@@ -62,7 +62,7 @@ SOURCE_AT_START = _source_state()
 
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
-current = {"files": [], "error": None}
+current = {"files": [], "error": None, "translated": {}}
 
 
 def _decode(data_url: str) -> Image.Image:
@@ -84,8 +84,26 @@ def _save(meta: dict, image: Image.Image, stamp: str, kind: str) -> str:
     return name
 
 
+# Freitextfelder, die im Prompt landen und deshalb englisch sein sollten.
+TRANSLATABLE = ("prompt", "keep", "paint_target", "negative_prompt")
+
+
+def _translate_inputs(params: dict) -> dict:
+    """Deutsche Eingaben vor dem Auftrag ins Englische bringen.
+
+    Faellt Ollama aus, bleibt alles wie eingegeben -- lieber ein Bild aus
+    deutschem Prompt als gar keines.
+    """
+    quelle = {k: params.get(k) or "" for k in TRANSLATABLE}
+    engine.note("loading", "Eingaben werden übersetzt …")
+    fertig = chat.translate(quelle)
+    params.update(fertig)
+    return fertig
+
+
 def _run_job(params: dict) -> None:
     try:
+        current["translated"] = _translate_inputs(params)
         refs = [_decode(d) for d in (params.get("images") or []) if d]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         kind = params.get("mode") or ("edit" if refs else "t2i")
@@ -183,6 +201,7 @@ class Handler(BaseHTTPRequestHandler):
             status = engine.snapshot()
             status["results"] = list(current["files"])
             status["error"] = current["error"]
+            status["translated"] = dict(current["translated"])
             return self._json(200, status)
 
         if path == "/api/info":
@@ -339,6 +358,7 @@ class Handler(BaseHTTPRequestHandler):
 
         current["files"] = []
         current["error"] = None
+        current["translated"] = {}
         threading.Thread(target=_run_job, args=(params,), daemon=True).start()
         return self._json(202, {"ok": True})
 

@@ -78,6 +78,14 @@ alle Bilder, was Kleidung, Umgebung und Bildaufbau stabil hält.
 `/magazine cover`, `/360 View` und weitere. Kurzbefehle lassen sich direkt in
 das Prompt-Feld tippen und stellen die Regler selbst um.
 
+**Deutsch überall.** Prompt, „was unverändert bleiben muss", „was umgefärbt
+wird" und der negative Prompt dürfen deutsch sein. Der Server erkennt das und
+übersetzt vor dem Auftrag ins Englische, weil Qwen-Image dem deutlich besser
+folgt. Kostet rund vier Sekunden und gilt auch für das GIMP-Plugin. Englische
+Eingaben laufen unangetastet durch. Ist Ollama nicht erreichbar, läuft der
+Auftrag mit dem Originaltext weiter statt zu scheitern. Was übersetzt wurde,
+zeigt die Oberfläche unter dem Prompt-Feld an.
+
 **Freitexteingabe:** Ein Satz auf Deutsch, ein lokales Sprachmodell über
 [Ollama](https://ollama.com) übersetzt und stellt ein. Der eigentliche Gewinn
 ist die Übersetzung — Qwen-Image folgt englischen Bildbeschreibungen deutlich

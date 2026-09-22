@@ -119,6 +119,8 @@
   .meta { margin-top: 10px; font-size: 12px; color: var(--muted); }
   .meta a { color: var(--accent); }
   .meta code { color: var(--text); font-size: 11.5px; word-break: break-word; }
+  #transNote { border-left: 2px solid var(--accent); padding-left: 8px; }
+  #transNote b { color: var(--text); font-weight: 600; }
   .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .tags span { background: var(--sunk); border: 1px solid var(--line); border-radius: 20px; padding: 1px 9px; font-size: 11px; }
 
@@ -184,6 +186,9 @@
 
     <label for="prompt">Prompt</label>
     <textarea id="prompt"></textarea>
+    <p class="hint">Deutsch ist in Ordnung — deutsche Eingaben werden vor dem
+      Auftrag ins Englische übersetzt, weil das Bildmodell dem besser folgt.</p>
+    <p class="hint" id="transNote" style="display:none"></p>
     <p class="hint" id="tplHint" style="display:none"></p>
 
     <fieldset id="variantenBox" style="display:none">
@@ -192,8 +197,9 @@
       <input id="keep" value="The black tow hitch with the ball neck">
       <label for="paintTarget">Was wird umgefärbt?</label>
       <input id="paintTarget" value="the vehicle body">
-      <p class="hint">Beides auf Englisch und möglichst konkret. Bei einem Porträt
-        etwa <code>the person's clothing</code>.</p>
+      <p class="hint">Möglichst konkret, deutsch oder englisch. Bei einem Porträt
+        etwa <code>die Jacke der Person</code>. Ein einzelnes Kleidungsstück wird
+        zuverlässiger getroffen als mehrere auf einmal.</p>
 
       <label>Achsen</label>
       <div class="row">
@@ -592,6 +598,7 @@ async function start() {
 
   buttonState("busy");
   $("stage").dataset.file = "";
+  $("transNote").style.display = "none";
   say("Auftrag wird gestartet …");
   paintSeries([], body.count, 1);
 
@@ -663,6 +670,7 @@ function poll() {
     const s = await fetch("/api/status").then(r => r.json()).catch(() => null);
     if (!s) return;
 
+    zeigeUebersetzung(s.translated);
     const done = s.results.length;
     const perImage = s.total ? s.step / s.total : 0;
     $("fill").style.width = (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
@@ -679,6 +687,18 @@ function poll() {
   }, 900);
 }
 const fmt = sec => sec < 90 ? `${Math.round(sec)}s` : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")} min`;
+
+// Was der Server vor dem Auftrag übersetzt hat — damit nachvollziehbar ist,
+// was das Bildmodell tatsächlich gelesen hat.
+const FELDNAME = {prompt: "Prompt", keep: "Unverändert", paint_target: "Umgefärbt",
+                  negative_prompt: "Negativ"};
+function zeigeUebersetzung(t) {
+  const el = $("transNote");
+  if (!t || !Object.keys(t).length) { el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.innerHTML = "Ins Englische übersetzt — "
+    + Object.entries(t).map(([k, v]) => `<b>${FELDNAME[k] || k}:</b> ${esc(v)}`).join(" · ");
+}
 
 // ---------- Mosaik der Serie ----------
 let seriesFiles = [];
