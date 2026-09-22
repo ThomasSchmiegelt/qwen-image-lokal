@@ -28,7 +28,9 @@ from engine import (  # noqa: E402
     ASPECT_RATIOS, MAX_REFERENCES, REFERENCE_TOKEN_BUDGET, Engine, dimensions_for,
 )
 import chat  # noqa: E402
-from presets import EFFECTS, catalog, overrides, parse_command  # noqa: E402
+from presets import (  # noqa: E402
+    AXIS_OFF, EFFECTS, PAINT_TARGET, catalog, overrides, parse_command,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -88,7 +90,7 @@ def _run_job(params: dict) -> None:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         kind = params.get("mode") or ("edit" if refs else "t2i")
 
-        manifest = os.path.join(OUTPUTS, f"{stamp}_{kind}.jsonl") if kind == "dataset" else None
+        manifest = os.path.join(OUTPUTS, f"{stamp}_{kind}.jsonl") if kind == "varianten" else None
 
         def on_image(meta, image):
             name = _save(meta, image, stamp, kind)
@@ -119,6 +121,7 @@ def _run_job(params: dict) -> None:
             scene=params.get("scene") or None,
             angle=params.get("angle") or None,
             device=params.get("device") or None,
+            paint_target=params.get("paint_target") or PAINT_TARGET,
             count=int(params.get("count", 1)),
             sweep=params.get("sweep") or None,
             lock_seed=bool(params.get("lock_seed", False)),
@@ -189,6 +192,8 @@ class Handler(BaseHTTPRequestHandler):
             info["max_references"] = MAX_REFERENCES
             info["reference_token_budget"] = REFERENCE_TOKEN_BUDGET
             info["chat"] = chat.available()
+            info["axis_off"] = AXIS_OFF
+            info["paint_target"] = PAINT_TARGET
             info["gimp"] = {"available": bool(shutil.which(GIMP_CMD)), "command": GIMP_CMD}
             now = _source_state()
             changed = sorted(k for k in set(now) | set(SOURCE_AT_START)
@@ -317,14 +322,14 @@ class Handler(BaseHTTPRequestHandler):
         mode = params.get("mode") or "t2i"
         has_text = bool(params.get("prompt", "").strip())
         if not has_text and not spec and not params.get("form") \
-                and mode not in ("gruppe", "person", "dataset"):
+                and mode not in ("gruppe", "person", "varianten"):
             return self._json(400, {"error": "Prompt ist leer"})
         if spec.get("needs_image") and not refs:
             return self._json(400, {
                 "error": f"„{spec['label']}\u201c braucht ein Bild \u2013 bitte eines hochladen"})
         if len(refs) > MAX_REFERENCES:
             return self._json(400, {"error": f"Hoechstens {MAX_REFERENCES} Referenzbilder"})
-        if mode in ("edit", "person", "dataset") and not refs:
+        if mode in ("edit", "person", "varianten") and not refs:
             return self._json(400, {"error": "Bitte ein Referenzbild hochladen"})
         if mode == "gruppe" and len(refs) < 2:
             return self._json(400, {"error": "Fuer ein Gruppenbild mindestens zwei Personen hochladen"})

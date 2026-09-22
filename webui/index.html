@@ -171,7 +171,7 @@
       <button id="tab-edit">Bearbeiten</button>
       <button id="tab-gruppe">Gruppe</button>
       <button id="tab-person">Perspektiven</button>
-      <button id="tab-dataset">Trainingsdaten</button>
+      <button id="tab-varianten">Varianten</button>
     </div>
 
     <div id="uploadBox" style="display:none">
@@ -186,34 +186,32 @@
     <textarea id="prompt"></textarea>
     <p class="hint" id="tplHint" style="display:none"></p>
 
-    <fieldset id="datasetBox" style="display:none">
-      <legend>Trainingsdaten</legend>
+    <fieldset id="variantenBox" style="display:none">
+      <legend>Varianten</legend>
       <label for="keep">Was muss unverändert bleiben?</label>
       <input id="keep" value="The black tow hitch with the ball neck">
-      <p class="hint">Auf Englisch beschreiben, möglichst konkret. Dieser Teil wird
-        in jeder Variante ausdrücklich festgeschrieben.</p>
+      <label for="paintTarget">Was wird umgefärbt?</label>
+      <input id="paintTarget" value="the vehicle body">
+      <p class="hint">Beides auf Englisch und möglichst konkret. Bei einem Porträt
+        etwa <code>the person's clothing</code>.</p>
+
+      <label>Achsen</label>
       <div class="row">
-        <div>
-          <label for="paint">Lack festhalten</label>
-          <select id="paint"></select>
-        </div>
-        <div>
-          <label for="scene">Umgebung festhalten</label>
-          <select id="scene"></select>
-        </div>
+        <div><select id="paint" title="Farbe"></select></div>
+        <div><select id="scene" title="Umgebung"></select></div>
       </div>
-      <div class="row">
-        <div>
-          <label for="angle">Blickwinkel festhalten</label>
-          <select id="angle"></select>
-        </div>
-        <div>
-          <label for="device">Kameraart festhalten</label>
-          <select id="device"></select>
-        </div>
+      <div class="row" style="margin-top:8px">
+        <div><select id="vlight" title="Licht"></select></div>
+        <div><select id="device" title="Kameraart"></select></div>
       </div>
-      <p class="hint">„automatisch“ heißt: diese Achse wird pro Bild gewürfelt.
-        Ein fester Wert hält sie über die ganze Serie konstant.</p>
+      <div class="row" style="margin-top:8px">
+        <div><select id="angle" title="Blickwinkel"></select></div>
+        <div></div>
+      </div>
+      <p class="hint"><b>würfeln</b> ändert die Achse bei jedem Bild.
+        <b>unverändert lassen</b> rührt sie gar nicht an — so bleibt etwa der
+        Hintergrund stehen, während nur die Farbe wechselt. Ein fester Wert gilt
+        für die ganze Serie.</p>
     </fieldset>
 
     <fieldset>
@@ -254,7 +252,7 @@
       <label for="sweep">Serie variieren</label>
       <select id="sweep">
         <option value="">nichts variieren &ndash; nur der Seed ändert sich</option>
-        <option value="dataset">Trainingsdaten: Lack, Umgebung, Licht, Kamera, Winkel würfeln</option>
+        <option value="varianten">Varianten: Farbe, Umgebung, Licht, Kamera, Winkel würfeln</option>
         <option value="view">Umrundung: vorne, Seite, hinten, oben, unten</option>
         <option value="camera">Kameraperspektiven der Reihe nach</option>
         <option value="style">Stile der Reihe nach</option>
@@ -361,14 +359,14 @@ const MODES = {
   person: {label: "Umrundung erzeugen", refs: 1, sweep: "view", count: 10, follow: false, lock: true,
            ph: "standing in a city street, wearing a dark coat",
            hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."},
-  dataset: {label: "Varianten erzeugen", refs: 1, sweep: "dataset", count: 12, follow: true, lock: false,
-            ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
-            hint: () => "Das Basisbild. Jede Variante ändert Lack, Umgebung, Licht, "
-                      + "Kameraart und Blickwinkel — nur das Festgeschriebene bleibt."}
+  varianten: {label: "Varianten erzeugen", refs: 1, sweep: "varianten", count: 12,
+              follow: true, lock: false,
+              ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
+              hint: () => "Das Basisbild. Welche Achsen sich ändern, stellst du unten ein."}
 };
 
 let mode = "t2i", refs = [], polling = null, maxRefs = 4, templates = {}, refBudget = 2200;
-let EFFECTS = [], FORMS = [], hasGimp = false;
+let EFFECTS = [], FORMS = [], hasGimp = false, AXIS_OFF = "-";
 
 // ---------- Voreinstellungen laden ----------
 fetch("/api/info").then(r => r.json()).then(info => {
@@ -402,14 +400,24 @@ fetch("/api/info").then(r => r.json()).then(info => {
       + " übersetzt und stellt die Regler unten ein. Erzeugt wird erst auf deinen Klick.";
   }
   fill("effect", EFFECTS); fill("form", FORMS);
-  fill("paint", info.paints); fill("scene", info.scenes);
-  fill("angle", info.angles); fill("device", info.devices);
+  AXIS_OFF = info.axis_off || "-";
+  fillAxis("paint", info.paints); fillAxis("scene", info.scenes);
+  fillAxis("angle", info.angles); fillAxis("device", info.devices);
+  fillAxis("vlight", info.lights);
+  $("paintTarget").value = info.paint_target || "the vehicle body";
   $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
     + EFFECTS.map(e => `<code>${esc(e.alias)}</code>`).join(", ")
     + ". Ein getippter Befehl stellt die Regler selbst um.";
   $("aspect").innerHTML = info.aspects.map(a => `<option>${a}</option>`).join("");
   setMode("t2i");
 });
+// Achsen im Varianten-Modus kennen drei Zustaende: wuerfeln, unveraendert
+// lassen, oder ein fester Wert.
+function fillAxis(id, items) {
+  $(id).innerHTML = '<option value="">würfeln</option>'
+    + `<option value="${AXIS_OFF}">unverändert lassen</option>`
+    + items.map(i => `<option value="${i.key}">${esc(i.label)}</option>`).join("");
+}
 function fill(id, items) {
   $(id).innerHTML = '<option value="">— automatisch —</option>'
     + items.map(i => `<option value="${i.key}">${esc(i.label)}</option>`).join("");
@@ -471,8 +479,13 @@ function setMode(next) {
   sweepChanged();
 
   const tpl = templates[next];
-  $("datasetBox").style.display = next === "dataset" ? "block" : "none";
-  $("tplHint").style.display = tpl && next !== "dataset" ? "block" : "none";
+  const istVarianten = next === "varianten";
+  $("variantenBox").style.display = istVarianten ? "block" : "none";
+  // Das Licht steuert im Varianten-Modus die Achse, nicht dieser Regler.
+  $("light").disabled = istVarianten;
+  $("light").title = istVarianten
+    ? "Im Varianten-Modus zählt die Licht-Achse weiter unten" : "";
+  $("tplHint").style.display = tpl && next !== "varianten" ? "block" : "none";
   if (tpl) $("tplHint").textContent = "Der Server setzt automatisch davor: „"
     + tpl.replace("{extra}", "…").replace("{n}", refs.length || "N") + "“";
   drawThumbs();
@@ -570,7 +583,9 @@ async function start() {
     keep: $("keep").value,
     paint: $("paint").value, scene: $("scene").value,
     angle: $("angle").value, device: $("device").value,
-    style: $("style").value, light: $("light").value, camera: $("camera").value,
+    style: $("style").value, camera: $("camera").value,
+    light: mode === "varianten" ? $("vlight").value : $("light").value,
+    paint_target: $("paintTarget").value,
     true_cfg_scale: parseFloat($("cfg").value),
     transparent: $("transparent").checked
   };

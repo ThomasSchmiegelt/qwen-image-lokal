@@ -264,24 +264,29 @@ def overrides(spec: dict) -> dict:
     return {k: spec[k] for k in OVERRIDE_KEYS if k in spec}
 
 
-# --- Trainingsdaten ------------------------------------------------------
+# --- Varianten ------------------------------------------------------
 # Vervielfaeltigung eines Basisbilds: alles darf sich aendern ausser dem
 # Gegenstand, auf den es ankommt. Die Bausteine sind als vollstaendige
 # Aussagen formuliert, damit sie hinter der Unveraenderlichkeits-Anweisung
 # stehen koennen, ohne den Satzbau zu zerlegen.
+# Nur die Farbe. Woran sie haftet, bestimmt PAINT_TARGET bzw. die Eingabe des
+# Benutzers -- "die Karosserie" beim Auto, "die Kleidung der Person" bei einem
+# Portraet. Vorher stand "the vehicle body" fest im Baustein, was den Regler
+# fuer alles ausser Fahrzeugen unbrauchbar machte.
+PAINT_TARGET = "the vehicle body"
 PAINTS = {
-    "rot":        ("Rot", "the vehicle body is painted bright red"),
-    "weiss":      ("Weiß", "the vehicle body is painted plain white"),
-    "schwarz":    ("Schwarz", "the vehicle body is painted glossy black"),
-    "silber":     ("Silber", "the vehicle body is painted metallic silver"),
-    "dunkelgrau": ("Dunkelgrau", "the vehicle body is painted dark grey"),
-    "dunkelgruen": ("Dunkelgrün", "the vehicle body is painted dark green"),
-    "beige":      ("Beige", "the vehicle body is painted beige"),
-    "gelb":       ("Gelb", "the vehicle body is painted bright yellow"),
-    "orange":     ("Orange", "the vehicle body is painted orange"),
-    "dunkelblau": ("Dunkelblau", "the vehicle body is painted deep navy blue"),
-    "bordeaux":   ("Bordeaux", "the vehicle body is painted dark burgundy red"),
-    "matt":       ("Mattlack", "the vehicle body has a matte grey wrap with no gloss"),
+    "rot":        ("Rot", "bright red"),
+    "weiss":      ("Weiß", "plain white"),
+    "schwarz":    ("Schwarz", "glossy black"),
+    "silber":     ("Silber", "metallic silver"),
+    "dunkelgrau": ("Dunkelgrau", "dark grey"),
+    "dunkelgruen": ("Dunkelgrün", "dark green"),
+    "beige":      ("Beige", "beige"),
+    "gelb":       ("Gelb", "bright yellow"),
+    "orange":     ("Orange", "orange"),
+    "dunkelblau": ("Dunkelblau", "deep navy blue"),
+    "bordeaux":   ("Bordeaux", "dark burgundy red"),
+    "matt":       ("Mattlack", "a matte grey wrap with no gloss"),
 }
 
 SCENES = {
@@ -329,10 +334,14 @@ DEVICES = {
     "analog":      ("Analogfilm", "shot on 35mm colour film with visible grain"),
 }
 
-# Vor den Benutzertext im Trainingsdaten-Modus. Die Unveraenderlichkeit steht
+# Sonderwert einer Achse: gar nicht anfassen. Zu unterscheiden von "" -- das
+# heisst im Varianten-Modus wuerfeln.
+AXIS_OFF = "-"
+
+# Vor den Benutzertext im Varianten-Modus. Die Unveraenderlichkeit steht
 # bewusst zweimal drin -- einmal als Anweisung, einmal als Aufzaehlung der
 # Merkmale. Ein Diffusionsmodell ueberschreibt sonst gern mit.
-DATASET_TEMPLATE = (
+VARIANT_TEMPLATE = (
     "A photograph of the same subject as in the reference image. "
     "{keep} must remain exactly identical to the reference: same model, same shape, "
     "same size, same colour, same finish, same mounting position and the same "
@@ -342,10 +351,10 @@ DATASET_TEMPLATE = (
 
 # Kerzenlicht auf einem Auto im Hof ergibt keine brauchbare Variante, deshalb
 # hier ohne. Wer es doch will, stellt die Lichtachse von Hand ein.
-DATASET_LIGHTS = {k: v for k, v in LIGHTS.items() if k != "kerze"}
+VARIANT_LIGHTS = {k: v for k, v in LIGHTS.items() if k != "kerze"}
 
-DATASET_AXES = {"paint": PAINTS, "scene": SCENES, "light": DATASET_LIGHTS,
+VARIANT_AXES = {"paint": PAINTS, "scene": SCENES, "light": VARIANT_LIGHTS,
                 "device": DEVICES, "angle": ANGLES}
 
 # Nachtraeglich eingehaengt, weil die Vorlage weiter unten steht als TEMPLATES.
-TEMPLATES["dataset"] = DATASET_TEMPLATE
+TEMPLATES["varianten"] = VARIANT_TEMPLATE

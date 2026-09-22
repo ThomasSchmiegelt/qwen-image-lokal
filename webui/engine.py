@@ -31,8 +31,8 @@ from diffusers import QwenImage21Pipeline
 from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimensions
 
 from presets import (
-    ANGLES, CAMERAS, DATASET_AXES, DEVICES, EFFECTS, FORMS, LIGHTS, PAINTS, SCENES, STYLES,
-    TEMPLATES, TRANSPARENT_TEMPLATE, VIEWS, fragment,
+    ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, LIGHTS, PAINT_TARGET, PAINTS,
+    SCENES, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE, VARIANT_AXES, VIEWS, fragment,
 )
 
 REPO = os.environ.get("QWEN_IMAGE_REPO", "Qwen/Qwen-Image-2.1")
@@ -95,7 +95,8 @@ def _free() -> None:
 
 
 def build_prompt(text: str, view=None, style=None, light=None, camera=None,
-                 paint=None, scene=None, angle=None, device=None) -> str:
+                 paint=None, scene=None, angle=None, device=None,
+                 paint_target: str = PAINT_TARGET) -> str:
     """Haengt die gewaehlten Voreinstellungen an den Prompt an.
 
     Der Blickwinkel steht vorn: er bestimmt die Bildkomposition, waehrend Stil,
@@ -103,7 +104,7 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
     """
     bits = [
         fragment(VIEWS, view),
-        fragment(PAINTS, paint),
+        f"{paint_target.strip()} is {PAINTS[paint][1]}" if paint in PAINTS else None,
         fragment(SCENES, scene),
         fragment(ANGLES, angle),
         fragment(DEVICES, device),
@@ -112,6 +113,11 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
         fragment(CAMERAS, camera),
     ]
     return ", ".join([text.strip().rstrip(",")] + [b for b in bits if b])
+
+
+def _axis(value):
+    """Leer und "aus" heissen beide: kein Textbaustein."""
+    return None if not value or value == AXIS_OFF else value
 
 
 class Engine:
@@ -181,6 +187,7 @@ class Engine:
         scene=None,
         angle=None,
         device=None,
+        paint_target: str = PAINT_TARGET,
         lock_seed: bool = False,
     ) -> list[dict]:
         """Baut die Auftragsliste einer Serie.
@@ -193,9 +200,10 @@ class Engine:
           "camera"    geht die Kameraperspektiven der Reihe nach durch
           "style"     dito fuer Stile, "light" fuer Lichtstimmungen
           "random"    wuerfelt jedes offene Feld -- reproduzierbar aus dem Seed
-          "dataset"   Trainingsdaten: wuerfelt Lack, Umgebung, Licht, Kamera und
-                      Blickwinkel fuer jedes Bild neu, damit die Varianten
-                      moeglichst weit auseinanderliegen
+          "varianten" wuerfelt Lack, Umgebung, Licht, Kameraart und Blickwinkel
+                      fuer jedes Bild neu. Eine Achse auf AXIS_OFF bleibt dabei
+                      unangetastet -- so laesst sich etwa nur die Farbe aendern,
+                      ohne dass der Hintergrund mitwandert
 
         `lock_seed` gibt allen Bildern denselben Startseed. Bei einer Umrundung
         haelt das Kleidung, Umgebung und Bildaufbau merklich stabiler, weil das
@@ -209,10 +217,10 @@ class Engine:
         for i in range(count):
             pick = {"view": view, "style": style, "light": light, "camera": camera,
                     "paint": paint, "scene": scene, "angle": angle, "device": device}
-            if sweep == "dataset":
-                # Jede Achse eigenstaendig gewuerfelt. Was fest eingestellt ist,
-                # bleibt fest -- so laesst sich eine Achse gezielt festhalten.
-                for field, table in DATASET_AXES.items():
+            if sweep == "varianten":
+                # Jede Achse eigenstaendig gewuerfelt. Ein fester Wert bleibt
+                # fest, AXIS_OFF schaltet die Achse ganz ab.
+                for field, table in VARIANT_AXES.items():
                     if not pick[field]:
                         pick[field] = rng.choice(list(table))
             elif sweep == "random":
@@ -223,9 +231,10 @@ class Engine:
                 # Der Reihe nach, damit sich die Bilder garantiert unterscheiden.
                 keys = list(tables[sweep])
                 pick[sweep] = keys[i % len(keys)]
+            pick = {k: _axis(v) for k, v in pick.items()}
             jobs.append({
                 "seed": seed if lock_seed else seed + i,
-                "prompt": build_prompt(prompt, **pick),
+                "prompt": build_prompt(prompt, paint_target=paint_target, **pick),
                 **pick,
             })
         return jobs
@@ -255,6 +264,7 @@ class Engine:
         scene=None,
         angle=None,
         device=None,
+        paint_target: str = PAINT_TARGET,
         style=None,
         light=None,
         camera=None,
@@ -285,7 +295,7 @@ class Engine:
             text = TRANSPARENT_TEMPLATE.format(extra=text)
 
         jobs = self.plan(text, count, seed, sweep, view, style, light, camera,
-                         paint, scene, angle, device, lock_seed)
+                         paint, scene, angle, device, paint_target, lock_seed)
 
         self._cancel = False
         self._set(state="loading", image=0, count=len(jobs), step=0, total=steps,

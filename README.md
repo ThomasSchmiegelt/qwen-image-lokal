@@ -56,15 +56,16 @@ Karte laden, werfen sich gegenseitig heraus.
 
 **Fünf Betriebsarten:** Text zu Bild · Bearbeiten (1–4 Referenzbilder) ·
 Gruppenbild (2–4 Personen in ein gemeinsames Foto) · Umrundung (eine Person
-aus wechselnden Blickwinkeln) · Trainingsdaten.
+aus wechselnden Blickwinkeln) · Varianten.
 
-**Trainingsdaten** vervielfachen ein Basisbild: Lack (12 Farben), Umgebung
-(12 Szenen), Licht, Kameraart (9 Geräte vom Smartphone bis zur
-Überwachungskamera) und Blickwinkel werden je Bild gewürfelt, während ein
-festgeschriebener Gegenstand unverändert bleibt. Jede Achse lässt sich
-einzeln festhalten. Neben den Bildern entsteht ein `*.jsonl`-Manifest mit
-einer Zeile je Variante, damit der Satz später filterbar und ausbalancierbar
-ist.
+**Varianten** vervielfachen ein Basisbild, etwa für Trainingsdaten. Fünf
+Achsen — Farbe (12), Umgebung (12 Szenen), Licht, Kameraart (9 Geräte vom
+Smartphone bis zur Überwachungskamera) und Blickwinkel (10) — lassen sich je
+einzeln auf **würfeln**, **unverändert lassen** oder einen festen Wert stellen.
+So entsteht wahlweise breite Streuung oder eine Serie, in der sich nur ein
+einziges Merkmal ändert. Was umgefärbt wird, beschreibst du selbst
+(`the vehicle body`, `the person's coat`), ebenso was unverändert bleiben muss.
+Neben den Bildern entsteht ein `*.jsonl`-Manifest mit einer Zeile je Variante.
 
 **Serien** mit 1–20 Bildern. Variieren nach Umrundung, Kameraperspektive, Stil
 oder Lichtstimmung — der Reihe nach oder gewürfelt. Optional derselbe Seed für
@@ -153,7 +154,7 @@ aber spürbar Verständnis — gemessen 14 statt 22 Treffern, weil ausdrücklich
 Wünsche wie „quer" oder „freigestellt" unter den Tisch fielen. Die Antwort wird
 stattdessen serverseitig gegen die echten Tabellen geprüft.
 
-**Der Blickwinkel ändert sich bei Trainingsdaten nur wenig.** Qwen-Image 2.1
+**Der Blickwinkel ändert sich bei Varianten nur wenig.** Qwen-Image 2.1
 hält sich eng an die Bildaufteilung der Vorlage. Lack, Umgebung und Licht
 wechseln zuverlässig, „bodennah" oder „Nahaufnahme" verschieben den Ausschnitt
 dagegen nur leicht. Für echte Perspektivvielfalt braucht es Aufnahmen aus
