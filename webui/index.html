@@ -309,7 +309,7 @@ const MODES = {
 };
 
 let mode = "t2i", refs = [], polling = null, maxRefs = 4, templates = {}, refBudget = 2200;
-let EFFECTS = [], FORMS = [];
+let EFFECTS = [], FORMS = [], hasGimp = false;
 
 // ---------- Voreinstellungen laden ----------
 fetch("/api/info").then(r => r.json()).then(info => {
@@ -321,6 +321,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fill("view", info.views); fill("style", info.styles);
   fill("light", info.lights); fill("camera", info.cameras);
   EFFECTS = info.effects; FORMS = info.forms;
+  hasGimp = !!(info.gimp && info.gimp.available);
   if (info.chat && info.chat.available) {
     $("chatBox").style.display = "block";
     $("chat").placeholder = "Sag einfach, was du willst — „10 Drachen als Zeichentrick, hochkant“";
@@ -603,9 +604,25 @@ async function show(file) {
   $("meta").innerHTML =
     `<div><a href="/outputs/${file}" download>${esc(file)}</a>`
     + (m.size ? ` · ${m.size[0]} × ${m.size[1]} px` : "")
-    + (m.seed ? ` · Seed ${esc(m.seed)}` : "") + `</div>`
+    + (m.seed ? ` · Seed ${esc(m.seed)}` : "")
+    + (hasGimp ? ` · <a href="#" onclick="openInGimp('${file}');return false">In GIMP öffnen</a>` : "")
+    + `</div>`
     + (tags ? `<div class="tags">${tags}</div>` : "")
     + (m.prompt ? `<div style="margin-top:7px"><code>${esc(m.prompt)}</code></div>` : "");
+}
+
+// Öffnet das Bild in GIMP auf dem Rechner, auf dem der Server läuft.
+async function openInGimp(file) {
+  say("GIMP wird gestartet …");
+  const res = await fetch("/api/open-in-gimp", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({file})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "GIMP ließ sich nicht starten.", "err");
+  }
+  say("In GIMP geöffnet. Der erste Start dauert einen Moment.", "ok");
 }
 
 async function loadGallery() {

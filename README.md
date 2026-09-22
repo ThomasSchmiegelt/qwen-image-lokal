@@ -93,6 +93,11 @@ wirkt nur dort. Qwen-Image 2.1 selbst hat keinen Masken-Eingang; GIMPs
 Auswahl- und Pinselwerkzeuge übernehmen diese Rolle. Auswahl vorher ausblenden,
 sonst gibt es eine harte Kante.
 
+In der Weboberfläche gibt es unter jedem angezeigten Bild **In GIMP öffnen** —
+das startet GIMP auf dem Rechner, auf dem der Server läuft, mit genau diesem
+Bild. Weil das ein Programm startet, nimmt der Server diesen Aufruf nur von
+`127.0.0.1` an; vom Handy aus bleibt er verwehrt, auch bei `QWEN_HOST=0.0.0.0`.
+
 GIMP 3.2 benutzt `~/.config/GIMP/3.2/plug-ins/`, auch als Snap-Paket. Das
 Verzeichnis `~/snap/gimp/*/.config/GIMP/3.0/` ist ein Überbleibsel und wird
 nicht gelesen.
@@ -107,6 +112,7 @@ nicht gelesen.
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama für die Freitexteingabe |
 | `QWEN_CHAT_MODEL` | `qwen3.5:4b` | Sprachmodell für die Deutung |
 | `QWEN_URL` | `http://127.0.0.1:7860` | Server, den das GIMP-Plugin anspricht |
+| `QWEN_GIMP` | `gimp` | Befehl für „In GIMP öffnen" |
 
 ## Bekannte Grenzen
 

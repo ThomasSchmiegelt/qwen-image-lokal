@@ -10,6 +10,8 @@ import json
 import mimetypes
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import traceback
@@ -33,6 +35,8 @@ OUTPUTS = os.path.join(ROOT, "outputs")
 HOST = os.environ.get("QWEN_HOST", "127.0.0.1")
 PORT = int(os.environ.get("QWEN_PORT", "7860"))
 SAFE_NAME = re.compile(r"[\w.\-]+\.png")
+# Fester Befehl, keine Shell: der Aufruf kann nur eine Datei aus outputs/ oeffnen.
+GIMP_CMD = os.environ.get("QWEN_GIMP", "gimp")
 
 os.makedirs(OUTPUTS, exist_ok=True)
 
@@ -152,6 +156,7 @@ class Handler(BaseHTTPRequestHandler):
             info["max_references"] = MAX_REFERENCES
             info["reference_token_budget"] = REFERENCE_TOKEN_BUDGET
             info["chat"] = chat.available()
+            info["gimp"] = {"available": bool(shutil.which(GIMP_CMD)), "command": GIMP_CMD}
             return self._json(200, info)
 
         if path == "/api/gallery":
@@ -202,6 +207,33 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/cancel":
             engine.cancel()
+            return self._json(200, {"ok": True})
+
+        if path == "/api/open-in-gimp":
+            # Startet ein Programm auf dem Rechner des Servers. Deshalb nur von
+            # dort aus erreichbar -- bei QWEN_HOST=0.0.0.0 koennte sonst jeder
+            # im Netz GIMP-Fenster aufpoppen lassen.
+            if self.client_address[0] not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+                return self._json(403, {"error": "Nur vom Rechner des Servers aus"})
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                params = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError as exc:
+                return self._json(400, {"error": f"ungueltiges JSON: {exc}"})
+            target = self._output_path(os.path.basename(params.get("file") or ""))
+            if not target:
+                return self._json(404, {"error": "Bild nicht gefunden"})
+            if not shutil.which(GIMP_CMD):
+                return self._json(501, {"error": f"{GIMP_CMD} ist nicht installiert"})
+            if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+                return self._json(501, {"error":
+                    "Der Server sieht keine Anzeige. start.sh aus einer Desktop-Sitzung starten."})
+            try:
+                subprocess.Popen(
+                    [GIMP_CMD, target], start_new_session=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError as exc:
+                return self._json(500, {"error": f"GIMP liess sich nicht starten: {exc}"})
             return self._json(200, {"ok": True})
 
         if path == "/api/chat":
