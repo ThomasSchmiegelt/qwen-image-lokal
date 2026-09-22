@@ -199,8 +199,40 @@ gimp/install.sh       Plugin verknüpfen
 
 ## Lizenz
 
-[MIT](LICENSE).
+Der **Code in diesem Repository** steht unter [MIT](LICENSE).
 
-Die Lizenz gilt für den Code in diesem Repository. **Qwen-Image 2.1 selbst
-steht unter seiner eigenen Lizenz** und wird hier nicht mitgeliefert, sondern
-beim ersten Start heruntergeladen.
+### Das Modell hat eine andere Lizenz — und die ist strenger
+
+Dieses Repository enthält keine Modellgewichte. Qwen-Image 2.1 wird beim
+ersten Start von Hugging Face geladen, und dabei akzeptierst du dessen eigene
+Lizenz:
+
+> **Qwen-Image 2.1 steht unter der [Qwen Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)
+> und darf nur für Forschung und Evaluierung genutzt werden.**
+> Für kommerzielle Nutzung ist eine gesonderte Lizenz von Hangzhou Tongyi
+> Laboratory nötig (`model-business@notice.qwencloud.com`).
+
+Das gilt unabhängig von der MIT-Lizenz dieses Codes. MIT erlaubt dir alles mit
+*diesen Dateien* — es verschafft dir keinerlei Rechte am Modell.
+
+Beachtenswert: Qwen-Image 1.0 und Qwen-Image-Edit stehen noch unter Apache 2.0.
+Erst mit 2.1 wurde auf die Research License gewechselt.
+
+Zwei Pflichten aus dieser Lizenz betreffen typische Nutzung dieses Werkzeugs:
+
+- **Trainierst du mit den erzeugten Bildern ein Modell und gibst es weiter**,
+  musst du gut sichtbar „Built with Qwen" angeben (Abschnitt 4b). Das betrifft
+  den Varianten-Modus unmittelbar.
+- **„Qwen" darf nicht der primäre Name** eines abgeleiteten Produkts sein;
+  beschreibende Verwendung ist erlaubt (Abschnitt 4c).
+
+Qwen is licensed under the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) 2026
+Hangzhou Tongyi Laboratory Technology Co., Ltd. All Rights Reserved.
+
+### Die Sprachmodelle ebenfalls
+
+Die Freitextdeutung und die Übersetzung laufen über Ollama. Welches Modell du
+dort einsetzt, bestimmst du selbst — dessen Lizenz gilt dann für dich, nicht
+die dieses Repositories.
+
+*Dies ist eine Zusammenfassung nach bestem Wissen, keine Rechtsberatung.*
