@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen-Image 2.1</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --sunk: #12141a; --line: #2c313a;
+    --text: #e6e8ec; --muted: #9aa2af; --accent: #6b8afd; --ok: #4ec98a; --err: #e8735f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 13px 20px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header span { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: 370px 1fr; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .chatbar { display: flex; gap: 6px; }
+  .chatbar input { flex: 1; }
+  .chatbar button {
+    width: 40px; border: 0; border-radius: 7px; background: var(--accent);
+    color: #fff; font-size: 17px; cursor: pointer;
+  }
+  .chatbar button:disabled { background: #39404f; cursor: default; }
+  #chatNote { margin-bottom: 12px; }
+  #chatNote.err { color: var(--err); }
+
+  .tabs { display: flex; gap: 5px; margin-bottom: 12px; }
+  .tabs button {
+    flex: 1; padding: 8px 2px; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); border-radius: 7px; cursor: pointer; font: inherit; font-size: 12.5px;
+  }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  label { display: block; margin: 12px 0 5px; font-size: 12px; color: var(--muted); }
+  textarea, input, select {
+    width: 100%; padding: 8px 9px; background: var(--sunk); color: var(--text);
+    border: 1px solid var(--line); border-radius: 7px; font: inherit;
+  }
+  textarea { resize: vertical; min-height: 78px; }
+  input:disabled, select:disabled { opacity: .45; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 11px; color: var(--muted); font-size: 13px; }
+  .check input { width: auto; margin: 0; }
+  .check label { margin: 0; font-size: 13px; }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+
+  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px 14px; margin: 16px 0 0; }
+  legend { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding: 0 6px; }
+
+  #go {
+    width: 100%; margin-top: 16px; padding: 11px; border: 0; border-radius: 8px;
+    background: var(--accent); color: #fff; font: 600 14px/1 inherit; cursor: pointer;
+  }
+  #go:disabled { background: #39404f; cursor: default; }
+  #stop {
+    width: 100%; margin-top: 8px; padding: 8px; border: 1px solid var(--line);
+    border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font: inherit;
+  }
+  .bar { height: 5px; background: var(--sunk); border-radius: 3px; overflow: hidden; margin-top: 12px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #status { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 18px; }
+  #status.err { color: var(--err); }
+  #status.ok { color: var(--ok); }
+
+  .thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .thumb { position: relative; width: 66px; height: 66px; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+  .thumb b {
+    position: absolute; top: -6px; right: -6px; width: 19px; height: 19px; border-radius: 50%;
+    background: var(--err); color: #fff; font: 700 12px/19px sans-serif; text-align: center; cursor: pointer;
+  }
+  .thumb i {
+    position: absolute; bottom: 2px; left: 3px; font: 600 10px/1 sans-serif;
+    color: #fff; text-shadow: 0 0 4px #000; font-style: normal;
+  }
+
+  .stage {
+    min-height: 360px; display: flex; align-items: center; justify-content: center; padding: 6px;
+    background:
+      linear-gradient(45deg, #1a1d23 25%, transparent 25%, transparent 75%, #1a1d23 75%),
+      linear-gradient(45deg, #1a1d23 25%, #181b20 25%, #181b20 75%, #1a1d23 75%);
+    background-size: 22px 22px; background-position: 0 0, 11px 11px; border-radius: 8px;
+  }
+  .stage img { max-width: 100%; max-height: 68vh; border-radius: 6px; display: block; }
+  .stage p { color: var(--muted); }
+  .meta { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .meta a { color: var(--accent); }
+  .meta code { color: var(--text); font-size: 11.5px; word-break: break-word; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .tags span { background: var(--sunk); border: 1px solid var(--line); border-radius: 20px; padding: 1px 9px; font-size: 11px; }
+
+  .head { display: flex; align-items: baseline; justify-content: space-between; margin: 22px 0 6px; gap: 12px; }
+  h2 { font-size: 11px; color: var(--muted); font-weight: 600; margin: 0; text-transform: uppercase; letter-spacing: .07em; }
+  .head a { font-size: 11.5px; color: var(--accent); text-decoration: none; }
+
+  /* Mosaik der aktuellen Serie */
+  .mosaic { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
+  .tile { margin: 0; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .tile img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; cursor: pointer; background: #0e1014; }
+  .tile img.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tile figcaption {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 4px 8px; font-size: 11px; color: var(--muted);
+  }
+  .tile figcaption a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  .tile .cam { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot {
+    aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--line);
+    display: flex; align-items: center; justify-content: center; color: var(--line); font-size: 22px;
+  }
+  .slot.now { border-style: solid; border-color: var(--accent); color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+  .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); }
+  .grid img.sel { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Qwen-Image 2.1</h1>
+  <span id="dims"></span>
+</header>
+
+<main>
+  <section class="panel">
+    <div id="chatBox" style="display:none">
+      <div class="chatbar">
+        <input id="chat" placeholder="Sag einfach, was du willst …">
+        <button id="chatGo" title="Verstehen und loslegen">&rarr;</button>
+      </div>
+      <p class="hint" id="chatNote"></p>
+    </div>
+
+    <div class="tabs">
+      <button id="tab-t2i" class="on">Text&rarr;Bild</button>
+      <button id="tab-edit">Bearbeiten</button>
+      <button id="tab-gruppe">Gruppe</button>
+      <button id="tab-person">Perspektiven</button>
+    </div>
+
+    <div id="uploadBox" style="display:none">
+      <label for="file">Referenzbilder <span id="refCount"></span></label>
+      <input type="file" id="file" accept="image/*" multiple>
+      <div class="thumbs" id="thumbs"></div>
+      <p class="hint" id="uploadHint"></p>
+      <p class="hint" id="refNote"></p>
+    </div>
+
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt"></textarea>
+    <p class="hint" id="tplHint" style="display:none"></p>
+
+    <fieldset>
+      <legend>Vorlage &amp; Effekt</legend>
+      <div class="row">
+        <div>
+          <label for="form">Vorlage</label>
+          <select id="form"></select>
+        </div>
+        <div>
+          <label for="effect">Effekt</label>
+          <select id="effect"></select>
+        </div>
+      </div>
+      <p class="hint" id="cmdHint"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Darstellung</legend>
+      <label for="view">Blickwinkel</label>
+      <select id="view"></select>
+
+      <div class="row3">
+        <div>
+          <label for="style">Stil</label>
+          <select id="style"></select>
+        </div>
+        <div>
+          <label for="light">Licht</label>
+          <select id="light"></select>
+        </div>
+        <div>
+          <label for="camera">Kamera</label>
+          <select id="camera"></select>
+        </div>
+      </div>
+
+      <label for="sweep">Serie variieren</label>
+      <select id="sweep">
+        <option value="">nichts variieren &ndash; nur der Seed ändert sich</option>
+        <option value="view">Umrundung: vorne, Seite, hinten, oben, unten</option>
+        <option value="camera">Kameraperspektiven der Reihe nach</option>
+        <option value="style">Stile der Reihe nach</option>
+        <option value="light">Lichtstimmungen der Reihe nach</option>
+        <option value="random">alles würfeln</option>
+      </select>
+
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label for="count">Anzahl Bilder</label>
+          <input type="number" id="count" value="1" min="1" max="20">
+        </div>
+        <div>
+          <label for="seed">Seed (&minus;1 = zufällig)</label>
+          <input type="number" id="seed" value="-1">
+        </div>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="lockSeed">
+        <label for="lockSeed">Seed für alle Bilder gleich halten</label>
+      </div>
+      <p class="hint" id="seedHint"></p>
+      <p class="hint">Eine Serie teilt sich das Laden des Modells &ndash; das erste Bild kostet
+        gut anderthalb Minuten, jedes weitere nur noch die reine Rechenzeit.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Bild</legend>
+      <div class="row">
+        <div>
+          <label for="aspect">Seitenverhältnis</label>
+          <select id="aspect"></select>
+        </div>
+        <div>
+          <label for="base">Auflösung</label>
+          <select id="base">
+            <option value="1024">1024 (schnell)</option>
+            <option value="1536">1536</option>
+            <option value="2048">2048 (langsam)</option>
+          </select>
+        </div>
+      </div>
+      <div class="check" id="followBox" style="display:none">
+        <input type="checkbox" id="follow" checked>
+        <label for="follow">Größe vom Referenzbild übernehmen</label>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="transparent">
+        <label for="transparent">Transparenter Hintergrund (RGBA)</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Feineinstellung</legend>
+      <div class="row">
+        <div>
+          <label for="steps">Schritte</label>
+          <input type="number" id="steps" value="40" min="1" max="100">
+        </div>
+        <div>
+          <label for="cfg">CFG</label>
+          <input type="number" id="cfg" value="1" min="1" max="10" step="0.5">
+        </div>
+      </div>
+      <label for="negative">Negativer Prompt (wirkt erst ab CFG &gt; 1)</label>
+      <textarea id="negative" style="min-height:48px" placeholder="blurry, low quality"></textarea>
+    </fieldset>
+
+    <button id="go">Erzeugen</button>
+    <button id="stop" style="display:none">Abbrechen</button>
+    <div class="bar"><i id="fill"></i></div>
+    <div id="status">bereit</div>
+  </section>
+
+  <section class="panel">
+    <div class="stage" id="stage"><p>Noch kein Bild erzeugt.</p></div>
+    <div class="meta" id="meta"></div>
+
+    <div class="head" id="seriesHead" style="display:none">
+      <h2>Diese Serie</h2>
+      <a id="zip" href="#">Alle als ZIP herunterladen</a>
+    </div>
+    <div class="mosaic" id="series"></div>
+
+    <div class="head"><h2>Alle Bilder</h2></div>
+    <div class="grid" id="gallery"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const RATIOS = {"1:1":1, "4:3":4/3, "3:4":3/4, "3:2":3/2, "2:3":2/3, "16:9":16/9, "9:16":9/16};
+const esc = t => String(t).replace(/[<>&"]/g, c => ({"<":"&lt;", ">":"&gt;", "&":"&amp;", '"':"&quot;"}[c]));
+
+const MODES = {
+  t2i:    {label: "Erzeugen", refs: 0, sweep: "", count: 1, lock: false,
+           ph: 'A neon shop sign that reads "QWEN IMAGE 2.1", rainy night, reflections on wet pavement'},
+  edit:   {label: "Bearbeiten", refs: 1, sweep: "", count: 1, lock: false, follow: true,
+           ph: "Change the background to a sunset beach",
+           hint: refs => `Bis zu ${refs} Bilder. Mehrere werden gemeinsam als Vorlage gelesen.`},
+  gruppe: {label: "Gruppenbild erzeugen", refs: 2, sweep: "", count: 1, lock: false, follow: false,
+           ph: "standing together in a sunlit park, smiling, casual clothing",
+           hint: refs => `Pro Person ein Bild, 2 bis ${refs} Stück. Gesicht gut sichtbar.`},
+  person: {label: "Umrundung erzeugen", refs: 1, sweep: "view", count: 10, follow: false, lock: true,
+           ph: "standing in a city street, wearing a dark coat",
+           hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."}
+};
+
+let mode = "t2i", refs = [], polling = null, maxRefs = 4, templates = {}, refBudget = 2200;
+let EFFECTS = [], FORMS = [];
+
+// ---------- Voreinstellungen laden ----------
+fetch("/api/info").then(r => r.json()).then(info => {
+  maxRefs = info.max_references;
+  templates = info.templates;
+  refBudget = info.reference_token_budget;
+  Object.assign(SWEEP_LEN, {view: info.views.length, style: info.styles.length,
+                            light: info.lights.length, camera: info.cameras.length});
+  fill("view", info.views); fill("style", info.styles);
+  fill("light", info.lights); fill("camera", info.cameras);
+  EFFECTS = info.effects; FORMS = info.forms;
+  if (info.chat && info.chat.available) {
+    $("chatBox").style.display = "block";
+    $("chat").placeholder = "Sag einfach, was du willst — „10 Drachen als Zeichentrick, hochkant“";
+    $("chatNote").textContent = "Freitext, deutsch. " + info.chat.model
+      + " übersetzt und stellt die Regler unten ein.";
+  }
+  fill("effect", EFFECTS); fill("form", FORMS);
+  $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
+    + EFFECTS.map(e => `<code>${esc(e.alias)}</code>`).join(", ")
+    + ". Ein getippter Befehl stellt die Regler selbst um.";
+  $("aspect").innerHTML = info.aspects.map(a => `<option>${a}</option>`).join("");
+  setMode("t2i");
+});
+function fill(id, items) {
+  $(id).innerHTML = '<option value="">— automatisch —</option>'
+    + items.map(i => `<option value="${i.key}">${esc(i.label)}</option>`).join("");
+}
+
+// ---------- Größenanzeige ----------
+function dims() {
+  const area = $("base").value ** 2, r = RATIOS[$("aspect").value] || 1;
+  return [Math.round(Math.sqrt(area * r) / 32) * 32, Math.round(Math.sqrt(area / r) / 32) * 32];
+}
+// Spiegelt reference_resolution() aus der Engine wider.
+function refSize(base, n) {
+  if (!n) return base;
+  return Math.max(512, Math.min(base, Math.floor(Math.sqrt(refBudget * 1024 / n) / 32) * 32));
+}
+function refresh() {
+  const useRef = refs.length && $("follow").checked && mode !== "t2i";
+  $("aspect").disabled = useRef;
+  const [w, h] = dims();
+  const n = parseInt($("count").value, 10) || 1;
+  $("dims").textContent = (useRef ? `Seitenverhältnis folgt der Referenz · ${$("base").value} px Basis` : `${w} × ${h} px`)
+    + (n > 1 ? ` · ${n} Bilder` : "") + " · lokal auf der RTX 3090";
+
+  const base = parseInt($("base").value, 10), r = refSize(base, refs.length);
+  $("refNote").textContent = refs.length && r < base
+    ? `Referenzen werden intern mit ${r} px gelesen, damit die Sequenz ins VRAM passt. `
+      + `Die Ausgabe bleibt bei ${base} px.`
+    : "";
+}
+["aspect", "base", "count", "follow"].forEach(id => $(id).addEventListener("change", refresh));
+
+// Bei einem Durchlauf durch eine Tabelle ist deren Laenge die sinnvolle Anzahl.
+const SWEEP_LEN = {};
+function sweepChanged() {
+  const s = $("sweep").value, n = SWEEP_LEN[s];
+  if (n) $("count").value = Math.min(n, 20);
+  $("seedHint").textContent = $("lockSeed").checked
+    ? "Gleicher Seed: Kleidung, Umgebung und Bildaufbau bleiben über die Serie hinweg stabiler."
+    : "Aufsteigende Seeds: jedes Bild wird eigenständiger, aber weniger konsistent.";
+  refresh();
+}
+$("sweep").addEventListener("change", sweepChanged);
+$("lockSeed").addEventListener("change", sweepChanged);
+
+// ---------- Modus ----------
+function setMode(next) {
+  mode = next;
+  const cfg = MODES[next];
+  Object.keys(MODES).forEach(m => $("tab-" + m).classList.toggle("on", m === next));
+  $("uploadBox").style.display = cfg.refs ? "block" : "none";
+  $("followBox").style.display = cfg.refs ? "flex" : "none";
+  $("prompt").placeholder = cfg.ph;
+  $("go").textContent = cfg.label;
+  $("uploadHint").textContent = cfg.hint ? cfg.hint(maxRefs) : "";
+  if (cfg.sweep !== undefined) $("sweep").value = cfg.sweep;
+  if (cfg.count !== undefined) $("count").value = cfg.count;
+  if (cfg.follow !== undefined) $("follow").checked = cfg.follow;
+  if (cfg.lock !== undefined) $("lockSeed").checked = cfg.lock;
+  sweepChanged();
+
+  const tpl = templates[next];
+  $("tplHint").style.display = tpl ? "block" : "none";
+  if (tpl) $("tplHint").textContent = "Der Server setzt automatisch davor: „"
+    + tpl.replace("{extra}", "…").replace("{n}", refs.length || "N") + "“";
+  drawThumbs();
+}
+Object.keys(MODES).forEach(m => $("tab-" + m).onclick = () => {
+  // Ein Effekt, der ein Bild braucht, passt nicht zu Text -> Bild.
+  const e = EFFECTS.find(x => x.key === $("effect").value);
+  if (m === "t2i" && e && e.needs_image) $("effect").value = "";
+  setMode(m);
+});
+
+// Effekte und Vorlagen bringen Einstellungen mit. Die werden sichtbar in die
+// Regler geschrieben, damit nichts unsichtbar im Hintergrund passiert.
+function applyOverrides(o) {
+  ["aspect", "style", "light", "camera", "view", "sweep"].forEach(k => {
+    if (o[k] !== undefined) $(k).value = o[k];
+  });
+  if (o.transparent !== undefined) $("transparent").checked = !!o.transparent;
+  if (o.lock_seed !== undefined) $("lockSeed").checked = !!o.lock_seed;
+  if (o.count !== undefined) $("count").value = o.count;
+  refresh();
+}
+$("effect").onchange = () => {
+  const e = EFFECTS.find(x => x.key === $("effect").value);
+  if (!e) return;
+  if (e.mode) setMode(e.mode);
+  else if (e.needs_image && mode === "t2i") setMode("edit");
+  applyOverrides(e);
+};
+$("form").onchange = () => {
+  const f = FORMS.find(x => x.key === $("form").value);
+  if (f) applyOverrides(f);
+};
+
+// ---------- Referenzbilder ----------
+$("file").onchange = e => {
+  const files = [...e.target.files].slice(0, maxRefs - refs.length);
+  let pending = files.length;
+  files.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = () => { refs.push(reader.result); if (!--pending) { drawThumbs(); setMode(mode); } };
+    reader.readAsDataURL(f);
+  });
+  e.target.value = "";
+};
+function drawThumbs() {
+  $("thumbs").innerHTML = refs.map((src, i) =>
+    `<div class="thumb"><img src="${src}" alt="Referenz ${i + 1}"><i>${i + 1}</i><b onclick="dropRef(${i})">×</b></div>`
+  ).join("");
+  $("refCount").textContent = refs.length ? `(${refs.length}/${maxRefs})` : "";
+  refresh();
+}
+function dropRef(i) { refs.splice(i, 1); drawThumbs(); setMode(mode); }
+
+// ---------- Start ----------
+function say(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
+
+async function start() {
+  const prompt = $("prompt").value.trim();
+  const need = MODES[mode].refs;
+  if (!prompt && !templates[mode]) return say("Bitte einen Prompt eingeben.", "err");
+  if (refs.length < need) return say(`Bitte ${need} Referenzbild(er) hochladen.`, "err");
+
+  let seed = parseInt($("seed").value, 10);
+  if (isNaN(seed) || seed < 0) { seed = Math.floor(Math.random() * 2 ** 31); $("seed").value = seed; }
+
+  const body = {
+    mode, prompt, negative_prompt: $("negative").value,
+    images: need ? refs : [],
+    aspect: $("aspect").value, base: parseInt($("base").value, 10),
+    follow_reference: $("follow").checked,
+    steps: parseInt($("steps").value, 10),
+    seed, count: parseInt($("count").value, 10) || 1,
+    sweep: $("sweep").value, lock_seed: $("lockSeed").checked,
+    view: $("view").value, effect: $("effect").value, form: $("form").value,
+    style: $("style").value, light: $("light").value, camera: $("camera").value,
+    true_cfg_scale: parseFloat($("cfg").value),
+    transparent: $("transparent").checked
+  };
+
+  $("go").disabled = true; $("stop").style.display = "block";
+  $("stage").dataset.file = "";
+  say("Auftrag wird gestartet …");
+  paintSeries([], body.count, 1);
+
+  const res = await fetch("/api/generate", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({error: res.statusText}));
+    $("go").disabled = false; $("stop").style.display = "none";
+    return say(err.error, "err");
+  }
+  poll();
+}
+$("go").onclick = start;
+$("stop").onclick = () => { fetch("/api/cancel", {method: "POST"}); say("Abbruch angefordert …"); };
+
+// ---------- Freitexteingabe ----------
+// Der Server liefert einen fertigen Satz Einstellungen. Die werden sichtbar in
+// die Regler geschrieben, bevor es losgeht -- so ist nachvollziehbar, was das
+// Sprachmodell verstanden hat, und korrigierbar, wenn es danebenlag.
+function applyPlan(plan) {
+  setMode(plan.mode);
+  $("prompt").value = plan.prompt || "";
+  ["aspect", "style", "light", "camera", "view", "sweep", "effect", "form"].forEach(
+    k => { if (plan[k] !== undefined) $(k).value = plan[k]; });
+  $("base").value = plan.base;
+  $("count").value = plan.count;
+  $("steps").value = plan.steps;
+  $("transparent").checked = !!plan.transparent;
+  $("lockSeed").checked = !!plan.lock_seed;
+  refresh();
+}
+
+async function sendChat() {
+  const text = $("chat").value.trim();
+  if (!text) return;
+  $("chatGo").disabled = true;
+  $("chatNote").className = "hint";
+  $("chatNote").textContent = "verstehe …";
+
+  const res = await fetch("/api/chat", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text, has_images: refs.length})
+  }).catch(() => null);
+  $("chatGo").disabled = false;
+
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    $("chatNote").className = "hint err";
+    $("chatNote").textContent = err.error || "Das Sprachmodell antwortet nicht.";
+    return;
+  }
+  const plan = await res.json();
+  applyPlan(plan);
+  $("chatNote").textContent = plan.note || "Verstanden.";
+  $("chat").value = "";
+  start();
+}
+$("chatGo").onclick = sendChat;
+$("chat").addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
+
+// ---------- Fortschritt ----------
+function poll() {
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    const s = await fetch("/api/status").then(r => r.json()).catch(() => null);
+    if (!s) return;
+
+    const done = s.results.length;
+    const perImage = s.total ? s.step / s.total : 0;
+    $("fill").style.width = (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
+    paintSeries(s.results, s.count, s.image);
+
+    if (s.busy) return say(`${s.message} · ${fmt(s.elapsed)}`);
+
+    clearInterval(polling);
+    $("go").disabled = false; $("stop").style.display = "none";
+    if (s.error) { $("fill").style.width = "0"; return say(s.error, "err"); }
+    if (done) say(`${s.message} in ${fmt(s.elapsed)}`, "ok");
+    else { $("fill").style.width = "0"; say(s.message); }
+    loadGallery();
+  }, 900);
+}
+const fmt = sec => sec < 90 ? `${Math.round(sec)}s` : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")} min`;
+
+// ---------- Mosaik der Serie ----------
+let seriesFiles = [];
+function paintSeries(files, count, active) {
+  const cells = [];
+  for (let i = 0; i < Math.max(count, files.length); i++) {
+    const f = files[i];
+    cells.push(f
+      ? `<figure class="tile">
+           <img src="/outputs/${f}" alt="${f}" onclick="show('${f}')"
+                onload="this.closest('.tile').querySelector('.px').textContent=this.naturalWidth+'×'+this.naturalHeight">
+           <figcaption><span class="px"></span><span class="cam" id="cam-${i}"></span>
+             <a href="/outputs/${f}" download title="Herunterladen">&darr;</a></figcaption>
+         </figure>`
+      : `<div class="slot${i === active - 1 ? " now" : ""}">${i === active - 1 ? "…" : ""}</div>`);
+  }
+  const html = cells.join("");
+  if ($("series").innerHTML === html) return;
+  $("series").innerHTML = html;
+  seriesFiles = files;
+  $("seriesHead").style.display = files.length > 1 ? "flex" : "none";
+  $("zip").href = "/api/zip?files=" + encodeURIComponent(files.join(","));
+  files.forEach((f, i) => fetch("/api/meta?file=" + encodeURIComponent(f))
+    .then(r => r.json()).then(m => {
+      const el = $("cam-" + i);
+      if (el) el.textContent = m.view || m.camera || m.style || "";
+    }).catch(() => {}));
+  if (files.length && !$("stage").dataset.file) show(files[0]);
+}
+
+// ---------- Große Anzeige ----------
+async function show(file) {
+  $("stage").dataset.file = file;
+  $("stage").innerHTML = `<img src="/outputs/${file}" alt="Erzeugtes Bild">`;
+  [...document.querySelectorAll(".grid img, .tile img")].forEach(
+    img => img.classList.toggle("sel", img.alt === file));
+  const m = await fetch("/api/meta?file=" + encodeURIComponent(file)).then(r => r.json()).catch(() => ({}));
+  const tags = ["effect", "form", "view", "style", "light", "camera"].filter(k => m[k]).map(k => `<span>${esc(m[k])}</span>`).join("");
+  $("meta").innerHTML =
+    `<div><a href="/outputs/${file}" download>${esc(file)}</a>`
+    + (m.size ? ` · ${m.size[0]} × ${m.size[1]} px` : "")
+    + (m.seed ? ` · Seed ${esc(m.seed)}` : "") + `</div>`
+    + (tags ? `<div class="tags">${tags}</div>` : "")
+    + (m.prompt ? `<div style="margin-top:7px"><code>${esc(m.prompt)}</code></div>` : "");
+}
+
+async function loadGallery() {
+  const {files} = await fetch("/api/gallery").then(r => r.json());
+  $("gallery").innerHTML = files.map(f =>
+    `<img src="/outputs/${f}" title="${f}" alt="${f}" onclick="show('${f}')">`).join("");
+}
+
+fetch("/api/status").then(r => r.json()).then(s => {
+  if (s.busy) { $("go").disabled = true; $("stop").style.display = "block"; poll(); }
+});
+loadGallery();
+</script>
+</body>
+</html>

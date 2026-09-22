@@ -1,0 +1,9 @@
+# Qwen-Image 2.1 ist erst in diffusers ab main enthalten, nicht in 0.40.
+git+https://github.com/huggingface/diffusers@cc8644b447d8f11074d3df06d0ee0e3e7c91bf75
+torch==2.14.0
+torchvision==0.29.0
+transformers==5.17.0
+accelerate==1.15.0
+huggingface_hub==1.32.0
+safetensors==0.8.0
+pillow==12.3.0

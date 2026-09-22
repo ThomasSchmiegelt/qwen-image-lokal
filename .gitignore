@@ -1,0 +1,16 @@
+# Virtuelle Umgebung (rund 12 GB)
+qwen_bild/
+
+# Erzeugte Bilder bleiben lokal
+outputs/
+
+# Reste einer verunglueckten pip-Zeile: `pip install torch>=2.4.0` ohne
+# Anfuehrungszeichen hat die Ausgabe in Dateien umgeleitet.
+=2.4.0
+=5.17
+torch
+bildmachen.py
+bildmachen.py.bak
+
+__pycache__/
+*.py[cod]
