@@ -148,6 +148,7 @@
       <button id="tab-edit">Bearbeiten</button>
       <button id="tab-gruppe">Gruppe</button>
       <button id="tab-person">Perspektiven</button>
+      <button id="tab-dataset">Trainingsdaten</button>
     </div>
 
     <div id="uploadBox" style="display:none">
@@ -161,6 +162,36 @@
     <label for="prompt">Prompt</label>
     <textarea id="prompt"></textarea>
     <p class="hint" id="tplHint" style="display:none"></p>
+
+    <fieldset id="datasetBox" style="display:none">
+      <legend>Trainingsdaten</legend>
+      <label for="keep">Was muss unverändert bleiben?</label>
+      <input id="keep" value="The black tow hitch with the ball neck">
+      <p class="hint">Auf Englisch beschreiben, möglichst konkret. Dieser Teil wird
+        in jeder Variante ausdrücklich festgeschrieben.</p>
+      <div class="row">
+        <div>
+          <label for="paint">Lack festhalten</label>
+          <select id="paint"></select>
+        </div>
+        <div>
+          <label for="scene">Umgebung festhalten</label>
+          <select id="scene"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="angle">Blickwinkel festhalten</label>
+          <select id="angle"></select>
+        </div>
+        <div>
+          <label for="device">Kameraart festhalten</label>
+          <select id="device"></select>
+        </div>
+      </div>
+      <p class="hint">„automatisch“ heißt: diese Achse wird pro Bild gewürfelt.
+        Ein fester Wert hält sie über die ganze Serie konstant.</p>
+    </fieldset>
 
     <fieldset>
       <legend>Vorlage &amp; Effekt</legend>
@@ -200,6 +231,7 @@
       <label for="sweep">Serie variieren</label>
       <select id="sweep">
         <option value="">nichts variieren &ndash; nur der Seed ändert sich</option>
+        <option value="dataset">Trainingsdaten: Lack, Umgebung, Licht, Kamera, Winkel würfeln</option>
         <option value="view">Umrundung: vorne, Seite, hinten, oben, unten</option>
         <option value="camera">Kameraperspektiven der Reihe nach</option>
         <option value="style">Stile der Reihe nach</option>
@@ -305,7 +337,11 @@ const MODES = {
            hint: refs => `Pro Person ein Bild, 2 bis ${refs} Stück. Gesicht gut sichtbar.`},
   person: {label: "Umrundung erzeugen", refs: 1, sweep: "view", count: 10, follow: false, lock: true,
            ph: "standing in a city street, wearing a dark coat",
-           hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."}
+           hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."},
+  dataset: {label: "Varianten erzeugen", refs: 1, sweep: "dataset", count: 12, follow: true, lock: false,
+            ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
+            hint: () => "Das Basisbild. Jede Variante ändert Lack, Umgebung, Licht, "
+                      + "Kameraart und Blickwinkel — nur das Festgeschriebene bleibt."}
 };
 
 let mode = "t2i", refs = [], polling = null, maxRefs = 4, templates = {}, refBudget = 2200;
@@ -329,6 +365,8 @@ fetch("/api/info").then(r => r.json()).then(info => {
       + " übersetzt und stellt die Regler unten ein.";
   }
   fill("effect", EFFECTS); fill("form", FORMS);
+  fill("paint", info.paints); fill("scene", info.scenes);
+  fill("angle", info.angles); fill("device", info.devices);
   $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
     + EFFECTS.map(e => `<code>${esc(e.alias)}</code>`).join(", ")
     + ". Ein getippter Befehl stellt die Regler selbst um.";
@@ -396,7 +434,8 @@ function setMode(next) {
   sweepChanged();
 
   const tpl = templates[next];
-  $("tplHint").style.display = tpl ? "block" : "none";
+  $("datasetBox").style.display = next === "dataset" ? "block" : "none";
+  $("tplHint").style.display = tpl && next !== "dataset" ? "block" : "none";
   if (tpl) $("tplHint").textContent = "Der Server setzt automatisch davor: „"
     + tpl.replace("{extra}", "…").replace("{n}", refs.length || "N") + "“";
   drawThumbs();
@@ -472,6 +511,9 @@ async function start() {
     seed, count: parseInt($("count").value, 10) || 1,
     sweep: $("sweep").value, lock_seed: $("lockSeed").checked,
     view: $("view").value, effect: $("effect").value, form: $("form").value,
+    keep: $("keep").value,
+    paint: $("paint").value, scene: $("scene").value,
+    angle: $("angle").value, device: $("device").value,
     style: $("style").value, light: $("light").value, camera: $("camera").value,
     true_cfg_scale: parseFloat($("cfg").value),
     transparent: $("transparent").checked
@@ -588,7 +630,8 @@ function paintSeries(files, count, active) {
   files.forEach((f, i) => fetch("/api/meta?file=" + encodeURIComponent(f))
     .then(r => r.json()).then(m => {
       const el = $("cam-" + i);
-      if (el) el.textContent = m.view || m.camera || m.style || "";
+      if (el) el.textContent = [m.paint, m.scene].filter(Boolean).join(" · ")
+                              || m.view || m.camera || m.style || "";
     }).catch(() => {}));
   if (files.length && !$("stage").dataset.file) show(files[0]);
 }
@@ -600,7 +643,8 @@ async function show(file) {
   [...document.querySelectorAll(".grid img, .tile img")].forEach(
     img => img.classList.toggle("sel", img.alt === file));
   const m = await fetch("/api/meta?file=" + encodeURIComponent(file)).then(r => r.json()).catch(() => ({}));
-  const tags = ["effect", "form", "view", "style", "light", "camera"].filter(k => m[k]).map(k => `<span>${esc(m[k])}</span>`).join("");
+  const tags = ["paint", "scene", "angle", "device", "effect", "form", "view",
+                "style", "light", "camera"].filter(k => m[k]).map(k => `<span>${esc(m[k])}</span>`).join("");
   $("meta").innerHTML =
     `<div><a href="/outputs/${file}" download>${esc(file)}</a>`
     + (m.size ? ` · ${m.size[0]} × ${m.size[1]} px` : "")

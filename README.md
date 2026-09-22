@@ -54,9 +54,17 @@ Karte laden, werfen sich gegenseitig heraus.
 
 ## Was die Oberfläche kann
 
-**Vier Betriebsarten:** Text zu Bild · Bearbeiten (1–4 Referenzbilder) ·
+**Fünf Betriebsarten:** Text zu Bild · Bearbeiten (1–4 Referenzbilder) ·
 Gruppenbild (2–4 Personen in ein gemeinsames Foto) · Umrundung (eine Person
-aus wechselnden Blickwinkeln).
+aus wechselnden Blickwinkeln) · Trainingsdaten.
+
+**Trainingsdaten** vervielfachen ein Basisbild: Lack (12 Farben), Umgebung
+(12 Szenen), Licht, Kameraart (9 Geräte vom Smartphone bis zur
+Überwachungskamera) und Blickwinkel werden je Bild gewürfelt, während ein
+festgeschriebener Gegenstand unverändert bleibt. Jede Achse lässt sich
+einzeln festhalten. Neben den Bildern entsteht ein `*.jsonl`-Manifest mit
+einer Zeile je Variante, damit der Satz später filterbar und ausbalancierbar
+ist.
 
 **Serien** mit 1–20 Bildern. Variieren nach Umrundung, Kameraperspektive, Stil
 oder Lichtstimmung — der Reihe nach oder gewürfelt. Optional derselbe Seed für
@@ -141,6 +149,12 @@ Ein JSON-Schema statt `format: "json"` erzwingt zwar gültige Syntax, kostet
 aber spürbar Verständnis — gemessen 14 statt 22 Treffern, weil ausdrückliche
 Wünsche wie „quer" oder „freigestellt" unter den Tisch fielen. Die Antwort wird
 stattdessen serverseitig gegen die echten Tabellen geprüft.
+
+**Der Blickwinkel ändert sich bei Trainingsdaten nur wenig.** Qwen-Image 2.1
+hält sich eng an die Bildaufteilung der Vorlage. Lack, Umgebung und Licht
+wechseln zuverlässig, „bodennah" oder „Nahaufnahme" verschieben den Ausschnitt
+dagegen nur leicht. Für echte Perspektivvielfalt braucht es Aufnahmen aus
+verschiedenen Winkeln als Basis.
 
 **Mehrere Referenzbilder kosten Sequenzlänge.** Vier Referenzen bei voller
 Auflösung sprengen den Speicher. Die Referenzauflösung wird deshalb automatisch

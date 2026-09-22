@@ -34,7 +34,7 @@ ROOT = os.path.dirname(HERE)
 OUTPUTS = os.path.join(ROOT, "outputs")
 HOST = os.environ.get("QWEN_HOST", "127.0.0.1")
 PORT = int(os.environ.get("QWEN_PORT", "7860"))
-SAFE_NAME = re.compile(r"[\w.\-]+\.png")
+SAFE_NAME = re.compile(r"[\w.\-]+\.(png|jsonl)")
 # Fester Befehl, keine Shell: der Aufruf kann nur eine Datei aus outputs/ oeffnen.
 GIMP_CMD = os.environ.get("QWEN_GIMP", "gimp")
 
@@ -56,7 +56,8 @@ def _save(meta: dict, image: Image.Image, stamp: str, kind: str) -> str:
     """Legt das Bild ab und schreibt Prompt/Seed als PNG-Textfelder mit hinein."""
     name = f"{stamp}_{kind}_{meta['index']:02d}_seed{meta['seed']}.png"
     info = PngImagePlugin.PngInfo()
-    for key in ("prompt", "seed", "view", "style", "light", "camera", "effect", "form"):
+    for key in ("prompt", "seed", "view", "style", "light", "camera", "effect",
+                "form", "paint", "scene", "angle", "device"):
         if meta.get(key) is not None:
             info.add_text(f"qwen_{key}", str(meta[key]))
     image.save(os.path.join(OUTPUTS, name), pnginfo=info)
@@ -69,8 +70,17 @@ def _run_job(params: dict) -> None:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         kind = params.get("mode") or ("edit" if refs else "t2i")
 
+        manifest = os.path.join(OUTPUTS, f"{stamp}_{kind}.jsonl") if kind == "dataset" else None
+
         def on_image(meta, image):
-            current["files"].append(_save(meta, image, stamp, kind))
+            name = _save(meta, image, stamp, kind)
+            current["files"].append(name)
+            if manifest:
+                # Eine Zeile je Bild: was variiert wurde, direkt neben der Datei.
+                # Damit laesst sich der Satz spaeter filtern oder ausbalancieren.
+                row = {"file": name, **{k: v for k, v in meta.items() if k != "index"}}
+                with open(manifest, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
         engine.run_series(
             prompt=params.get("prompt", ""),
@@ -86,6 +96,11 @@ def _run_job(params: dict) -> None:
             transparent=bool(params.get("transparent", False)),
             effect=params.get("effect") or None,
             form=params.get("form") or None,
+            keep=params.get("keep") or "The main subject",
+            paint=params.get("paint") or None,
+            scene=params.get("scene") or None,
+            angle=params.get("angle") or None,
+            device=params.get("device") or None,
             count=int(params.get("count", 1)),
             sweep=params.get("sweep") or None,
             lock_seed=bool(params.get("lock_seed", False)),
@@ -279,14 +294,15 @@ class Handler(BaseHTTPRequestHandler):
         spec = EFFECTS.get(params.get("effect") or "", {})
         mode = params.get("mode") or "t2i"
         has_text = bool(params.get("prompt", "").strip())
-        if not has_text and not spec and not params.get("form") and mode not in ("gruppe", "person"):
+        if not has_text and not spec and not params.get("form") \
+                and mode not in ("gruppe", "person", "dataset"):
             return self._json(400, {"error": "Prompt ist leer"})
         if spec.get("needs_image") and not refs:
             return self._json(400, {
                 "error": f"„{spec['label']}\u201c braucht ein Bild \u2013 bitte eines hochladen"})
         if len(refs) > MAX_REFERENCES:
             return self._json(400, {"error": f"Hoechstens {MAX_REFERENCES} Referenzbilder"})
-        if mode in ("edit", "person") and not refs:
+        if mode in ("edit", "person", "dataset") and not refs:
             return self._json(400, {"error": "Bitte ein Referenzbild hochladen"})
         if mode == "gruppe" and len(refs) < 2:
             return self._json(400, {"error": "Fuer ein Gruppenbild mindestens zwei Personen hochladen"})

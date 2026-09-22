@@ -31,8 +31,8 @@ from diffusers import QwenImage21Pipeline
 from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimensions
 
 from presets import (
-    CAMERAS, EFFECTS, FORMS, LIGHTS, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE, VIEWS,
-    fragment,
+    ANGLES, CAMERAS, DATASET_AXES, DEVICES, EFFECTS, FORMS, LIGHTS, PAINTS, SCENES, STYLES,
+    TEMPLATES, TRANSPARENT_TEMPLATE, VIEWS, fragment,
 )
 
 REPO = os.environ.get("QWEN_IMAGE_REPO", "Qwen/Qwen-Image-2.1")
@@ -94,7 +94,8 @@ def _free() -> None:
         torch.cuda.empty_cache()
 
 
-def build_prompt(text: str, view=None, style=None, light=None, camera=None) -> str:
+def build_prompt(text: str, view=None, style=None, light=None, camera=None,
+                 paint=None, scene=None, angle=None, device=None) -> str:
     """Haengt die gewaehlten Voreinstellungen an den Prompt an.
 
     Der Blickwinkel steht vorn: er bestimmt die Bildkomposition, waehrend Stil,
@@ -102,6 +103,10 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None) -> s
     """
     bits = [
         fragment(VIEWS, view),
+        fragment(PAINTS, paint),
+        fragment(SCENES, scene),
+        fragment(ANGLES, angle),
+        fragment(DEVICES, device),
         fragment(STYLES, style),
         fragment(LIGHTS, light),
         fragment(CAMERAS, camera),
@@ -172,6 +177,10 @@ class Engine:
         style=None,
         light=None,
         camera=None,
+        paint=None,
+        scene=None,
+        angle=None,
+        device=None,
         lock_seed: bool = False,
     ) -> list[dict]:
         """Baut die Auftragsliste einer Serie.
@@ -184,17 +193,29 @@ class Engine:
           "camera"    geht die Kameraperspektiven der Reihe nach durch
           "style"     dito fuer Stile, "light" fuer Lichtstimmungen
           "random"    wuerfelt jedes offene Feld -- reproduzierbar aus dem Seed
+          "dataset"   Trainingsdaten: wuerfelt Lack, Umgebung, Licht, Kamera und
+                      Blickwinkel fuer jedes Bild neu, damit die Varianten
+                      moeglichst weit auseinanderliegen
 
         `lock_seed` gibt allen Bildern denselben Startseed. Bei einer Umrundung
         haelt das Kleidung, Umgebung und Bildaufbau merklich stabiler, weil das
         Ausgangsrauschen identisch bleibt.
         """
-        tables = {"view": VIEWS, "style": STYLES, "light": LIGHTS, "camera": CAMERAS}
+        tables = {"view": VIEWS, "style": STYLES, "light": LIGHTS, "camera": CAMERAS,
+                  "paint": PAINTS, "scene": SCENES, "angle": ANGLES,
+                  "device": DEVICES}
         rng = random.Random(seed)
         jobs = []
         for i in range(count):
-            pick = {"view": view, "style": style, "light": light, "camera": camera}
-            if sweep == "random":
+            pick = {"view": view, "style": style, "light": light, "camera": camera,
+                    "paint": paint, "scene": scene, "angle": angle, "device": device}
+            if sweep == "dataset":
+                # Jede Achse eigenstaendig gewuerfelt. Was fest eingestellt ist,
+                # bleibt fest -- so laesst sich eine Achse gezielt festhalten.
+                for field, table in DATASET_AXES.items():
+                    if not pick[field]:
+                        pick[field] = rng.choice(list(table))
+            elif sweep == "random":
                 for field, table in tables.items():
                     if field != "view" and not pick[field]:
                         pick[field] = rng.choice(list(table))
@@ -228,7 +249,12 @@ class Engine:
         count: int = 1,
         sweep: str | None = None,
         lock_seed: bool = False,
+        keep: str = "The main subject",
         view=None,
+        paint=None,
+        scene=None,
+        angle=None,
+        device=None,
         style=None,
         light=None,
         camera=None,
@@ -253,11 +279,13 @@ class Engine:
         if mode in TEMPLATES:
             if not images:
                 raise ValueError("Fuer diesen Modus werden Referenzbilder gebraucht.")
-            text = TEMPLATES[mode].format(n=len(images), extra=text)
+            text = TEMPLATES[mode].format(
+                n=len(images), extra=text, keep=keep.strip() or "The main subject")
         if transparent:
             text = TRANSPARENT_TEMPLATE.format(extra=text)
 
-        jobs = self.plan(text, count, seed, sweep, view, style, light, camera, lock_seed)
+        jobs = self.plan(text, count, seed, sweep, view, style, light, camera,
+                         paint, scene, angle, device, lock_seed)
 
         self._cancel = False
         self._set(state="loading", image=0, count=len(jobs), step=0, total=steps,
@@ -349,7 +377,8 @@ class Engine:
                     break
 
                 image_out = out.images[0]
-                meta = {k: job[k] for k in ("prompt", "seed", "view", "style", "light", "camera")}
+                meta = {k: job[k] for k in ("prompt", "seed", "view", "style", "light",
+                                            "camera", "paint", "scene", "angle", "device")}
                 meta["index"] = index
                 meta["effect"] = effect
                 meta["form"] = form

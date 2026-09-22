@@ -92,6 +92,10 @@ def catalog() -> dict:
         "lights": [{"key": k, "label": v[0]} for k, v in LIGHTS.items()],
         "cameras": [{"key": k, "label": v[0]} for k, v in CAMERAS.items()],
         "views": [{"key": k, "label": v[0]} for k, v in VIEWS.items()],
+        "paints": [{"key": k, "label": v[0]} for k, v in PAINTS.items()],
+        "scenes": [{"key": k, "label": v[0]} for k, v in SCENES.items()],
+        "angles": [{"key": k, "label": v[0]} for k, v in ANGLES.items()],
+        "devices": [{"key": k, "label": v[0]} for k, v in DEVICES.items()],
         "templates": TEMPLATES,
         "effects": [{"key": k, "label": v["label"], "alias": v["alias"],
                      "needs_image": v["needs_image"], **overrides(v)}
@@ -258,3 +262,90 @@ def parse_command(text: str) -> tuple[str | None, str]:
 def overrides(spec: dict) -> dict:
     """Die Einstellungen, die ein Effekt oder eine Vorlage mitbringt."""
     return {k: spec[k] for k in OVERRIDE_KEYS if k in spec}
+
+
+# --- Trainingsdaten ------------------------------------------------------
+# Vervielfaeltigung eines Basisbilds: alles darf sich aendern ausser dem
+# Gegenstand, auf den es ankommt. Die Bausteine sind als vollstaendige
+# Aussagen formuliert, damit sie hinter der Unveraenderlichkeits-Anweisung
+# stehen koennen, ohne den Satzbau zu zerlegen.
+PAINTS = {
+    "rot":        ("Rot", "the vehicle body is painted bright red"),
+    "weiss":      ("Weiß", "the vehicle body is painted plain white"),
+    "schwarz":    ("Schwarz", "the vehicle body is painted glossy black"),
+    "silber":     ("Silber", "the vehicle body is painted metallic silver"),
+    "dunkelgrau": ("Dunkelgrau", "the vehicle body is painted dark grey"),
+    "dunkelgruen": ("Dunkelgrün", "the vehicle body is painted dark green"),
+    "beige":      ("Beige", "the vehicle body is painted beige"),
+    "gelb":       ("Gelb", "the vehicle body is painted bright yellow"),
+    "orange":     ("Orange", "the vehicle body is painted orange"),
+    "dunkelblau": ("Dunkelblau", "the vehicle body is painted deep navy blue"),
+    "bordeaux":   ("Bordeaux", "the vehicle body is painted dark burgundy red"),
+    "matt":       ("Mattlack", "the vehicle body has a matte grey wrap with no gloss"),
+}
+
+SCENES = {
+    "hof":      ("Hofeinfahrt", "standing on a paved driveway in front of a house"),
+    "schotter": ("Schotterplatz", "standing on a gravel yard"),
+    "wiese":    ("Feldweg", "standing on a dirt track next to a green field"),
+    "wald":     ("Waldweg", "standing on a forest track surrounded by trees"),
+    "tiefgarage": ("Tiefgarage", "standing in an underground car park with concrete pillars"),
+    "werkstatt": ("Werkstatt", "standing inside a repair workshop with tools on the walls"),
+    "schnee":   ("Schnee", "standing on a snow-covered surface in winter"),
+    "stadt":    ("Stadtstraße", "parked at the kerb of a city street with buildings behind"),
+    "strand":   ("Strandparkplatz", "standing on a sandy car park near the sea"),
+    "regen":    ("Nasse Fahrbahn", "standing on wet asphalt with rain puddles"),
+    "halle":    ("Lagerhalle", "standing inside a bright warehouse hall"),
+    "baustelle": ("Baustelle", "standing on a muddy construction site"),
+}
+
+# Blickwinkel auf einen Gegenstand -- nicht zu verwechseln mit VIEWS, die eine
+# Person umrunden.
+ANGLES = {
+    "gerade":     ("Gerade von hinten", "seen straight from behind at bumper height"),
+    "linksleicht": ("Leicht von links", "seen from slightly left of centre"),
+    "rechtsleicht": ("Leicht von rechts", "seen from slightly right of centre"),
+    "linksschraeg": ("Schräg von links", "seen at a 40 degree angle from the left rear"),
+    "rechtsschraeg": ("Schräg von rechts", "seen at a 40 degree angle from the right rear"),
+    "tief":       ("Bodennah", "seen from a low camera position close to the ground"),
+    "erhoeht":    ("Erhöht", "seen from slightly above, looking down at the rear"),
+    "nah":        ("Nahaufnahme", "a close-up filling most of the frame"),
+    "weit":       ("Abstand", "seen from further away with the whole rear of the vehicle visible"),
+    "hochkant":   ("Aufrecht", "an upright portrait framing of the rear"),
+}
+
+# Aufnahmegeraet statt Objektiv: fuer Trainingsdaten ist die Bildanmutung der
+# Kamera wichtiger als die Brennweite. Die CAMERAS-Tabelle passt hier nicht,
+# ihre Eintraege sind auf Personen gemuenzt ("Kopf und Schultern").
+DEVICES = {
+    "handy":       ("Smartphone", "shot on a smartphone camera, slightly over-processed"),
+    "spiegelreflex": ("Spiegelreflex", "shot on a DSLR with a 50mm lens, clean and sharp"),
+    "weitwinkel":  ("Weitwinkel", "shot with a wide angle lens, slight barrel distortion"),
+    "tele":        ("Teleobjektiv", "shot with a telephoto lens, compressed perspective"),
+    "action":      ("Action-Kamera", "shot on an action camera, very wide, mild fisheye"),
+    "dashcam":     ("Dashcam", "a dashcam still, slightly soft with over-sharpened edges"),
+    "ueberwachung": ("Überwachungskamera", "a surveillance camera still, low contrast, visible noise"),
+    "kompakt":     ("Kompaktkamera", "a compact camera snapshot with direct flash"),
+    "analog":      ("Analogfilm", "shot on 35mm colour film with visible grain"),
+}
+
+# Vor den Benutzertext im Trainingsdaten-Modus. Die Unveraenderlichkeit steht
+# bewusst zweimal drin -- einmal als Anweisung, einmal als Aufzaehlung der
+# Merkmale. Ein Diffusionsmodell ueberschreibt sonst gern mit.
+DATASET_TEMPLATE = (
+    "A photograph of the same subject as in the reference image. "
+    "{keep} must remain exactly identical to the reference: same model, same shape, "
+    "same size, same colour, same finish, same mounting position and the same "
+    "proportions relative to the vehicle. Do not redesign it, do not move it, "
+    "do not change its colour. Everything else in the picture may differ. {extra}"
+)
+
+# Kerzenlicht auf einem Auto im Hof ergibt keine brauchbare Variante, deshalb
+# hier ohne. Wer es doch will, stellt die Lichtachse von Hand ein.
+DATASET_LIGHTS = {k: v for k, v in LIGHTS.items() if k != "kerze"}
+
+DATASET_AXES = {"paint": PAINTS, "scene": SCENES, "light": DATASET_LIGHTS,
+                "device": DEVICES, "angle": ANGLES}
+
+# Nachtraeglich eingehaengt, weil die Vorlage weiter unten steht als TEMPLATES.
+TEMPLATES["dataset"] = DATASET_TEMPLATE
