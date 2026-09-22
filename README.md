@@ -82,6 +82,9 @@ das Prompt-Feld tippen und stellen die Regler selbst um.
 ist die Übersetzung — Qwen-Image folgt englischen Bildbeschreibungen deutlich
 besser. Alles Verstandene landet sichtbar in den Reglern, bevor es losgeht.
 
+Die Deutung erzeugt noch kein Bild: erst Text, dann Prompt und Einstellungen,
+dann prüfen, dann selbst auf Erzeugen klicken.
+
 Das Sprachmodell wird nach jeder Anfrage sofort wieder entladen
 (`keep_alive: 0`), damit die GPU frei für das Bildmodell bleibt.
 

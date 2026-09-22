@@ -78,6 +78,12 @@
     animation: atmen 1.6s ease-in-out infinite;
   }
   #go.done, #go.done:disabled { background: var(--ok); color: #0c2117; }
+  /* Nach einer Freitext-Deutung: der Knopf meldet sich, ohne zu draengen. */
+  #go.ready { animation: winken 1.3s ease-in-out 4; }
+  @keyframes winken {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(107, 138, 253, .55); }
+    50% { box-shadow: 0 0 0 8px rgba(107, 138, 253, 0); }
+  }
   @keyframes atmen { 50% { filter: brightness(1.18); } }
   #stop {
     width: 100%; margin-top: 8px; padding: 8px; border: 1px solid var(--line);
@@ -393,7 +399,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
     $("chatBox").style.display = "block";
     $("chat").placeholder = "Sag einfach, was du willst — „10 Drachen als Zeichentrick, hochkant“";
     $("chatNote").textContent = "Freitext, deutsch. " + info.chat.model
-      + " übersetzt und stellt die Regler unten ein.";
+      + " übersetzt und stellt die Regler unten ein. Erzeugt wird erst auf deinen Klick.";
   }
   fill("effect", EFFECTS); fill("form", FORMS);
   fill("paint", info.paints); fill("scene", info.scenes);
@@ -528,7 +534,7 @@ function say(text, cls = "") { $("status").textContent = text; $("status").class
 // wenn fertig, danach wieder normal.
 function buttonState(state) {
   const go = $("go");
-  go.classList.remove("busy", "done");
+  go.classList.remove("busy", "done", "ready");
   clearTimeout(buttonState.timer);
   if (state === "busy") {
     go.disabled = true; go.classList.add("busy"); go.textContent = "läuft …";
@@ -625,9 +631,12 @@ async function sendChat() {
   }
   const plan = await res.json();
   applyPlan(plan);
-  $("chatNote").textContent = plan.note || "Verstanden.";
+  $("chatNote").textContent = (plan.note || "Verstanden.")
+    + ` Einstellungen unten prüfen, dann auf „${MODES[mode].label}“.`;
   $("chat").value = "";
-  start();
+  // Bewusst kein Start: erst Text, dann Prompt, dann prüfen, dann Bild.
+  $("go").classList.add("ready");
+  setTimeout(() => $("go").classList.remove("ready"), 6000);
 }
 $("chatGo").onclick = sendChat;
 $("chat").addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
