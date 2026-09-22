@@ -139,7 +139,7 @@ def _run_job(params: dict) -> None:
             scene=params.get("scene") or None,
             angle=params.get("angle") or None,
             device=params.get("device") or None,
-            paint_target=params.get("paint_target") or PAINT_TARGET,
+            paint_target=params.get("paint_target") or "",
             count=int(params.get("count", 1)),
             sweep=params.get("sweep") or None,
             lock_seed=bool(params.get("lock_seed", False)),

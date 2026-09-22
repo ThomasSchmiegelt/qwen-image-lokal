@@ -31,7 +31,7 @@ from diffusers import QwenImage21Pipeline
 from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimensions
 
 from presets import (
-    ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, LIGHTS, PAINT_TARGET, PAINTS,
+    ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, LIGHTS, PAINTS,
     SCENES, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE, VARIANT_AXES, VIEWS, fragment,
 )
 
@@ -96,7 +96,7 @@ def _free() -> None:
 
 def build_prompt(text: str, view=None, style=None, light=None, camera=None,
                  paint=None, scene=None, angle=None, device=None,
-                 paint_target: str = PAINT_TARGET) -> str:
+                 paint_target: str = "") -> str:
     """Haengt die gewaehlten Voreinstellungen an den Prompt an.
 
     Der Blickwinkel steht vorn: er bestimmt die Bildkomposition, waehrend Stil,
@@ -104,7 +104,10 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
     """
     bits = [
         fragment(VIEWS, view),
-        f"{paint_target.strip()} is {PAINTS[paint][1]}" if paint in PAINTS else None,
+        # Ohne Ziel kein Farbbaustein -- " is bright red" waere Unsinn, und ein
+        # stillschweigend eingesetztes Ersatzziel aendert am falschen Objekt.
+        f"{paint_target.strip()} is {PAINTS[paint][1]}"
+        if paint in PAINTS and paint_target.strip() else None,
         fragment(SCENES, scene),
         fragment(ANGLES, angle),
         fragment(DEVICES, device),
@@ -187,7 +190,7 @@ class Engine:
         scene=None,
         angle=None,
         device=None,
-        paint_target: str = PAINT_TARGET,
+        paint_target: str = "",
         lock_seed: bool = False,
     ) -> list[dict]:
         """Baut die Auftragsliste einer Serie.
@@ -264,7 +267,7 @@ class Engine:
         scene=None,
         angle=None,
         device=None,
-        paint_target: str = PAINT_TARGET,
+        paint_target: str = "",
         style=None,
         light=None,
         camera=None,

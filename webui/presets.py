@@ -92,7 +92,7 @@ def catalog() -> dict:
         "lights": [{"key": k, "label": v[0]} for k, v in LIGHTS.items()],
         "cameras": [{"key": k, "label": v[0]} for k, v in CAMERAS.items()],
         "views": [{"key": k, "label": v[0]} for k, v in VIEWS.items()],
-        "paints": [{"key": k, "label": v[0]} for k, v in PAINTS.items()],
+        "paints": [{"key": k, "label": v[0], "phrase": v[1]} for k, v in PAINTS.items()],
         "scenes": [{"key": k, "label": v[0]} for k, v in SCENES.items()],
         "angles": [{"key": k, "label": v[0]} for k, v in ANGLES.items()],
         "devices": [{"key": k, "label": v[0]} for k, v in DEVICES.items()],

@@ -58,6 +58,9 @@
   input:disabled, select:disabled { opacity: .45; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .axis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+  .axis label { margin-top: 8px; }
+  #paintPreview.warn { color: var(--busy); }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 11px; color: var(--muted); font-size: 13px; }
   .check input { width: auto; margin: 0; }
   .check label { margin: 0; font-size: 13px; }
@@ -193,31 +196,48 @@
 
     <fieldset id="variantenBox" style="display:none">
       <legend>Varianten</legend>
+
       <label for="keep">Was muss unverändert bleiben?</label>
       <input id="keep" value="The black tow hitch with the ball neck">
-      <label for="paintTarget">Was wird umgefärbt?</label>
-      <input id="paintTarget" value="the vehicle body">
-      <p class="hint">Möglichst konkret, deutsch oder englisch. Bei einem Porträt
-        etwa <code>die Jacke der Person</code>. Ein einzelnes Kleidungsstück wird
-        zuverlässiger getroffen als mehrere auf einmal.</p>
 
-      <label>Achsen</label>
-      <div class="row">
-        <div><select id="paint" title="Farbe"></select></div>
-        <div><select id="scene" title="Umgebung"></select></div>
+      <label style="margin-top:16px">Achsen &ndash; was soll sich ändern?</label>
+
+      <div class="axis">
+        <div>
+          <label for="paint">Farbe</label>
+          <select id="paint"></select>
+        </div>
+        <div>
+          <label for="paintTarget">… wovon?</label>
+          <input id="paintTarget" placeholder="z. B. die Jacke der Person">
+        </div>
       </div>
-      <div class="row" style="margin-top:8px">
-        <div><select id="vlight" title="Licht"></select></div>
-        <div><select id="device" title="Kameraart"></select></div>
+      <p class="hint" id="paintPreview"></p>
+
+      <div class="axis" style="margin-top:12px">
+        <div>
+          <label for="scene">Umgebung</label>
+          <select id="scene"></select>
+        </div>
+        <div>
+          <label for="vlight">Licht</label>
+          <select id="vlight"></select>
+        </div>
       </div>
-      <div class="row" style="margin-top:8px">
-        <div><select id="angle" title="Blickwinkel"></select></div>
-        <div></div>
+      <div class="axis">
+        <div>
+          <label for="device">Kameraart</label>
+          <select id="device"></select>
+        </div>
+        <div>
+          <label for="angle">Blickwinkel</label>
+          <select id="angle"></select>
+        </div>
       </div>
+
       <p class="hint"><b>würfeln</b> ändert die Achse bei jedem Bild.
-        <b>unverändert lassen</b> rührt sie gar nicht an — so bleibt etwa der
-        Hintergrund stehen, während nur die Farbe wechselt. Ein fester Wert gilt
-        für die ganze Serie.</p>
+        <b>unverändert lassen</b> rührt sie gar nicht an. Ein fester Wert gilt
+        für die ganze Serie. Deutsch ist überall in Ordnung.</p>
     </fieldset>
 
     <fieldset>
@@ -372,7 +392,7 @@ const MODES = {
 };
 
 let mode = "t2i", refs = [], polling = null, maxRefs = 4, templates = {}, refBudget = 2200;
-let EFFECTS = [], FORMS = [], hasGimp = false, AXIS_OFF = "-";
+let EFFECTS = [], FORMS = [], PAINTS = [], hasGimp = false, AXIS_OFF = "-";
 
 // ---------- Voreinstellungen laden ----------
 fetch("/api/info").then(r => r.json()).then(info => {
@@ -410,7 +430,8 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fillAxis("paint", info.paints); fillAxis("scene", info.scenes);
   fillAxis("angle", info.angles); fillAxis("device", info.devices);
   fillAxis("vlight", info.lights);
-  $("paintTarget").value = info.paint_target || "the vehicle body";
+  PAINTS = info.paints;
+  paintPreview();
   $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
     + EFFECTS.map(e => `<code>${esc(e.alias)}</code>`).join(", ")
     + ". Ein getippter Befehl stellt die Regler selbst um.";
@@ -468,6 +489,26 @@ function sweepChanged() {
 $("sweep").addEventListener("change", sweepChanged);
 $("lockSeed").addEventListener("change", sweepChanged);
 
+// Zeigt den Satz, den die Farbachse erzeugen wird. Ohne das bleibt unsichtbar,
+// dass ein unpassendes Ziel die Achse wirkungslos macht.
+function paintPreview() {
+  const el = $("paintPreview"), wahl = $("paint").value, ziel = $("paintTarget").value.trim();
+  el.className = "hint";
+  if (wahl === AXIS_OFF) { el.textContent = "Die Farbe bleibt unverändert."; return; }
+  if (!ziel) {
+    el.className = "hint warn";
+    el.textContent = "Bitte eintragen, wovon die Farbe geändert werden soll — "
+      + "sonst bleibt die Farbachse wirkungslos.";
+    return;
+  }
+  const treffer = PAINTS.find(p => p.key === wahl);
+  el.textContent = treffer
+    ? `Ergibt: „${ziel} is ${treffer.phrase}“`
+    : `Pro Bild eine andere Farbe, z. B. „${ziel} is ${(PAINTS[0] || {}).phrase || "red"}“`;
+}
+$("paint").addEventListener("change", paintPreview);
+$("paintTarget").addEventListener("input", paintPreview);
+
 // ---------- Modus ----------
 function setMode(next) {
   mode = next;
@@ -486,6 +527,7 @@ function setMode(next) {
 
   const tpl = templates[next];
   const istVarianten = next === "varianten";
+  paintPreview();
   $("variantenBox").style.display = istVarianten ? "block" : "none";
   // Das Licht steuert im Varianten-Modus die Achse, nicht dieser Regler.
   $("light").disabled = istVarianten;
@@ -573,6 +615,10 @@ async function start() {
   const need = MODES[mode].refs;
   if (!prompt && !templates[mode]) return say("Bitte einen Prompt eingeben.", "err");
   if (refs.length < need) return say(`Bitte ${need} Referenzbild(er) hochladen.`, "err");
+  if (mode === "varianten" && $("paint").value !== AXIS_OFF && !$("paintTarget").value.trim()) {
+    paintPreview();
+    return say("Die Farbachse braucht ein Ziel — oder stell sie auf „unverändert lassen“.", "err");
+  }
 
   let seed = parseInt($("seed").value, 10);
   if (isNaN(seed) || seed < 0) { seed = Math.floor(Math.random() * 2 ** 31); $("seed").value = seed; }
