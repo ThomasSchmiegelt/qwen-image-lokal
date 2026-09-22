@@ -156,9 +156,7 @@ gimp/install.sh       Plugin verknüpfen
 
 ## Lizenz
 
-PolyForm Noncommercial 1.0.0 mit einer zusätzlichen Einschränkung für
-militärische Nutzung und Waffen — siehe [LICENSE](LICENSE). Das ist **keine**
-Open-Source-Lizenz.
+[MIT](LICENSE).
 
 Die Lizenz gilt für den Code in diesem Repository. **Qwen-Image 2.1 selbst
 steht unter seiner eigenen Lizenz** und wird hier nicht mitgeliefert, sondern
