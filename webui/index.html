@@ -8,12 +8,19 @@
   :root {
     --bg: #14161a; --panel: #1c1f25; --sunk: #12141a; --line: #2c313a;
     --text: #e6e8ec; --muted: #9aa2af; --accent: #6b8afd; --ok: #4ec98a; --err: #e8735f;
+    --busy: #e0a33c;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
+  #staleBar {
+    display: none; padding: 9px 20px; background: #4a2420; color: #ffd9d2;
+    border-bottom: 1px solid #7a3b34; font-size: 13px;
+  }
+  #staleBar code { color: #fff; }
+
   header {
     padding: 13px 20px; border-bottom: 1px solid var(--line);
     display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
@@ -34,10 +41,11 @@
   #chatNote { margin-bottom: 12px; }
   #chatNote.err { color: var(--err); }
 
-  .tabs { display: flex; gap: 5px; margin-bottom: 12px; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 12px; }
   .tabs button {
-    flex: 1; padding: 8px 2px; border: 1px solid var(--line); background: transparent;
+    padding: 8px 4px; border: 1px solid var(--line); background: transparent;
     color: var(--muted); border-radius: 7px; cursor: pointer; font: inherit; font-size: 12.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
   .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
@@ -63,6 +71,14 @@
     background: var(--accent); color: #fff; font: 600 14px/1 inherit; cursor: pointer;
   }
   #go:disabled { background: #39404f; cursor: default; }
+  /* Waehrend der Berechnung: eigene Farbe statt nur ausgegraut, damit auf einen
+     Blick klar ist, dass der Klick angekommen ist. */
+  #go.busy, #go.busy:disabled {
+    background: var(--busy); color: #1b1408; cursor: progress;
+    animation: atmen 1.6s ease-in-out infinite;
+  }
+  #go.done, #go.done:disabled { background: var(--ok); color: #0c2117; }
+  @keyframes atmen { 50% { filter: brightness(1.18); } }
   #stop {
     width: 100%; margin-top: 8px; padding: 8px; border: 1px solid var(--line);
     border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font: inherit;
@@ -128,6 +144,7 @@
 </style>
 </head>
 <body>
+<div id="staleBar"></div>
 <header>
   <h1>Qwen-Image 2.1</h1>
   <span id="dims"></span>
@@ -358,6 +375,20 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fill("light", info.lights); fill("camera", info.cameras);
   EFFECTS = info.effects; FORMS = info.forms;
   hasGimp = !!(info.gimp && info.gimp.available);
+  // Ein sehr alter Server meldet gar kein "source" -- dann ist er erst recht
+  // veraltet und kann es nur nicht selbst sagen.
+  const neustart = " Bitte im Terminal <code>Strg+C</code> und <code>./start.sh</code>.";
+  if (!info.source) {
+    $("staleBar").style.display = "block";
+    $("staleBar").innerHTML = "Dieser Server ist älter als die Oberfläche und kann "
+      + "seinen Stand nicht melden. Das gibt widersprüchliches Verhalten." + neustart;
+  } else if (info.source.stale) {
+    $("staleBar").style.display = "block";
+    $("staleBar").innerHTML = "Der Server läuft noch mit älterem Code ("
+      + info.source.changed.map(esc).join(", ")
+      + " wurde seither geändert). Die Seite hier ist aktuell, der Server nicht —"
+      + " das gibt widersprüchliches Verhalten." + neustart;
+  }
   if (info.chat && info.chat.available) {
     $("chatBox").style.display = "block";
     $("chat").placeholder = "Sag einfach, was du willst — „10 Drachen als Zeichentrick, hochkant“";
@@ -425,7 +456,7 @@ function setMode(next) {
   $("uploadBox").style.display = cfg.refs ? "block" : "none";
   $("followBox").style.display = cfg.refs ? "flex" : "none";
   $("prompt").placeholder = cfg.ph;
-  $("go").textContent = cfg.label;
+  if (!$("go").classList.contains("busy")) $("go").textContent = cfg.label;
   $("uploadHint").textContent = cfg.hint ? cfg.hint(maxRefs) : "";
   if (cfg.sweep !== undefined) $("sweep").value = cfg.sweep;
   if (cfg.count !== undefined) $("count").value = cfg.count;
@@ -493,6 +524,25 @@ function dropRef(i) { refs.splice(i, 1); drawThumbs(); setMode(mode); }
 // ---------- Start ----------
 function say(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
 
+// Der Knopf zeigt den Zustand mit: gelb waehrend der Berechnung, kurz gruen
+// wenn fertig, danach wieder normal.
+function buttonState(state) {
+  const go = $("go");
+  go.classList.remove("busy", "done");
+  clearTimeout(buttonState.timer);
+  if (state === "busy") {
+    go.disabled = true; go.classList.add("busy"); go.textContent = "läuft …";
+    $("stop").style.display = "block";
+  } else {
+    go.disabled = false; go.textContent = MODES[mode].label;
+    $("stop").style.display = "none";
+    if (state === "done") {
+      go.classList.add("done");
+      buttonState.timer = setTimeout(() => go.classList.remove("done"), 2500);
+    }
+  }
+}
+
 async function start() {
   const prompt = $("prompt").value.trim();
   const need = MODES[mode].refs;
@@ -519,7 +569,7 @@ async function start() {
     transparent: $("transparent").checked
   };
 
-  $("go").disabled = true; $("stop").style.display = "block";
+  buttonState("busy");
   $("stage").dataset.file = "";
   say("Auftrag wird gestartet …");
   paintSeries([], body.count, 1);
@@ -529,7 +579,7 @@ async function start() {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({error: res.statusText}));
-    $("go").disabled = false; $("stop").style.display = "none";
+    buttonState("idle");
     return say(err.error, "err");
   }
   poll();
@@ -597,8 +647,8 @@ function poll() {
     if (s.busy) return say(`${s.message} · ${fmt(s.elapsed)}`);
 
     clearInterval(polling);
-    $("go").disabled = false; $("stop").style.display = "none";
-    if (s.error) { $("fill").style.width = "0"; return say(s.error, "err"); }
+    if (s.error) { buttonState("idle"); $("fill").style.width = "0"; return say(s.error, "err"); }
+    buttonState(done ? "done" : "idle");
     if (done) say(`${s.message} in ${fmt(s.elapsed)}`, "ok");
     else { $("fill").style.width = "0"; say(s.message); }
     loadGallery();
@@ -676,7 +726,7 @@ async function loadGallery() {
 }
 
 fetch("/api/status").then(r => r.json()).then(s => {
-  if (s.busy) { $("go").disabled = true; $("stop").style.display = "block"; poll(); }
+  if (s.busy) { buttonState("busy"); poll(); }
 });
 loadGallery();
 </script>

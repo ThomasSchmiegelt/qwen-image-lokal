@@ -200,6 +200,12 @@ def sanitise(raw: dict, has_images: int) -> dict:
                 if field in out and not out[field] and not raw.get(field):
                     out[field] = value
 
+    # Der Umrundungs-Modus ohne Umrundung waere ein einzelnes Bild von vorn.
+    # Wenn das Sprachmodell den Modus erkannt, die Serienart aber vergessen hat,
+    # ist die Absicht trotzdem eindeutig.
+    if out["mode"] == "person" and not out["sweep"]:
+        out["sweep"] = "view"
+
     # Eine Liste durchzugehen ergibt nur mit genug Bildern Sinn.
     tables = {"view": VIEWS, "style": STYLES, "light": LIGHTS, "camera": CAMERAS}
     if out["sweep"] in tables and out["count"] == 1:

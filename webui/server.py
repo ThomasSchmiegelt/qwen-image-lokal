@@ -5,6 +5,7 @@ Dann:   http://127.0.0.1:7860
 """
 
 import base64
+import hashlib
 import io
 import json
 import mimetypes
@@ -39,6 +40,23 @@ SAFE_NAME = re.compile(r"[\w.\-]+\.(png|jsonl)")
 GIMP_CMD = os.environ.get("QWEN_GIMP", "gimp")
 
 os.makedirs(OUTPUTS, exist_ok=True)
+
+
+def _source_state() -> dict[str, str]:
+    """Pruefsummen der Python-Dateien, die der Server beim Start geladen hat."""
+    state = {}
+    for name in sorted(os.listdir(HERE)):
+        if name.endswith(".py"):
+            with open(os.path.join(HERE, name), "rb") as fh:
+                state[name] = hashlib.sha256(fh.read()).hexdigest()[:12]
+    return state
+
+
+# Beim Start festgehalten. Python laedt Module genau einmal -- wer danach eine
+# Datei aendert, sieht die Aenderung erst nach einem Neustart. Das ist schon
+# mehrfach fuer einen Programmfehler gehalten worden, deshalb meldet es der
+# Server jetzt von sich aus.
+SOURCE_AT_START = _source_state()
 
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
@@ -172,6 +190,10 @@ class Handler(BaseHTTPRequestHandler):
             info["reference_token_budget"] = REFERENCE_TOKEN_BUDGET
             info["chat"] = chat.available()
             info["gimp"] = {"available": bool(shutil.which(GIMP_CMD)), "command": GIMP_CMD}
+            now = _source_state()
+            changed = sorted(k for k in set(now) | set(SOURCE_AT_START)
+                             if now.get(k) != SOURCE_AT_START.get(k))
+            info["source"] = {"stale": bool(changed), "changed": changed}
             return self._json(200, info)
 
         if path == "/api/gallery":
