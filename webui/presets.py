@@ -96,6 +96,9 @@ def catalog() -> dict:
         "scenes": [{"key": k, "label": v[0]} for k, v in SCENES.items()],
         "angles": [{"key": k, "label": v[0]} for k, v in ANGLES.items()],
         "devices": [{"key": k, "label": v[0]} for k, v in DEVICES.items()],
+        "scenarios": [{"key": k, "label": v[0]} for k, v in SCENARIOS.items()],
+        "group_actions": [{"key": k, "label": v["label"], "min": v["min"], "hint": v["hint"]}
+                          for k, v in GROUP_ACTIONS.items()],
         "templates": TEMPLATES,
         "effects": [{"key": k, "label": v["label"], "alias": v["alias"],
                      "needs_image": v["needs_image"], **overrides(v)}
@@ -358,3 +361,82 @@ VARIANT_AXES = {"paint": PAINTS, "scene": SCENES, "light": VARIANT_LIGHTS,
 
 # Nachtraeglich eingehaengt, weil die Vorlage weiter unten steht als TEMPLATES.
 TEMPLATES["varianten"] = VARIANT_TEMPLATE
+
+
+# --- Gruppenbilder -------------------------------------------------------
+# "Zusammenstellen", "ergaenzen" und "entfernen" sind drei verschiedene
+# Aufgaben. Eine gemeinsame Anweisung dafuer waere schwammig, deshalb je eine
+# eigene -- samt Mindestzahl an Referenzbildern.
+GROUP_ACTIONS = {
+    "zusammen": {
+        "label": "Aus Einzelbildern zusammenstellen", "min": 2,
+        "hint": "Pro Person ein Bild, 2 bis 4 Stück.",
+        "template": (
+            "A single group photograph showing all {n} people from the reference images "
+            "together in one frame, side by side. Keep every person's face, hair and "
+            "identity clearly recognizable and consistent with their reference image. {extra}"
+        ),
+    },
+    "ergaenzen": {
+        "label": "Person ergänzen", "min": 2,
+        "hint": "Erstes Bild: das Gruppenfoto. Danach je ein Bild pro Person, die dazu soll.",
+        # Ohne ausdrueckliche Zahl verschmilzt das Modell die zusaetzliche Person
+        # mit einer vorhandenen -- mit einem vagen "mehr als vorher" stellt es
+        # dagegen gleich mehrere dazu. Es kann nicht zaehlen, wie viele schon im
+        # Bild sind, deshalb gibt der Benutzer die Endzahl vor.
+        "template": (
+            "The first reference image is an existing group photograph. The following "
+            "{m} reference image(s) each show one further person who is NOT yet part of "
+            "that group. Redraw the group photograph so that it contains everyone from "
+            "the first image PLUS those {m} further people standing alongside them. "
+            "The finished picture must show exactly {total} people, no more and no "
+            "fewer. Do not replace "
+            "anyone, do not merge two people into one, and do not change anyone's "
+            "clothing. Keep the existing people, their faces, their poses, the ground, "
+            "the lighting and the background exactly as they are, and match the new "
+            "people to that same lighting, perspective and scale. {extra}"
+        ),
+    },
+    "entfernen": {
+        "label": "Person entfernen", "min": 1,
+        "hint": "Nur das Gruppenfoto. Unten beschreiben, wer verschwinden soll.",
+        "template": (
+            "The reference image is a group photograph. Remove {extra} from the picture "
+            "and close the gap naturally, as if that person had never been there. Keep "
+            "everyone else, their faces, their poses, the lighting and the background "
+            "exactly as they are."
+        ),
+    },
+}
+
+# Inszenierung einer Gruppe. Bewusst als Beschreibung des Aussehens formuliert
+# und nicht als Verweis auf einen Film -- das Modell trifft eine ausformulierte
+# Bildbeschreibung deutlich zuverlaessiger als einen Werktitel.
+SCENARIOS = {
+    "geister": ("Machtgeister", "rendered as glowing translucent blue spirit figures, "
+                "softly luminous edges, faint shimmer around their outlines, "
+                "semi-transparent robes, dark background"),
+    "gefaehrten": ("Fantasy-Gefährten", "as an epic fantasy fellowship in worn travelling "
+                   "cloaks with swords, bows and packs, standing on a mountain path at "
+                   "dawn, painterly and cinematic"),
+    "ritter": ("Tafelrunde", "as medieval knights in polished plate armour with surcoats, "
+               "in a torchlit stone hall"),
+    "wikinger": ("Wikinger", "as norse warriors in furs and leather with braided hair, "
+                 "on a windswept rocky shore under grey clouds"),
+    "helden": ("Superhelden", "as comic book superheroes in bold costumes with capes, "
+               "heroic low angle, dramatic sky behind them"),
+    "crew": ("Raumschiffbesatzung", "as the crew of a spaceship in fitted uniforms, "
+             "standing on an illuminated bridge with screens behind them"),
+    "western": ("Western", "as characters in a dusty frontier town, long coats and hats, "
+                "harsh noon sun, sepia tones"),
+    "noir": ("Detektive", "as film noir detectives in trench coats and fedoras, "
+             "high contrast black and white, venetian blind shadows"),
+    "renaissance": ("Gemälde", "as figures in a renaissance oil painting, rich fabrics, "
+                    "chiaroscuro lighting, cracked varnish texture"),
+    "abschluss": ("Abschlussfoto", "as a formal graduation photograph in gowns and caps, "
+                  "on the steps of a university building"),
+    "band": ("Band", "as a rock band photographed for an album cover, leather and denim, "
+             "moody backstage lighting"),
+    "familie": ("Familienporträt", "as a warm formal family portrait in a photo studio, "
+                "soft key light, plain backdrop"),
+}

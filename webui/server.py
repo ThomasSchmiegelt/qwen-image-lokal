@@ -29,7 +29,7 @@ from engine import (  # noqa: E402
 )
 import chat  # noqa: E402
 from presets import (  # noqa: E402
-    AXIS_OFF, EFFECTS, PAINT_TARGET, catalog, overrides, parse_command,
+    AXIS_OFF, EFFECTS, GROUP_ACTIONS, PAINT_TARGET, catalog, overrides, parse_command,
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -77,7 +77,7 @@ def _save(meta: dict, image: Image.Image, stamp: str, kind: str) -> str:
     name = f"{stamp}_{kind}_{meta['index']:02d}_seed{meta['seed']}.png"
     info = PngImagePlugin.PngInfo()
     for key in ("prompt", "seed", "view", "style", "light", "camera", "effect",
-                "form", "paint", "scene", "angle", "device"):
+                "form", "paint", "scene", "angle", "device", "scenario"):
         if meta.get(key) is not None:
             info.add_text(f"qwen_{key}", str(meta[key]))
     image.save(os.path.join(OUTPUTS, name), pnginfo=info)
@@ -140,6 +140,9 @@ def _run_job(params: dict) -> None:
             angle=params.get("angle") or None,
             device=params.get("device") or None,
             paint_target=params.get("paint_target") or "",
+            scenario=params.get("scenario") or None,
+            action=params.get("action") or "zusammen",
+            group_size=int(params.get("group_size") or 2),
             count=int(params.get("count", 1)),
             sweep=params.get("sweep") or None,
             lock_seed=bool(params.get("lock_seed", False)),
@@ -350,8 +353,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": f"Hoechstens {MAX_REFERENCES} Referenzbilder"})
         if mode in ("edit", "person", "varianten") and not refs:
             return self._json(400, {"error": "Bitte ein Referenzbild hochladen"})
-        if mode == "gruppe" and len(refs) < 2:
-            return self._json(400, {"error": "Fuer ein Gruppenbild mindestens zwei Personen hochladen"})
+        if mode == "gruppe":
+            act = GROUP_ACTIONS.get(params.get("action") or "zusammen") or GROUP_ACTIONS["zusammen"]
+            if len(refs) < act["min"]:
+                return self._json(400, {"error":
+                    f"„{act['label']}“ braucht mindestens {act['min']} Referenzbild(er)"})
+            if params.get("action") == "entfernen" and not has_text:
+                return self._json(400, {"error": "Bitte beschreiben, wer entfernt werden soll"})
 
         if not engine.lock.acquire(blocking=False):
             return self._json(409, {"error": "Es laeuft bereits ein Auftrag"})

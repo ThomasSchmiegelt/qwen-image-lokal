@@ -55,8 +55,19 @@ Karte laden, werfen sich gegenseitig heraus.
 ## Was die Oberfläche kann
 
 **Fünf Betriebsarten:** Text zu Bild · Bearbeiten (1–4 Referenzbilder) ·
-Gruppenbild (2–4 Personen in ein gemeinsames Foto) · Umrundung (eine Person
-aus wechselnden Blickwinkeln) · Varianten.
+Gruppe · Umrundung (eine Person aus wechselnden Blickwinkeln) · Varianten.
+
+**Gruppe** kennt drei Aufgaben: *aus Einzelbildern zusammenstellen* (je ein
+Bild pro Person), *Person ergänzen* (erstes Bild ist das Gruppenfoto, danach
+je ein Bild pro Person, die dazu soll) und *Person entfernen* (beschreiben,
+wer verschwinden soll — „die mittlere Person"). Beim Ergänzen gibst du an, wie
+viele Personen schon auf dem Gruppenfoto sind: das Modell kann nicht zählen,
+und ohne feste Zielzahl stellt es wahllos Leute dazu.
+
+Dazu **Inszenierungen** — 12 Vorlagen für das Aussehen der Gruppe, von
+leuchtenden Geistern über Fantasy-Gefährten und Tafelrunde bis Detektive und
+Familienporträt. Sie beschreiben den Look ausformuliert statt einen Filmtitel
+zu nennen; das trifft das Modell zuverlässiger.
 
 **Varianten** vervielfachen ein Basisbild, etwa für Trainingsdaten. Fünf
 Achsen — Farbe (12), Umgebung (12 Szenen), Licht, Kameraart (9 Geräte vom

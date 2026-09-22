@@ -194,6 +194,24 @@
     <p class="hint" id="transNote" style="display:none"></p>
     <p class="hint" id="tplHint" style="display:none"></p>
 
+    <fieldset id="gruppeBox" style="display:none">
+      <legend>Gruppe</legend>
+      <label for="action">Was soll geschehen?</label>
+      <select id="action"></select>
+      <div id="groupSizeBox" style="display:none">
+        <label for="groupSize">Wie viele Personen sind auf dem Gruppenfoto?</label>
+        <input type="number" id="groupSize" value="2" min="1" max="12">
+        <p class="hint">Das Modell kann nicht zählen. Aus deiner Angabe plus der
+          Zahl der Personenbilder ergibt sich, wie viele am Ende im Bild stehen
+          sollen.</p>
+      </div>
+
+      <label for="scenario">Inszenierung</label>
+      <select id="scenario"></select>
+      <p class="hint">Die Inszenierung beschreibt das Aussehen der Gruppe, nicht
+        einen Filmtitel &ndash; das trifft das Modell zuverlässiger.</p>
+    </fieldset>
+
     <fieldset id="variantenBox" style="display:none">
       <legend>Varianten</legend>
 
@@ -392,7 +410,7 @@ const MODES = {
 };
 
 let mode = "t2i", refs = [], polling = null, maxRefs = 4, templates = {}, refBudget = 2200;
-let EFFECTS = [], FORMS = [], PAINTS = [], hasGimp = false, AXIS_OFF = "-";
+let EFFECTS = [], FORMS = [], PAINTS = [], ACTIONS = [], hasGimp = false, AXIS_OFF = "-";
 
 // ---------- Voreinstellungen laden ----------
 fetch("/api/info").then(r => r.json()).then(info => {
@@ -430,6 +448,10 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fillAxis("paint", info.paints); fillAxis("scene", info.scenes);
   fillAxis("angle", info.angles); fillAxis("device", info.devices);
   fillAxis("vlight", info.lights);
+  fill("scenario", info.scenarios);
+  ACTIONS = info.group_actions;
+  $("action").innerHTML = ACTIONS.map(
+    a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
   PAINTS = info.paints;
   paintPreview();
   $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
@@ -518,7 +540,8 @@ function setMode(next) {
   $("followBox").style.display = cfg.refs ? "flex" : "none";
   $("prompt").placeholder = cfg.ph;
   if (!$("go").classList.contains("busy")) $("go").textContent = cfg.label;
-  $("uploadHint").textContent = cfg.hint ? cfg.hint(maxRefs) : "";
+  $("uploadHint").textContent = mode === "gruppe" ? (aktion().hint || "")
+                                : (cfg.hint ? cfg.hint(maxRefs) : "");
   if (cfg.sweep !== undefined) $("sweep").value = cfg.sweep;
   if (cfg.count !== undefined) $("count").value = cfg.count;
   if (cfg.follow !== undefined) $("follow").checked = cfg.follow;
@@ -527,6 +550,8 @@ function setMode(next) {
 
   const tpl = templates[next];
   const istVarianten = next === "varianten";
+  $("gruppeBox").style.display = next === "gruppe" ? "block" : "none";
+  groupSizeSichtbar();
   paintPreview();
   $("variantenBox").style.display = istVarianten ? "block" : "none";
   // Das Licht steuert im Varianten-Modus die Achse, nicht dieser Regler.
@@ -567,6 +592,15 @@ $("form").onchange = () => {
   const f = FORMS.find(x => x.key === $("form").value);
   if (f) applyOverrides(f);
 };
+
+// Die gewählte Gruppen-Aktion bestimmt, wie viele Bilder nötig sind.
+function aktion() {
+  return ACTIONS.find(a => a.key === $("action").value) || {min: 2, hint: ""};
+}
+$("action").addEventListener("change", () => { setMode(mode); refresh(); });
+function groupSizeSichtbar() {
+  $("groupSizeBox").style.display = $("action").value === "ergaenzen" ? "block" : "none";
+}
 
 // ---------- Referenzbilder ----------
 $("file").onchange = e => {
@@ -612,7 +646,7 @@ function buttonState(state) {
 
 async function start() {
   const prompt = $("prompt").value.trim();
-  const need = MODES[mode].refs;
+  const need = mode === "gruppe" ? aktion().min : MODES[mode].refs;
   if (!prompt && !templates[mode]) return say("Bitte einen Prompt eingeben.", "err");
   if (refs.length < need) return say(`Bitte ${need} Referenzbild(er) hochladen.`, "err");
   if (mode === "varianten" && $("paint").value !== AXIS_OFF && !$("paintTarget").value.trim()) {
@@ -632,7 +666,8 @@ async function start() {
     seed, count: parseInt($("count").value, 10) || 1,
     sweep: $("sweep").value, lock_seed: $("lockSeed").checked,
     view: $("view").value, effect: $("effect").value, form: $("form").value,
-    keep: $("keep").value,
+    keep: $("keep").value, action: $("action").value, scenario: $("scenario").value,
+    group_size: parseInt($("groupSize").value, 10) || 2,
     paint: $("paint").value, scene: $("scene").value,
     angle: $("angle").value, device: $("device").value,
     style: $("style").value, camera: $("camera").value,
@@ -783,8 +818,8 @@ async function show(file) {
   [...document.querySelectorAll(".grid img, .tile img")].forEach(
     img => img.classList.toggle("sel", img.alt === file));
   const m = await fetch("/api/meta?file=" + encodeURIComponent(file)).then(r => r.json()).catch(() => ({}));
-  const tags = ["paint", "scene", "angle", "device", "effect", "form", "view",
-                "style", "light", "camera"].filter(k => m[k]).map(k => `<span>${esc(m[k])}</span>`).join("");
+  const tags = ["scenario", "paint", "scene", "angle", "device", "effect", "form",
+                "view", "style", "light", "camera"].filter(k => m[k]).map(k => `<span>${esc(m[k])}</span>`).join("");
   $("meta").innerHTML =
     `<div><a href="/outputs/${file}" download>${esc(file)}</a>`
     + (m.size ? ` · ${m.size[0]} × ${m.size[1]} px` : "")

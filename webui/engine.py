@@ -31,8 +31,8 @@ from diffusers import QwenImage21Pipeline
 from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimensions
 
 from presets import (
-    ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, LIGHTS, PAINTS,
-    SCENES, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE, VARIANT_AXES, VIEWS, fragment,
+    ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, GROUP_ACTIONS, LIGHTS,
+    PAINTS, SCENARIOS, SCENES, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE, VARIANT_AXES, VIEWS, fragment,
 )
 
 REPO = os.environ.get("QWEN_IMAGE_REPO", "Qwen/Qwen-Image-2.1")
@@ -96,7 +96,7 @@ def _free() -> None:
 
 def build_prompt(text: str, view=None, style=None, light=None, camera=None,
                  paint=None, scene=None, angle=None, device=None,
-                 paint_target: str = "") -> str:
+                 scenario=None, paint_target: str = "") -> str:
     """Haengt die gewaehlten Voreinstellungen an den Prompt an.
 
     Der Blickwinkel steht vorn: er bestimmt die Bildkomposition, waehrend Stil,
@@ -110,6 +110,7 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
         if paint in PAINTS and paint_target.strip() else None,
         fragment(SCENES, scene),
         fragment(ANGLES, angle),
+        fragment(SCENARIOS, scenario),
         fragment(DEVICES, device),
         fragment(STYLES, style),
         fragment(LIGHTS, light),
@@ -190,6 +191,7 @@ class Engine:
         scene=None,
         angle=None,
         device=None,
+        scenario=None,
         paint_target: str = "",
         lock_seed: bool = False,
     ) -> list[dict]:
@@ -219,7 +221,8 @@ class Engine:
         jobs = []
         for i in range(count):
             pick = {"view": view, "style": style, "light": light, "camera": camera,
-                    "paint": paint, "scene": scene, "angle": angle, "device": device}
+                    "paint": paint, "scene": scene, "angle": angle, "device": device,
+                    "scenario": scenario}
             if sweep == "varianten":
                 # Jede Achse eigenstaendig gewuerfelt. Ein fester Wert bleibt
                 # fest, AXIS_OFF schaltet die Achse ganz ab.
@@ -267,6 +270,9 @@ class Engine:
         scene=None,
         angle=None,
         device=None,
+        scenario=None,
+        action: str = "zusammen",
+        group_size: int = 2,
         paint_target: str = "",
         style=None,
         light=None,
@@ -289,7 +295,20 @@ class Engine:
         if spec.get("instruction"):
             # Die Anweisung steht vorn, der Benutzertext praezisiert sie.
             text = f"{spec['instruction']} {text}".strip()
-        if mode in TEMPLATES:
+        if mode == "gruppe":
+            # Zusammenstellen, ergaenzen und entfernen brauchen je eigene Worte.
+            spec_action = GROUP_ACTIONS.get(action) or GROUP_ACTIONS["zusammen"]
+            if len(images) < spec_action["min"]:
+                raise ValueError(
+                    f"„{spec_action['label']}“ braucht mindestens "
+                    f"{spec_action['min']} Referenzbild(er).")
+            if action == "entfernen" and not text:
+                raise ValueError("Bitte beschreiben, wer entfernt werden soll.")
+            zusatz = max(len(images) - 1, 1)
+            text = spec_action["template"].format(
+                n=len(images), m=zusatz, extra=text,
+                total=max(group_size, 1) + zusatz)
+        elif mode in TEMPLATES:
             if not images:
                 raise ValueError("Fuer diesen Modus werden Referenzbilder gebraucht.")
             text = TEMPLATES[mode].format(
@@ -298,7 +317,7 @@ class Engine:
             text = TRANSPARENT_TEMPLATE.format(extra=text)
 
         jobs = self.plan(text, count, seed, sweep, view, style, light, camera,
-                         paint, scene, angle, device, paint_target, lock_seed)
+                         paint, scene, angle, device, scenario, paint_target, lock_seed)
 
         self._cancel = False
         self._set(state="loading", image=0, count=len(jobs), step=0, total=steps,
@@ -391,7 +410,8 @@ class Engine:
 
                 image_out = out.images[0]
                 meta = {k: job[k] for k in ("prompt", "seed", "view", "style", "light",
-                                            "camera", "paint", "scene", "angle", "device")}
+                                            "camera", "paint", "scene", "angle", "device",
+                                            "scenario")}
                 meta["index"] = index
                 meta["effect"] = effect
                 meta["form"] = form
