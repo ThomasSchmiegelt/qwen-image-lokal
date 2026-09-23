@@ -279,6 +279,14 @@ def _run_demo(params: dict) -> None:
             gelesen = chat.bild_lesen(fh.read())
         current["gelesen"] = gelesen
 
+        # Zu einem hochgeladenen Bild darf man selbst sagen, was darauf zu
+        # sehen ist. Das schlaegt die maschinelle Lesung: wer sein eigenes
+        # Foto beschreibt, trifft es genauer als ein Blick des Modells.
+        eigene = (eigenes["prompt"] or "").strip() if params.get("image") else ""
+        if eigene:
+            gelesen = dict(gelesen, beschreibung=eigene)
+            current["gelesen"] = gelesen
+
         bloecke = params.get("bloecke")
         if not bloecke:
             name = params.get("ablauf") or "reise"
@@ -307,7 +315,7 @@ def _run_demo(params: dict) -> None:
                 # stellt klar, dass zwei Figuren gemeint sind.
                 engine.run_series(**_series_kwargs(
                     {"mode": "gruppe", "action": "zusammen",
-                     "prompt": buendel[0]["bausteine"][0],
+                     "prompt": ablauf.gruppen_prompt(buendel[0]),
                      "aspect": "3:2", "follow_reference": False, "seed": seed,
                      "count": 1, **fest},
                     [laden(letztes), basis_bild], "gruppe", sammler))

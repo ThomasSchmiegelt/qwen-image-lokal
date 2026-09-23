@@ -44,6 +44,12 @@ _AKTION = (
 _ZAEHNE = ("If teeth are visible, draw them cleanly: even, correctly shaped, "
            "the right number, never smeared or doubled.")
 
+# Ein Stilwechsel laesst den alten Ort durchscheinen: aus dem Startbild
+# wandert dann gern ein Auto in die Ecke der Wueste. Bloecke, die den Ort
+# wirklich austauschen, sagen das mit `ersetzt` ausdruecklich.
+_ERSETZT = ("The old surroundings are gone entirely: no vehicle, building or "
+            "object from the reference image appears anywhere in the new scene.")
+
 PERSON = "the person, their face and their pose"
 PERSON_ORT = "the person, their face, their pose and their position in the frame"
 ALLES = "the person, their clothing and the surroundings"
@@ -59,7 +65,21 @@ def prompt_fuer(block: dict, baustein: str) -> str:
     else:
         kopf = _BEHUTSAM.format(keep=block.get("bleibt") or PERSON_ORT, extra="").strip()
         text = f"{kopf}, {baustein}"
+    if block.get("ersetzt"):
+        text = f"{text} {_ERSETZT}"
     return f"{text} {_ZAEHNE}"
+
+
+def gruppen_prompt(block: dict) -> str:
+    """Der Zusatztext eines Gruppenblocks.
+
+    Ein Gruppenbild entsteht ueber den Gruppen-Pfad und damit an
+    `prompt_fuer` vorbei -- die dortigen Hinweise muessen hier eigens
+    dazukommen.
+    """
+    bausteine = bausteine_von(block)
+    text = bausteine[0] if bausteine else ""
+    return f"{text} {_ZAEHNE}".strip()
 
 
 def bausteine_von(block: dict) -> list[str]:
@@ -71,6 +91,11 @@ def bausteine_von(block: dict) -> list[str]:
     schneidet ab.
     """
     liste = [z for z in (block.get("bausteine") or [])]
+    # Ein Gruppenbild entsteht aus allen Vorlagen auf einmal und ist deshalb
+    # immer genau ein Bild. Eine Anzahl darueber ist sinnlos, und wuerde die
+    # Zaehlung im Server von dem trennen, was er tatsaechlich erzeugt.
+    if block.get("art") == "gruppe":
+        return liste[:1]
     anzahl = block.get("anzahl")
     try:
         anzahl = int(anzahl)
@@ -187,7 +212,7 @@ def reise(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
             "leaping sideways with a high kick, the body stretched out horizontally"]},
 
         {"titel": "Hintergrund", "referenz": "start", "vorlage": "verwandeln",
-         "bleibt": PERSON_ORT, "zurueck": True, "bausteine": [
+         "bleibt": PERSON_ORT, "zurueck": True, "ersetzt": True, "bausteine": [
             "standing in a vast sand desert with dunes to the horizon",
             "standing on a blue glacier between ice walls",
             "standing in a busy asian street at night, signs and lanterns",
@@ -195,7 +220,7 @@ def reise(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
             "standing in a drawn cartoon landscape with rolling hills and a bright sky"]},
 
         {"titel": "Rolle", "referenz": "start", "vorlage": "verwandeln",
-         "bleibt": "the person and their face", "zurueck": True, "bausteine": [
+         "bleibt": "the person and their face", "zurueck": True, "ersetzt": True, "bausteine": [
             "as a medieval knight in polished plate armour, a sword at their side",
             "as a glowing translucent blue spirit figure with luminous edges",
             "as an astronaut in a white spacesuit, helmet under the arm",
@@ -333,7 +358,7 @@ def klassisch(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]
             "an over the shoulder shot with a soft foreground edge"]},
 
         {"titel": "Hintergrund", "referenz": "start", "vorlage": "verwandeln",
-         "bleibt": PERSON_ORT, "zurueck": True, "bausteine": [
+         "bleibt": PERSON_ORT, "zurueck": True, "ersetzt": True, "bausteine": [
             "in front of seamless mid grey studio paper",
             "in front of deep black velvet, the edges falling into darkness",
             "in front of clean white, brightly lit, no visible horizon",
@@ -354,7 +379,7 @@ def zeitreise(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]
     """Dieselbe Person durch zwölf Epochen und sechs Aufnahmeverfahren."""
     return [
         {"titel": "Epoche", "referenz": "start", "vorlage": "verwandeln",
-         "bleibt": "the person and their face", "zurueck": True, "bausteine": [
+         "bleibt": "the person and their face", "zurueck": True, "ersetzt": True, "bausteine": [
             "as a stone age human in furs beside a cave wall with painted animals",
             "as an ancient egyptian in linen beside carved hieroglyphs",
             "as a roman citizen in a toga on marble steps",

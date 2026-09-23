@@ -41,10 +41,15 @@ def kulisse_waehlen(name: str = "", seed: int = 0) -> str:
 
 def basis_prompt(kulisse: str = "auto") -> str:
     was = KULISSEN.get(kulisse, KULISSEN["auto"])[1]
+    # Kein "driveway": das Wort zieht selbst dann ein Auto ins Bild, wenn die
+    # Kulisse ein Pferd ist. Und ausdruecklich sagen, dass sonst nichts im
+    # Bild steht -- sonst parkt in der Ecke gern noch ein Wagen.
     return (
-        "a full body photograph of one person standing on a paved driveway, neutral "
-        "relaxed pose, arms at their sides, looking at the camera, "
-        f"{was} behind them, plain overcast daylight, everything in sharp focus"
+        "a full body photograph of one person standing on an open paved square, "
+        "neutral relaxed pose, arms at their sides, looking at the camera, "
+        f"{was} behind them and nothing else -- apart from the person and "
+        f"{KULISSEN.get(kulisse, KULISSEN['auto'])[2]} the frame stays empty, "
+        "plain overcast daylight, everything in sharp focus"
     )
 
 

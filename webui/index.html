@@ -219,7 +219,7 @@
       <img id="demoPreview" alt="Startbild" style="display:none;max-width:100%;border-radius:6px;margin-top:8px">
       <p class="hint" id="demoRefNote"></p>
 
-      <label for="demoPrompt">…oder beschreiben, wer erzeugt werden soll</label>
+      <label for="demoPrompt" id="demoPromptLabel">…oder beschreiben, wer erzeugt werden soll</label>
       <textarea id="demoPrompt" style="min-height:48px"
         placeholder="leer lassen für die Vorgabe: eine Person vor einem geparkten Auto"></textarea>
 
@@ -776,7 +776,8 @@ function blockZeichnen() {
       <div class="row4">
         <input type="number" class="banzahl" min="0" max="40" placeholder="Anzahl"
                title="Wie viele Bilder? Leer = eine je Zeile"
-               value="${b.anzahl || ""}">
+               ${b.art === "gruppe" ? "disabled" : ""}
+               value="${b.art === "gruppe" ? "1" : (b.anzahl || "")}">
         <select class="bref">
           <option value="start"${b.referenz !== "letztes" ? " selected" : ""}>vom Startbild</option>
           <option value="letztes"${b.referenz === "letztes" ? " selected" : ""}>vom letzten Bild</option>
@@ -822,7 +823,9 @@ function blockZeichnen() {
       const w = e.target.value;
       bloecke[i].art = w === "gruppe" ? "gruppe" : undefined;
       bloecke[i].vorlage = w === "gruppe" ? undefined : w;
-      if (w === "gruppe") bloecke[i].bausteine = [""];
+      // Ein Gruppenbild ist immer genau ein Bild; eine Anzahl daneben wuerde
+      // nur eine Erwartung wecken, die der Server nicht einloest.
+      if (w === "gruppe") { bloecke[i].bausteine = [""]; bloecke[i].anzahl = undefined; }
       blockZeichnen(); demoDauer();
     };
     el.querySelectorAll("[data-tu]").forEach(a => a.onclick = ev => {
@@ -871,9 +874,13 @@ $("demoFile").onchange = e => {
   leser.onload = () => {
     demoRef = leser.result;
     $("demoPreview").src = demoRef; $("demoPreview").style.display = "block";
-    $("demoRefNote").textContent = "Dein Foto wird als Basisbild verwendet; "
-      + "der Beschreibungstext wird dann ignoriert.";
-    $("demoPrompt").disabled = true;
+    $("demoRefNote").textContent = "Dein Foto wird als Basisbild verwendet. "
+      + "Der Text unten beschreibt dann, wer darauf zu sehen ist.";
+    $("demoPrompt").disabled = false;
+    $("demoPromptLabel").textContent =
+      "…kurz beschreiben, wer auf dem Bild ist (leer lassen: der Server liest es selbst)";
+    $("demoPrompt").placeholder =
+      "z. B. eine Frau Mitte dreißig mit kurzen blonden Haaren, dunkler Jacke";
   };
   leser.readAsDataURL(f);
 };
@@ -882,6 +889,7 @@ function demoDauer() {
   // Dieselbe Regel wie im Server: Anzahl schlaegt die Zahl der Zeilen.
   const proBlock = b => {
     const zeilen = (b.bausteine || []).length;
+    if (b.art === "gruppe") return Math.min(zeilen, 1);
     return b.anzahl > 0 && zeilen ? b.anzahl : zeilen;
   };
   const erzeugt = 1 + bloecke.reduce((s, b) => s + proBlock(b), 0);
@@ -914,6 +922,7 @@ async function starteDemo() {
   }
   startSlots(1 + bloecke.reduce((s, b) => {
     const zeilen = (b.bausteine || []).length;
+    if (b.art === "gruppe") return s + Math.min(zeilen, 1);
     return s + (b.anzahl > 0 && zeilen ? b.anzahl : zeilen);
   }, 0));
   poll();
