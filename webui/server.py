@@ -227,12 +227,6 @@ def _run_demo(params: dict) -> None:
         # Was hinter der Person steht. Ohne Angabe eine aus dem Seed
         # abgeleitete -- so wechselt die Kulisse von Lauf zu Lauf.
         kulisse = demo.kulisse_waehlen(params.get("kulisse") or "", seed)
-        bloecke = params.get("bloecke")
-        if not bloecke:
-            name = params.get("ablauf") or "reise"
-            eintrag = ablauf.ABLAEUFE.get(name) or ablauf.ABLAEUFE["reise"]
-            bloecke = eintrag["bauen"](kulisse)
-        gesamt = ablauf.zu_erzeugen(bloecke)
 
         eigenes = {"prompt": params.get("prompt") or ""}
         if eigenes["prompt"].strip():
@@ -258,7 +252,7 @@ def _run_demo(params: dict) -> None:
 
         # --- Startbild ---------------------------------------------------
         pruefe()
-        current["stage"] = f"Startbild · 1/{gesamt}"
+        current["stage"] = "Startbild"
         if params.get("image"):
             basis_bild = _decode(params["image"]).convert("RGBA")
             basis_datei = _save({"index": 1, "seed": seed, "prompt": "hochgeladenes Startbild"},
@@ -274,6 +268,17 @@ def _run_demo(params: dict) -> None:
                 raise RuntimeError("Das Startbild konnte nicht erzeugt werden")
             basis_datei = gesammelt[-1]
             basis_bild = laden(basis_datei)
+
+        # Der Ablauf wird erst jetzt gebaut: manche Schritte passen nicht zu
+        # jedem Startbild. Ein Bart-Schritt ergibt bei einer Frau keinen Sinn.
+        bloecke = params.get("bloecke")
+        if not bloecke:
+            with open(os.path.join(OUTPUTS, basis_datei), "rb") as fh:
+                weiblich = chat.ist_weiblich(fh.read())
+            name = params.get("ablauf") or "reise"
+            eintrag = ablauf.ABLAEUFE.get(name) or ablauf.ABLAEUFE["reise"]
+            bloecke = eintrag["bauen"](kulisse, weiblich)
+        gesamt = ablauf.zu_erzeugen(bloecke)
 
         # --- Bloecke abarbeiten -------------------------------------------
         je_block: dict[int, list[str]] = {}
@@ -415,9 +420,9 @@ class Handler(BaseHTTPRequestHandler):
                                 for k, v in demo.KULISSEN.items()]
             info["ablaeufe"] = [
                 {"key": k, "label": v["label"],
-                 "bilder": ablauf.anzahl_bilder(v["bauen"]("auto")),
-                 "erzeugt": ablauf.zu_erzeugen(v["bauen"]("auto")),
-                 "bloecke": v["bauen"]("auto")}
+                 "bilder": ablauf.anzahl_bilder(v["bauen"]("auto", None)),
+                 "erzeugt": ablauf.zu_erzeugen(v["bauen"]("auto", None)),
+                 "bloecke": v["bauen"]("auto", None)}
                 for k, v in ablauf.ABLAEUFE.items()]
             return self._json(200, info)
 

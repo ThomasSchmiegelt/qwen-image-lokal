@@ -128,7 +128,7 @@ ohne Beschriftung, bei dem die Bilder ineinander blenden. Eine Folge ist eine
 | Feld | Bedeutung |
 |---|---|
 | Referenz | vom Startbild oder vom letzten Bild des vorigen Blocks |
-| Vorlage | *behutsam ändern* (bewahrt) oder *verwandeln* (Stilwechsel) |
+| Vorlage | *behutsam ändern* (bewahrt), *verwandeln* (Stilwechsel) oder *Bewegung* |
 | Seed | eigener oder wie das Startbild |
 | danach Startbild | blendet das Ausgangsbild wieder ein, ohne es neu zu rechnen |
 | was bleibt | die Ausnahme, die stehen bleiben muss |
@@ -142,10 +142,15 @@ zementiert aber auch die Neigung dieses *einen* Rauschmusters — gemessen wurde
 aus „grellem Neon" ein violetter Hauch (Abweichung 42 statt 79).
 
 Zwei Abläufe sind mitgeliefert: **Bogen** (38 Bilder, konservativ über Comic
-und Neon und zurück) und **Reise** (43 Bilder: Beleuchtung, Kameraperspektiven,
-Person, Kameraschwenk, Hintergründe, Rollen, Szenen bis in den Cyberpunk — und
-dort bleibend für Neonkleidung, zum Schluss ein Gruppenbild aus letzter Ansicht
-und Startbild).
+und Neon und zurück) und **Reise** (48 Bilder: Beleuchtung, Kameraperspektiven,
+Person, Kameraschwenk, Bewegung, Hintergründe, Rollen, Szenen bis in den
+Cyberpunk — und dort bleibend für Neonkleidung, zum Schluss ein Gruppenbild aus
+letzter Ansicht und Startbild).
+
+Der Ablauf **passt sich dem Startbild an**: bevor die Blöcke gebaut werden,
+sieht sich dasselbe Sprachmodell das Startbild an. Ist dort eine Frau zu sehen,
+wird aus dem Bart-Schritt ein Haarfarben-Schritt. Bei unklarem Befund bleibt es
+beim Regelfall, statt zu raten.
 
 Im Editor lassen sich Blöcke hinzufügen, verschieben, löschen und über **als
 Text** als JSON sichern und zurückspielen. Die Kommandozeile nimmt so eine

@@ -759,6 +759,7 @@ function blockZeichnen() {
         <select class="bart">
           <option value="behutsam"${b.art !== "gruppe" && b.vorlage !== "verwandeln" ? " selected" : ""}>behutsam ändern</option>
           <option value="verwandeln"${b.vorlage === "verwandeln" ? " selected" : ""}>verwandeln</option>
+          <option value="aktion"${b.vorlage === "aktion" ? " selected" : ""}>Bewegung</option>
           <option value="gruppe"${b.art === "gruppe" ? " selected" : ""}>Gruppenbild</option>
         </select>
         <select class="bseed">

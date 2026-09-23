@@ -12,6 +12,7 @@ Nichts aus der Antwort wird ungeprueft uebernommen -- `sanitise()` laesst nur
 Werte durch, die es wirklich gibt.
 """
 
+import base64
 import json
 import os
 import re
@@ -297,3 +298,45 @@ def translate(fields: dict[str, str], model: str | None = None) -> dict[str, str
         return {}
     return {k: raw[k].strip() for k in offen
             if isinstance(raw.get(k), str) and raw[k].strip() and raw[k].strip() != offen[k]}
+
+
+# --- Bild lesen ----------------------------------------------------------
+# Dasselbe Sprachmodell kann auch Bilder ansehen. Das reicht für einfache
+# Fragen, mit denen sich ein Ablauf an das Startbild anpassen lässt.
+def bild_frage(bild_bytes: bytes, frage: str, model: str | None = None) -> str:
+    """Eine Frage zu einem Bild. Leerer String, wenn Ollama nicht antwortet."""
+    body = {
+        "model": model or MODEL,
+        "stream": False,
+        "think": False,
+        "keep_alive": 0,
+        "options": {"temperature": 0.0, "num_predict": 20},
+        "messages": [{"role": "user", "content": frage,
+                      "images": [base64.b64encode(bild_bytes).decode("ascii")]}],
+    }
+    request = urllib.request.Request(
+        OLLAMA.rstrip("/") + "/api/chat", json.dumps(body).encode("utf-8"),
+        {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            return THINK.sub("", json.load(response)["message"]["content"]).strip()
+    except Exception:
+        return ""
+
+
+def ist_weiblich(bild_bytes: bytes, model: str | None = None) -> bool | None:
+    """True bei einer Frau, False bei einem Mann, None wenn unklar.
+
+    Wird gebraucht, um Schritte auszulassen, die nicht passen -- einen Bart
+    etwa. Im Zweifel None: dann bleibt es beim Regelfall, statt zu raten.
+    """
+    antwort = bild_frage(
+        bild_bytes,
+        "Zeigt dieses Bild eine Frau, einen Mann oder ist es nicht eindeutig? "
+        "Antworte mit genau einem Wort: frau, mann oder unklar.",
+        model).lower()
+    if "frau" in antwort or "weiblich" in antwort or "woman" in antwort:
+        return True
+    if "mann" in antwort or "männlich" in antwort or "man" in antwort:
+        return False
+    return None
