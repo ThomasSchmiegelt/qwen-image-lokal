@@ -486,6 +486,11 @@ let EFFECTS = [], FORMS = [], PAINTS = [], ACTIONS = [], SUBJECTS = [],
 
 // ---------- Voreinstellungen laden ----------
 fetch("/api/info").then(r => r.json()).then(info => {
+  // Das Wichtigste zuerst: bricht weiter unten etwas ab, sind die Grundregler
+  // wenigstens gefüllt. Vorher blieb das Seitenverhältnis leer und der Auftrag
+  // scheiterte im Server mit einem KeyError auf einem leeren Wert.
+  $("aspect").innerHTML = (info.aspects || ["1:1"])
+    .map(a => `<option>${a}</option>`).join("");
   maxRefs = info.max_references;
   templates = info.templates;
   refBudget = info.reference_token_budget;
@@ -521,9 +526,9 @@ fetch("/api/info").then(r => r.json()).then(info => {
   }
   fill("effect", EFFECTS); fill("form", FORMS);
   AXIS_OFF = info.axis_off || "-";
-  fillAxis("paint", info.paints); fillAxis("scene", info.scenes);
-  fillAxis("angle", info.angles); fillAxis("device", info.devices);
+  fillAxis("paint", info.paints); fillAxis("device", info.devices);
   fillAxis("vlight", info.lights);
+  // "scene" und "angle" fuellt subjectChanged() aus den Listen der Motivart.
   fillAxis("material", info.materials);
   $("material").value = AXIS_OFF;   // Werkstoff nur auf Wunsch
   SUBJECTS = info.subjects;
@@ -539,17 +544,33 @@ fetch("/api/info").then(r => r.json()).then(info => {
   $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
     + EFFECTS.map(e => `<code>${esc(e.alias)}</code>`).join(", ")
     + ". Ein getippter Befehl stellt die Regler selbst um.";
-  $("aspect").innerHTML = info.aspects.map(a => `<option>${a}</option>`).join("");
   setMode("t2i");
+}).catch(fehler => {
+  console.error(fehler);
+  $("staleBar").style.display = "block";
+  $("staleBar").textContent = "Die Oberfläche konnte sich nicht einrichten: "
+    + fehler.message + " — läuft der Server mit dem passenden Code?";
 });
+// Fehlt dem Server ein Feld, soll das auffallen statt die Seite abzuwürgen:
+// ein leeres Auswahlfeld liefert sonst "" und der Auftrag scheitert erst
+// weit später mit einer unverständlichen Meldung.
+function meldeLuecke(id) {
+  console.warn("Der Server liefert keine Daten für", id);
+  $("staleBar").style.display = "block";
+  $("staleBar").textContent = `Der Server liefert keine Daten für „${id}“. `
+    + "Wahrscheinlich läuft er mit älterem Code – bitte Strg+C und ./start.sh.";
+}
+
 // Achsen im Varianten-Modus kennen drei Zustaende: wuerfeln, unveraendert
 // lassen, oder ein fester Wert.
 function fillAxis(id, items) {
+  if (!Array.isArray(items)) return meldeLuecke(id);
   $(id).innerHTML = '<option value="">würfeln</option>'
     + `<option value="${AXIS_OFF}">unverändert lassen</option>`
     + items.map(i => `<option value="${i.key}">${esc(i.label)}</option>`).join("");
 }
 function fill(id, items) {
+  if (!Array.isArray(items)) return meldeLuecke(id);
   $(id).innerHTML = '<option value="">— automatisch —</option>'
     + items.map(i => `<option value="${i.key}">${esc(i.label)}</option>`).join("");
 }

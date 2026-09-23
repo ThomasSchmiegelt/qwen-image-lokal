@@ -253,6 +253,21 @@ Auflösung sprengen den Speicher. Die Referenzauflösung wird deshalb automatisc
 gesenkt (1–2 Bilder 1024 px, 3 Bilder 864 px, 4 Bilder 736 px), die
 Ausgabegröße bleibt unberührt. VRAM-Spitze bei vier Personen: 19,9 GB.
 
+## Prüfen
+
+```bash
+./qwen_bild/bin/python webui/pruefung.py        # Server auf 7860 muss laufen
+```
+
+Vergleicht die Oberfläche mit dem laufenden Server: liest die Seite nur Felder,
+die `/api/info` auch liefert, existiert jedes angesprochene Element, sind die
+Klammern im Skript geschlossen, läuft der Server mit dem Code von der Platte.
+
+Anlass war ein echter Fehler: ein Feld wurde aus `/api/info` entfernt, die
+beiden Aufrufe in der Seite blieben stehen. Der TypeError brach die gesamte
+Einrichtung ab, das Seitenverhältnis-Feld blieb leer — und der Auftrag
+scheiterte erst viel später im Server mit `KeyError: ''`.
+
 ## Aufbau
 
 ```
@@ -261,7 +276,9 @@ webui/server.py       HTTP-Server, nur Standardbibliothek
 webui/engine.py       zweiphasige Pipeline
 webui/presets.py      Stile, Lichter, Kameras, Blickwinkel, Vorlagen, Effekte
 webui/chat.py         Freitext über Ollama deuten und prüfen
-webui/demo.py         Schritte der Vorführung und der Videobau
+webui/ablauf.py       Abläufe als Blöcke, mitgelieferte Folgen
+webui/demo.py         Startbild-Vorgabe und Videobau
+webui/pruefung.py     Oberfläche gegen den Server prüfen
 demo/demonstration.py dieselbe Vorführung von der Kommandozeile
 webui/index.html      Oberfläche
 gimp/qwen-image/      GIMP-3-Plugin

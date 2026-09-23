@@ -65,8 +65,14 @@ ASPECT_RATIOS = {
 
 
 def dimensions_for(aspect: str, base: int) -> tuple[int, int]:
-    """Kantenlaengen wie die Pipeline sie selbst berechnet (Vielfache von 32)."""
-    width, height, _ = calculate_dimensions(base * base, ASPECT_RATIOS[aspect])
+    """Kantenlaengen wie die Pipeline sie selbst berechnet (Vielfache von 32).
+
+    Ein unbekanntes Seitenverhaeltnis -- etwa ein leerer Wert aus einem
+    Auswahlfeld, das nicht gefuellt wurde -- ergibt quadratisch, statt den
+    ganzen Auftrag mit einem KeyError abzubrechen.
+    """
+    width, height, _ = calculate_dimensions(
+        base * base, ASPECT_RATIOS.get(aspect, ASPECT_RATIOS["1:1"]))
     return width, height
 
 
