@@ -920,11 +920,18 @@ async function starteDemo() {
     buttonState("idle");
     return say(err.error || "Die Vorführung ließ sich nicht starten.", "err");
   }
-  startSlots(1 + bloecke.reduce((s, b) => {
-    const zeilen = (b.bausteine || []).length;
-    if (b.art === "gruppe") return s + Math.min(zeilen, 1);
-    return s + (b.anzahl > 0 && zeilen ? b.anzahl : zeilen);
-  }, 0));
+  // Der Auftrag laeuft ab hier auf dem Server. Was beim Vorzeichnen
+  // schiefgeht, darf die Fortschrittsabfrage nicht mitreissen -- sonst
+  // bliebe der Knopf fuer immer auf "laeuft".
+  try {
+    startSlots(1 + bloecke.reduce((s, b) => {
+      const zeilen = (b.bausteine || []).length;
+      if (b.art === "gruppe") return s + Math.min(zeilen, 1);
+      return s + (b.anzahl > 0 && zeilen ? b.anzahl : zeilen);
+    }, 0));
+  } catch (e) {
+    console.error(e);
+  }
   poll();
 }
 
@@ -991,9 +998,15 @@ async function start() {
   say("Auftrag wird gestartet …");
   paintSeries([], body.count, 1);
 
+  // Bricht die Verbindung weg, muss der Knopf zurueckspringen -- sonst
+  // steht er fuer immer auf "laeuft", ohne dass etwas rechnet.
   const res = await fetch("/api/generate", {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
-  });
+  }).catch(() => null);
+  if (!res) {
+    buttonState("idle");
+    return say("Der Server ist nicht erreichbar.", "err");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({error: res.statusText}));
     buttonState("idle");
@@ -1059,12 +1072,19 @@ function poll() {
     const s = await fetch("/api/status").then(r => r.json()).catch(() => null);
     if (!s) return;
 
-    zeigeUebersetzung(s.translated);
-    zeigeGelesen(s.gelesen);
-    const done = s.results.length;
-    const perImage = s.total ? s.step / s.total : 0;
-    $("fill").style.width = (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
-    paintSeries(s.results, s.count, s.image);
+    const done = (s.results || []).length;
+    // Anzeigen duerfen scheitern, ohne die Abfrage mitzureissen: sonst
+    // bleibt der Knopf stehen, obwohl der Auftrag laengst fertig ist.
+    try {
+      zeigeUebersetzung(s.translated);
+      zeigeGelesen(s.gelesen);
+      const perImage = s.total ? s.step / s.total : 0;
+      $("fill").style.width =
+        (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
+      paintSeries(s.results || [], s.count, s.image);
+    } catch (e) {
+      console.error(e);
+    }
 
     if (s.busy) return say((s.stage ? s.stage + " · " : "") + s.message
                           + " · " + fmt(s.elapsed));
@@ -1102,6 +1122,10 @@ function zeigeUebersetzung(t) {
 
 // ---------- Mosaik der Serie ----------
 let seriesFiles = [];
+
+// Leere Plaetze fuer einen angekuendigten Ablauf: so ist von Anfang an zu
+// sehen, wie viele Bilder noch kommen.
+function startSlots(anzahl) { paintSeries([], anzahl, 1); }
 function paintSeries(files, count, active) {
   const cells = [];
   for (let i = 0; i < Math.max(count, files.length); i++) {

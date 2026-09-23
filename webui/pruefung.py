@@ -46,6 +46,53 @@ def pruefe_elemente(text: str, skript: str) -> list[str]:
     return fehler
 
 
+# Alles, was der Browser selbst mitbringt, plus die Schlüsselwörter, die vor
+# einer Klammer stehen dürfen. Was ein Aufruf weder hier noch im Skript
+# findet, gibt es schlicht nicht.
+BEKANNT = {
+    "if", "for", "while", "switch", "catch", "return", "typeof", "function",
+    "async", "await", "new", "else", "do", "try", "in", "of", "delete", "void",
+    "fetch", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+    "parseInt", "parseFloat", "isNaN", "encodeURIComponent", "decodeURIComponent",
+    "String", "Number", "Boolean", "Array", "Object", "JSON", "Math", "Promise",
+    "Error", "Set", "Map", "Date", "RegExp", "alert", "confirm", "console",
+    "FileReader", "Blob", "URL", "FormData", "Image", "atob", "btoa",
+}
+
+# Zeichenketten und Kommentare enthalten deutschen Fließtext -- "das ist (so)"
+# sähe sonst aus wie ein Aufruf von ist().
+def _nur_code(skript: str) -> str:
+    ohne = re.sub(r"/\*.*?\*/", " ", skript, flags=re.S)
+    ohne = re.sub(r"(?<![:\w])//[^\n]*", " ", ohne)
+    for muster in (r"`(?:[^`\\]|\\.)*`", r"'(?:[^'\\\n]|\\.)*'", r'"(?:[^"\\\n]|\\.)*"'):
+        ohne = re.sub(muster, '""', ohne)
+    return ohne
+
+
+def pruefe_aufrufe(skript: str) -> list[str]:
+    """Ruft die Seite eine Funktion auf, die es nicht gibt?
+
+    Anlass war ein echter Fehler: `startSlots` wurde aufgerufen, aber nie
+    geschrieben. Der ReferenceError brach `starteDemo` genau vor der
+    Fortschrittsabfrage ab -- der Auftrag lief, die Seite erfuhr nie davon,
+    und der Startknopf blieb für immer auf "läuft".
+    """
+    code = _nur_code(skript)
+    bekannt = set(BEKANNT)
+    bekannt |= set(re.findall(r"\bfunction\s+([\w$]+)", code))
+    bekannt |= set(re.findall(r"\b(?:const|let|var)\s+([\w$]+)", code))
+    # Mehrfachzuweisungen in einer Zeile: let a = 1, b = 2, c = null
+    for zeile in re.findall(r"\b(?:const|let|var)\s+([^;\n]+)", code):
+        bekannt |= set(re.findall(r"([\w$]+)\s*=", zeile))
+    # Benannte Argumente von Pfeilfunktionen
+    bekannt |= set(re.findall(r"\(([\w$]+)\)\s*=>", code))
+    bekannt |= set(re.findall(r"\b([\w$]+)\s*=>", code))
+
+    return [f"die Seite ruft {name}() auf, geschrieben ist es nirgends"
+            for name in sorted(set(re.findall(r"(?<![.\w$])([a-zA-Z_$][\w$]*)\s*\(", code)))
+            if name not in bekannt]
+
+
 def pruefe_felder(skript: str, info: dict) -> list[str]:
     gelesen = sorted(set(re.findall(r"\binfo\.(\w+)", skript)))
     fehlend = [k for k in gelesen if k not in info]
@@ -58,7 +105,7 @@ def main() -> int:
     argumente = zerleger.parse_args()
 
     text, skript = seite()
-    fehler = pruefe_elemente(text, skript)
+    fehler = pruefe_elemente(text, skript) + pruefe_aufrufe(skript)
 
     try:
         with urllib.request.urlopen(
@@ -82,7 +129,9 @@ def main() -> int:
 
     geprueft = len(set(re.findall(r'\$\("([^"]+)"\)', skript)))
     felder = len(set(re.findall(r"\binfo\.(\w+)", skript))) if info else 0
-    print(f"in Ordnung: {geprueft} Elemente, {felder} Serverfelder, Klammern geschlossen")
+    aufrufe = len(set(re.findall(r"(?<![.\w$])([a-zA-Z_$][\w$]*)\s*\(", _nur_code(skript))))
+    print(f"in Ordnung: {geprueft} Elemente, {felder} Serverfelder, "
+          f"{aufrufe} Aufrufe, Klammern geschlossen")
     return 0
 
 
