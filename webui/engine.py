@@ -32,7 +32,8 @@ from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimen
 
 from presets import (
     ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, GROUP_ACTIONS, LIGHTS,
-    PAINTS, SCENARIOS, SCENES, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE, VARIANT_AXES, VIEWS, fragment,
+    MATERIALS, PAINTS, SCENARIOS, SCENES, STYLES, TEMPLATES, TRANSPARENT_TEMPLATE,
+    VIEWS, fragment, variant_axes,
 )
 
 REPO = os.environ.get("QWEN_IMAGE_REPO", "Qwen/Qwen-Image-2.1")
@@ -96,7 +97,7 @@ def _free() -> None:
 
 def build_prompt(text: str, view=None, style=None, light=None, camera=None,
                  paint=None, scene=None, angle=None, device=None,
-                 scenario=None, paint_target: str = "") -> str:
+                 scenario=None, material=None, paint_target: str = "") -> str:
     """Haengt die gewaehlten Voreinstellungen an den Prompt an.
 
     Der Blickwinkel steht vorn: er bestimmt die Bildkomposition, waehrend Stil,
@@ -110,6 +111,7 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
         if paint in PAINTS and paint_target.strip() else None,
         fragment(SCENES, scene),
         fragment(ANGLES, angle),
+        fragment(MATERIALS, material),
         fragment(SCENARIOS, scenario),
         fragment(DEVICES, device),
         fragment(STYLES, style),
@@ -192,6 +194,8 @@ class Engine:
         angle=None,
         device=None,
         scenario=None,
+        material=None,
+        subject: str = "fahrzeug",
         paint_target: str = "",
         lock_seed: bool = False,
     ) -> list[dict]:
@@ -214,19 +218,20 @@ class Engine:
         haelt das Kleidung, Umgebung und Bildaufbau merklich stabiler, weil das
         Ausgangsrauschen identisch bleibt.
         """
+        achsen = variant_axes(subject)
         tables = {"view": VIEWS, "style": STYLES, "light": LIGHTS, "camera": CAMERAS,
                   "paint": PAINTS, "scene": SCENES, "angle": ANGLES,
-                  "device": DEVICES}
+                  "device": DEVICES, "material": MATERIALS}
         rng = random.Random(seed)
         jobs = []
         for i in range(count):
             pick = {"view": view, "style": style, "light": light, "camera": camera,
                     "paint": paint, "scene": scene, "angle": angle, "device": device,
-                    "scenario": scenario}
+                    "scenario": scenario, "material": material}
             if sweep == "varianten":
                 # Jede Achse eigenstaendig gewuerfelt. Ein fester Wert bleibt
                 # fest, AXIS_OFF schaltet die Achse ganz ab.
-                for field, table in VARIANT_AXES.items():
+                for field, table in achsen.items():
                     if not pick[field]:
                         pick[field] = rng.choice(list(table))
             elif sweep == "random":
@@ -271,6 +276,9 @@ class Engine:
         angle=None,
         device=None,
         scenario=None,
+        material=None,
+        subject: str = "fahrzeug",
+        image_prompts: list | None = None,
         action: str = "zusammen",
         group_size: int = 2,
         paint_target: str = "",
@@ -308,6 +316,11 @@ class Engine:
             text = spec_action["template"].format(
                 n=len(images), m=zusatz, extra=text,
                 total=max(group_size, 1) + zusatz)
+            # Rollen je Referenzbild: "Person aus Bild 2 als Ritter darstellen".
+            rollen = [f"Depict the person from reference image {i + 1} as {d.strip()}"
+                      for i, d in enumerate(image_prompts or []) if d and d.strip()]
+            if rollen:
+                text = f"{text} {'. '.join(rollen)}."
         elif mode in TEMPLATES:
             if not images:
                 raise ValueError("Fuer diesen Modus werden Referenzbilder gebraucht.")
@@ -317,7 +330,8 @@ class Engine:
             text = TRANSPARENT_TEMPLATE.format(extra=text)
 
         jobs = self.plan(text, count, seed, sweep, view, style, light, camera,
-                         paint, scene, angle, device, scenario, paint_target, lock_seed)
+                         paint, scene, angle, device, scenario, material, subject,
+                         paint_target, lock_seed)
 
         self._cancel = False
         self._set(state="loading", image=0, count=len(jobs), step=0, total=steps,
@@ -411,7 +425,7 @@ class Engine:
                 image_out = out.images[0]
                 meta = {k: job[k] for k in ("prompt", "seed", "view", "style", "light",
                                             "camera", "paint", "scene", "angle", "device",
-                                            "scenario")}
+                                            "scenario", "material")}
                 meta["index"] = index
                 meta["effect"] = effect
                 meta["form"] = form

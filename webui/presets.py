@@ -93,8 +93,13 @@ def catalog() -> dict:
         "cameras": [{"key": k, "label": v[0]} for k, v in CAMERAS.items()],
         "views": [{"key": k, "label": v[0]} for k, v in VIEWS.items()],
         "paints": [{"key": k, "label": v[0], "phrase": v[1]} for k, v in PAINTS.items()],
-        "scenes": [{"key": k, "label": v[0]} for k, v in SCENES.items()],
-        "angles": [{"key": k, "label": v[0]} for k, v in ANGLES.items()],
+        "materials": [{"key": k, "label": v[0]} for k, v in MATERIALS.items()],
+        "subjects": [
+            {"key": k, "label": v["label"], "target": v["target"],
+             "scenes": [{"key": a, "label": b[0]} for a, b in v["scenes"].items()],
+             "angles": [{"key": a, "label": b[0]} for a, b in v["angles"].items()]}
+            for k, v in SUBJECT_KINDS.items()
+        ],
         "devices": [{"key": k, "label": v[0]} for k, v in DEVICES.items()],
         "scenarios": [{"key": k, "label": v[0]} for k, v in SCENARIOS.items()],
         "group_actions": [{"key": k, "label": v["label"], "min": v["min"], "hint": v["hint"]}
@@ -148,6 +153,17 @@ EFFECTS = {
         "instruction": "Show this exact same scene as a much wider shot: the camera pulls back "
                        "and reveals more of the surroundings on the left and right. Keep the "
                        "subject, the clothing, the setting, the light and the style identical.",
+    },
+    "cad2real": {
+        "alias": "/cad2real", "label": "CAD zu Foto", "needs_image": True,
+        "instruction": "Turn this CAD rendering into a photorealistic product photograph. "
+                       "Keep the geometry, the proportions and every edge, hole, fastener "
+                       "and detail of the design exactly as drawn -- do not redesign "
+                       "anything and do not add or remove parts. Replace the flat CAD "
+                       "shading with real materials: correct surface finish, faint wear "
+                       "and handling marks, realistic reflections, accurate shadows "
+                       "including a contact shadow on the surface it rests on, and the "
+                       "shallow depth of field of a real camera.",
     },
     "colorize": {
         "alias": "/colorize", "label": "Einfärben", "needs_image": True,
@@ -292,7 +308,7 @@ PAINTS = {
     "matt":       ("Mattlack", "a matte grey wrap with no gloss"),
 }
 
-SCENES = {
+VEHICLE_SCENES = {
     "hof":      ("Hofeinfahrt", "standing on a paved driveway in front of a house"),
     "schotter": ("Schotterplatz", "standing on a gravel yard"),
     "wiese":    ("Feldweg", "standing on a dirt track next to a green field"),
@@ -307,9 +323,9 @@ SCENES = {
     "baustelle": ("Baustelle", "standing on a muddy construction site"),
 }
 
-# Blickwinkel auf einen Gegenstand -- nicht zu verwechseln mit VIEWS, die eine
-# Person umrunden.
-ANGLES = {
+# Blickwinkel auf ein Fahrzeug. Die Bausteine nennen Stossstange und Heck,
+# taugen also nur hier -- fuer Gegenstaende und Personen gibt es eigene Saetze.
+VEHICLE_ANGLES = {
     "gerade":     ("Gerade von hinten", "seen straight from behind at bumper height"),
     "linksleicht": ("Leicht von links", "seen from slightly left of centre"),
     "rechtsleicht": ("Leicht von rechts", "seen from slightly right of centre"),
@@ -355,9 +371,6 @@ VARIANT_TEMPLATE = (
 # Kerzenlicht auf einem Auto im Hof ergibt keine brauchbare Variante, deshalb
 # hier ohne. Wer es doch will, stellt die Lichtachse von Hand ein.
 VARIANT_LIGHTS = {k: v for k, v in LIGHTS.items() if k != "kerze"}
-
-VARIANT_AXES = {"paint": PAINTS, "scene": SCENES, "light": VARIANT_LIGHTS,
-                "device": DEVICES, "angle": ANGLES}
 
 # Nachtraeglich eingehaengt, weil die Vorlage weiter unten steht als TEMPLATES.
 TEMPLATES["varianten"] = VARIANT_TEMPLATE
@@ -440,3 +453,97 @@ SCENARIOS = {
     "familie": ("Familienporträt", "as a warm formal family portrait in a photo studio, "
                 "soft key light, plain backdrop"),
 }
+
+
+# --- Motivarten ----------------------------------------------------------
+# Umgebung und Blickwinkel haengen davon ab, was auf dem Bild ist. "Auf einem
+# Schotterplatz stehend" und "auf Stossstangenhoehe von hinten" passen zu einem
+# Auto und zu nichts sonst. Deshalb je ein eigener Satz.
+OBJECT_SCENES = {
+    "og_studio":  ("Studiotisch", "on a seamless studio backdrop with soft shadows"),
+    "og_holz":    ("Holztisch", "on a worn wooden table"),
+    "og_werkbank": ("Werkbank", "on a metal workbench with tools around it"),
+    "og_beton":   ("Beton", "on a raw concrete surface"),
+    "og_stoff":   ("Stoff", "on folded linen fabric"),
+    "og_regal":   ("Regal", "on a shelf next to other products"),
+    "og_karton":  ("Neben der Verpackung", "next to its cardboard packaging"),
+    "og_draussen": ("Im Freien", "outdoors on a stone wall in daylight"),
+    "og_labor":   ("Labor", "on a clean white laboratory bench"),
+    "og_einsatz": ("Im Einsatz", "in its actual place of use, installed and connected"),
+}
+
+OBJECT_ANGLES = {
+    "og_vorn":    ("Von vorn", "seen straight from the front at eye level"),
+    "og_schraeg": ("Dreiviertel", "seen at a three-quarter angle from the front left"),
+    "og_seite":   ("Von der Seite", "seen from directly at the side"),
+    "og_oben":    ("Von oben", "seen from directly above, flat lay"),
+    "og_45":      ("Aufsicht 45°", "seen from a 45 degree elevated angle"),
+    "og_tief":    ("Untersicht", "seen from slightly below, hero angle"),
+    "og_detail":  ("Detail", "an extreme close-up of one part of the object"),
+    "og_hand":    ("In der Hand", "held in a hand, showing its scale"),
+    "og_frei":    ("Freigestellt", "isolated on a plain background with a soft drop shadow"),
+}
+
+PERSON_SCENES = {
+    "ps_studio":  ("Studio", "in a photo studio against a plain backdrop"),
+    "ps_strasse": ("Stadtstraße", "on a city street"),
+    "ps_park":    ("Park", "in a green park"),
+    "ps_buero":   ("Büro", "in a modern office"),
+    "ps_kueche":  ("Küche", "in a bright kitchen"),
+    "ps_cafe":    ("Café", "in a café"),
+    "ps_strand":  ("Strand", "on a beach"),
+    "ps_wald":    ("Wald", "on a forest path"),
+    "ps_bahnhof": ("Bahnhof", "in a railway station concourse"),
+    "ps_werkstatt": ("Werkstatt", "in a workshop"),
+}
+
+PERSON_ANGLES = {
+    "pa_vorne":  ("Von vorn", "seen from the front, facing the camera"),
+    "pa_halb":   ("Halbprofil", "seen at a three-quarter angle"),
+    "pa_profil": ("Profil", "seen from the side in profile"),
+    "pa_hinten": ("Von hinten", "seen from behind"),
+    "pa_nah":    ("Nah", "a close portrait crop from the chest up"),
+    "pa_ganz":   ("Ganzkörper", "a full body shot"),
+    "pa_tief":   ("Untersicht", "seen from a low angle"),
+    "pa_hoch":   ("Aufsicht", "seen from slightly above"),
+}
+
+# Werkstoff. Vor allem fuer Gegenstaende gedacht und deshalb standardmaessig
+# abgeschaltet -- eine gewuerfelte "aus Gusseisen"-Person waere Unsinn.
+MATERIALS = {
+    "alu":       ("Aluminium", "made of brushed aluminium"),
+    "stahl":     ("Edelstahl", "made of polished stainless steel"),
+    "kunststoff": ("Kunststoff matt", "made of matte injection-moulded plastic"),
+    "holz":      ("Holz", "made of oiled hardwood"),
+    "carbon":    ("Carbon", "made of carbon fibre with a visible weave"),
+    "gummi":     ("Gummi", "made of textured black rubber"),
+    "glas":      ("Glas", "made of clear glass"),
+    "messing":   ("Messing", "made of brushed brass"),
+    "keramik":   ("Keramik", "made of glazed ceramic"),
+    "guss":      ("Gusseisen", "made of raw cast iron"),
+}
+
+SUBJECT_KINDS = {
+    "fahrzeug":   {"label": "Fahrzeug", "scenes": VEHICLE_SCENES, "angles": VEHICLE_ANGLES,
+                   "target": "die Karosserie"},
+    "gegenstand": {"label": "Gegenstand", "scenes": OBJECT_SCENES, "angles": OBJECT_ANGLES,
+                   "target": "das Gehäuse"},
+    "person":     {"label": "Person", "scenes": PERSON_SCENES, "angles": PERSON_ANGLES,
+                   "target": "die Jacke der Person"},
+}
+
+# Zum Nachschlagen eines einzelnen Wertes ist egal, aus welchem Satz er stammt.
+SCENES = {**VEHICLE_SCENES, **OBJECT_SCENES, **PERSON_SCENES}
+ANGLES = {**VEHICLE_ANGLES, **OBJECT_ANGLES, **PERSON_ANGLES}
+
+
+def variant_axes(subject: str) -> dict:
+    """Die Tabellen, aus denen fuer diese Motivart gewuerfelt wird."""
+    kind = SUBJECT_KINDS.get(subject) or SUBJECT_KINDS["fahrzeug"]
+    achsen = {"paint": PAINTS, "scene": kind["scenes"], "light": VARIANT_LIGHTS,
+              "device": DEVICES, "angle": kind["angles"]}
+    # Eine gewuerfelte "aus Gusseisen"-Person waere Unsinn. Von Hand festgelegt
+    # geht der Werkstoff weiterhin, nur gewuerfelt wird er hier nicht.
+    if subject != "person":
+        achsen["material"] = MATERIALS
+    return achsen

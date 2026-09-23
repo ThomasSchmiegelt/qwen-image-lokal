@@ -77,7 +77,7 @@ def _save(meta: dict, image: Image.Image, stamp: str, kind: str) -> str:
     name = f"{stamp}_{kind}_{meta['index']:02d}_seed{meta['seed']}.png"
     info = PngImagePlugin.PngInfo()
     for key in ("prompt", "seed", "view", "style", "light", "camera", "effect",
-                "form", "paint", "scene", "angle", "device", "scenario"):
+                "form", "paint", "scene", "angle", "device", "scenario", "material"):
         if meta.get(key) is not None:
             info.add_text(f"qwen_{key}", str(meta[key]))
     image.save(os.path.join(OUTPUTS, name), pnginfo=info)
@@ -95,9 +95,21 @@ def _translate_inputs(params: dict) -> dict:
     deutschem Prompt als gar keines.
     """
     quelle = {k: params.get(k) or "" for k in TRANSLATABLE}
+    # Die Rollentexte der einzelnen Referenzbilder sind ebenfalls Freitext.
+    rollen = list(params.get("image_prompts") or [])
+    for i, text in enumerate(rollen):
+        quelle[f"bild{i + 1}"] = text or ""
+
     engine.note("loading", "Eingaben werden übersetzt …")
     fertig = chat.translate(quelle)
-    params.update(fertig)
+
+    for i in range(len(rollen)):
+        neu = fertig.get(f"bild{i + 1}")
+        if neu:
+            rollen[i] = neu
+    if rollen:
+        params["image_prompts"] = rollen
+    params.update({k: v for k, v in fertig.items() if k in TRANSLATABLE})
     return fertig
 
 
@@ -141,6 +153,9 @@ def _run_job(params: dict) -> None:
             device=params.get("device") or None,
             paint_target=params.get("paint_target") or "",
             scenario=params.get("scenario") or None,
+            material=params.get("material") or None,
+            subject=params.get("subject") or "fahrzeug",
+            image_prompts=params.get("image_prompts") or [],
             action=params.get("action") or "zusammen",
             group_size=int(params.get("group_size") or 2),
             count=int(params.get("count", 1)),

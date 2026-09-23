@@ -60,7 +60,10 @@ Gruppe · Umrundung (eine Person aus wechselnden Blickwinkeln) · Varianten.
 **Gruppe** kennt drei Aufgaben: *aus Einzelbildern zusammenstellen* (je ein
 Bild pro Person), *Person ergänzen* (erstes Bild ist das Gruppenfoto, danach
 je ein Bild pro Person, die dazu soll) und *Person entfernen* (beschreiben,
-wer verschwinden soll — „die mittlere Person"). Beim Ergänzen gibst du an, wie
+wer verschwinden soll — „die mittlere Person"). **Jedes Referenzbild bekommt
+auf Wunsch einen eigenen Text**, der sagt, wie diese Person darzustellen ist —
+„ein mittelalterlicher Ritter", „eine Astronautin im Raumanzug". Beim Ergänzen
+gibst du an, wie
 viele Personen schon auf dem Gruppenfoto sind: das Modell kann nicht zählen,
 und ohne feste Zielzahl stellt es wahllos Leute dazu.
 
@@ -69,10 +72,16 @@ leuchtenden Geistern über Fantasy-Gefährten und Tafelrunde bis Detektive und
 Familienporträt. Sie beschreiben den Look ausformuliert statt einen Filmtitel
 zu nennen; das trifft das Modell zuverlässiger.
 
-**Varianten** vervielfachen ein Basisbild, etwa für Trainingsdaten. Fünf
-Achsen — Farbe (12), Umgebung (12 Szenen), Licht, Kameraart (9 Geräte vom
-Smartphone bis zur Überwachungskamera) und Blickwinkel (10) — lassen sich je
-einzeln auf **würfeln**, **unverändert lassen** oder einen festen Wert stellen.
+**Varianten** vervielfachen ein Basisbild, etwa für Trainingsdaten. Zuerst die
+**Motivart** wählen — Fahrzeug, Gegenstand oder Person: davon hängt ab, welche
+Umgebungen und Blickwinkel angeboten werden. „Auf Stoßstangenhöhe von hinten"
+passt zu einem Auto und zu nichts sonst, ein Gegenstand will „auf der Werkbank"
+und „freigestellt mit Schlagschatten".
+
+Sechs Achsen — Farbe, Umgebung, Licht, Kameraart, Blickwinkel und Werkstoff
+(10 Materialien von Aluminium bis Gusseisen) — lassen sich je einzeln auf
+**würfeln**, **unverändert lassen** oder einen festen Wert stellen. Der
+Werkstoff steht standardmäßig aus und wird bei Personen nie gewürfelt.
 So entsteht wahlweise breite Streuung oder eine Serie, in der sich nur ein
 einziges Merkmal ändert. Was umgefärbt wird, beschreibst du selbst
 (`the vehicle body`, `the person's coat`), ebenso was unverändert bleiben muss.
@@ -85,7 +94,9 @@ alle Bilder, was Kleidung, Umgebung und Bildaufbau stabil hält.
 **Voreinstellungen** in `webui/presets.py`, frei erweiterbar: 17 Stile,
 10 Lichtstimmungen, 11 Kameraperspektiven, 10 Blickwinkel, 8 Vorlagen
 (Porträt, Logo, Buchumschlag, Verpackung, Icon, Web- und App-Muster) sowie
-15 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
+16 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
+`/cad2real` (aus einer CAD-Ansicht ein Produktfoto mit echten Materialien,
+Oberflächenspuren und Kontaktschatten, bei unveränderter Geometrie),
 `/magazine cover`, `/360 View` und weitere. Kurzbefehle lassen sich direkt in
 das Prompt-Feld tippen und stellen die Regler selbst um.
 
@@ -178,6 +189,13 @@ hält sich eng an die Bildaufteilung der Vorlage. Lack, Umgebung und Licht
 wechseln zuverlässig, „bodennah" oder „Nahaufnahme" verschieben den Ausschnitt
 dagegen nur leicht. Für echte Perspektivvielfalt braucht es Aufnahmen aus
 verschiedenen Winkeln als Basis.
+
+**Farbe und Werkstoff zugleich ist mehrdeutig.** Wer beide Achsen gleichzeitig
+würfelt, bekommt womöglich ein gelbes Teil neben einem zweiten aus Carbon. Eins
+von beidem wählen, das andere auf „unverändert lassen".
+
+**Rollen je Bild greifen, aber nicht immer vollständig.** Der Ritter kam mit
+Rüstung und Jeans. Je knapper und konkreter der Rollentext, desto besser.
 
 **Mehrere Referenzbilder kosten Sequenzlänge.** Vier Referenzen bei voller
 Auflösung sprengen den Speicher. Die Referenzauflösung wird deshalb automatisch
