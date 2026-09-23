@@ -165,6 +165,22 @@ EFFECTS = {
                        "including a contact shadow on the surface it rests on, and the "
                        "shallow depth of field of a real camera.",
     },
+    "upscale": {
+        # Qwen-Image 2.1 ist kein Skalierer: es zeichnet das Bild in der
+        # groesseren Kantenlaenge neu. Das Ergebnis ist deshalb nicht
+        # pixelgleich, dafuer entstehen echte Strukturen statt geglaetteter
+        # Kanten. Bei base 2048 wird die Vorlage mit 1472 px gelesen und
+        # 2496x1664 ausgegeben -- die Proportionen kommen ueber
+        # follow_reference aus der Vorlage selbst.
+        "alias": "/upscale", "label": "Hochskalieren (mehr Details)",
+        "needs_image": True, "mode": "edit", "base": 2048,
+        "instruction": "Reproduce this exact image at high resolution. The composition, "
+                       "the framing, the subject, the pose, the colours and the light stay "
+                       "exactly as they are -- nothing is added, removed, moved or restyled. "
+                       "Only the detail becomes finer: crisp edges, clean material and fabric "
+                       "texture, individual strands of hair, legible small structures, natural "
+                       "skin detail. No blur, no noise, no halos around edges.",
+    },
     "colorize": {
         "alias": "/colorize", "label": "Einfärben", "needs_image": True,
         "instruction": "Colorize this black and white photograph with natural, period-accurate "
@@ -262,7 +278,7 @@ FORMS = {
 
 # Einstellungen, die ein Effekt oder eine Vorlage mitbringen darf.
 OVERRIDE_KEYS = ("aspect", "style", "light", "camera", "view", "mode",
-                 "sweep", "count", "lock_seed", "transparent")
+                 "sweep", "count", "lock_seed", "transparent", "base")
 
 
 def parse_command(text: str) -> tuple[str | None, str]:

@@ -705,6 +705,9 @@ function applyOverrides(o) {
   if (o.transparent !== undefined) $("transparent").checked = !!o.transparent;
   if (o.lock_seed !== undefined) $("lockSeed").checked = !!o.lock_seed;
   if (o.count !== undefined) $("count").value = o.count;
+  // Hochskalieren bringt eine groessere Kantenlaenge mit -- der Regler muss
+  // sie zeigen, sonst waere nicht zu sehen, warum es laenger dauert.
+  if (o.base !== undefined) $("base").value = o.base;
   refresh();
 }
 $("effect").onchange = () => {

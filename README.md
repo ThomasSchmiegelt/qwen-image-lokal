@@ -94,10 +94,12 @@ alle Bilder, was Kleidung, Umgebung und Bildaufbau stabil hält.
 **Voreinstellungen** in `webui/presets.py`, frei erweiterbar: 17 Stile,
 10 Lichtstimmungen, 11 Kameraperspektiven, 10 Blickwinkel, 8 Vorlagen
 (Porträt, Logo, Buchumschlag, Verpackung, Icon, Web- und App-Muster) sowie
-16 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
+17 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
 `/cad2real` (aus einer CAD-Ansicht ein Produktfoto mit echten Materialien,
 Oberflächenspuren und Kontaktschatten, bei unveränderter Geometrie),
-`/magazine cover`, `/360 View` und weitere. Kurzbefehle lassen sich direkt in
+`/upscale` (dasselbe Bild in 2048er Kantenlänge, mit ausgezeichneten
+Strukturen statt geglätteter Kanten), `/magazine cover`, `/360 View` und
+weitere. Kurzbefehle lassen sich direkt in
 das Prompt-Feld tippen und stellen die Regler selbst um.
 
 **Deutsch überall.** Prompt, „was unverändert bleiben muss", „was umgefärbt
@@ -233,6 +235,14 @@ nicht auf, einen unscharf vorgefüllten übernimmt es unscharf. Umgesetzt ist
 deshalb der Weg, der zum Modell passt — die Szene wird im neuen Format neu
 gezeichnet. Person, Kleidung, Umgebung und Licht bleiben erhalten, die Mitte
 ist danach aber nicht pixelgleich.
+
+**`/upscale` rechnet nicht hoch, es zeichnet neu.** Einen Skalierer bringt
+Qwen-Image 2.1 nicht mit. Der Effekt gibt das Bild deshalb mit 2048er
+Kantenlänge neu aus — das Seitenverhältnis kommt aus der Vorlage, die mit
+1472 px gelesen wird. Es entstehen echte Strukturen statt weichgezeichneter
+Kanten, das Ergebnis ist dafür nicht pixelgleich: kleine Details können
+anders ausfallen als im Original. Für Beweisfotos ist das nichts, für ein
+altes Handybild, das groß gedruckt werden soll, sehr wohl.
 
 **`/restore` ist nur ein Prompt.** Ein Diffusionsmodell erfindet Details, statt
 sie wiederherzustellen. Für echtes Restaurieren gehört ein eigenes Modell her.
