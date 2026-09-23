@@ -59,6 +59,13 @@
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .axis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+  .block { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .blockkopf { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .blockkopf input { flex: 1; font-weight: 600; }
+  .blockkopf a { color: var(--muted); text-decoration: none; font-size: 15px; padding: 0 3px; }
+  .blockkopf a:hover { color: var(--text); }
+  .block textarea { min-height: 76px; font-size: 12px; }
+  .block .hint { margin-top: 4px; }
   .axis label { margin-top: 8px; }
   #paintPreview.warn { color: var(--busy); }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 11px; color: var(--muted); font-size: 13px; }
@@ -181,7 +188,7 @@
       <button id="tab-gruppe">Gruppe</button>
       <button id="tab-person">Perspektiven</button>
       <button id="tab-varianten">Varianten</button>
-      <button id="tab-demo">Vorführung</button>
+      <button id="tab-demo">Ablauf</button>
     </div>
 
     <div id="uploadBox" style="display:none">
@@ -200,31 +207,29 @@
     <p class="hint" id="tplHint" style="display:none"></p>
 
     <fieldset id="demoBox" style="display:none">
-      <legend>Vorführung</legend>
-      <p class="hint">Vierzig Bilder mit Bogen: erst wird nur <b>die Person</b>
-        getauscht, Kleidung und Umgebung bleiben. Dann zurück zum Ausgangsbild
-        und von dort konservativ los — Kleidungsfarbe, Perspektive, Hintergrund,
-        ein Teil des Hintergrunds, Gruppe. Danach Lichtstimmungen, dann wird es
-        dystopisch, dann Malerei und Comic, dann Cyberpunk und immer knalliger
-        ins Neon. Am Ende zurück ins Realistische und wieder das Ausgangsbild.
-        Alles mit festem Seed, damit die Bilder deckungsgleich übereinander
-        liegen und nahtlos ineinander blenden.</p>
+      <legend>Ablauf</legend>
 
-      <label for="demoFile">Eigenes Foto einer Person (optional)</label>
+      <label for="ablaufWahl">Vorlage</label>
+      <select id="ablaufWahl"></select>
+      <p class="hint" id="ablaufInfo"></p>
+
+      <label for="demoFile">Eigenes Startbild (optional)</label>
       <input type="file" id="demoFile" accept="image/*">
-      <img id="demoPreview" alt="Basisbild" style="display:none;max-width:100%;border-radius:6px;margin-top:8px">
+      <img id="demoPreview" alt="Startbild" style="display:none;max-width:100%;border-radius:6px;margin-top:8px">
       <p class="hint" id="demoRefNote"></p>
 
       <label for="demoPrompt">…oder beschreiben, wer erzeugt werden soll</label>
-      <textarea id="demoPrompt" style="min-height:52px"
+      <textarea id="demoPrompt" style="min-height:48px"
         placeholder="leer lassen für die Vorgabe: eine Person vor einem geparkten Auto"></textarea>
 
-      <label for="demoTarget">Was im Hintergrund umgefärbt werden soll</label>
-      <input id="demoTarget" value="das Auto im Hintergrund">
-      <p class="hint">Schritt 4 färbt nur dieses eine Ding um. Bei einem eigenen
-        Foto ohne Auto etwa <code>die Wand im Hintergrund</code>.</p>
+      <div class="head" style="margin-top:16px">
+        <h2>Blöcke</h2>
+        <span><a href="#" id="blockNeu">+ Block</a> · <a href="#" id="alsText">als Text</a></span>
+      </div>
+      <textarea id="ablaufText" style="display:none;min-height:150px;font-family:monospace;font-size:11px"></textarea>
+      <div id="bloecke"></div>
 
-      <div class="row3">
+      <div class="row3" style="margin-top:14px">
         <div>
           <label for="demoBase">Auflösung</label>
           <select id="demoBase">
@@ -238,7 +243,7 @@
         </div>
         <div>
           <label for="demoDuration">Video (s)</label>
-          <input type="number" id="demoDuration" value="20" min="8" max="90">
+          <input type="number" id="demoDuration" value="25" min="8" max="120">
         </div>
       </div>
       <p class="hint" id="demoDauer"></p>
@@ -468,7 +473,7 @@ const MODES = {
   person: {label: "Umrundung erzeugen", refs: 1, sweep: "view", count: 10, follow: false, lock: true,
            ph: "standing in a city street, wearing a dark coat",
            hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."},
-  demo: {label: "Vorführung starten", refs: 0, ph: "", hint: () => ""},
+  demo: {label: "Ablauf starten", refs: 0, ph: "", hint: () => ""},
   varianten: {label: "Varianten erzeugen", refs: 1, sweep: "varianten", count: 12,
               follow: true, lock: false,
               ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
@@ -490,6 +495,10 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fill("light", info.lights); fill("camera", info.cameras);
   EFFECTS = info.effects; FORMS = info.forms;
   hasGimp = !!(info.gimp && info.gimp.available);
+  ABLAEUFE = info.ablaeufe || [];
+  $("ablaufWahl").innerHTML = ABLAEUFE.map(
+    a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
+  if (ABLAEUFE.length) { $("ablaufWahl").value = ABLAEUFE[0].key; $("ablaufWahl").onchange(); }
   // Ein sehr alter Server meldet gar kein "source" -- dann ist er erst recht
   // veraltet und kann es nur nicht selbst sagen.
   const neustart = " Bitte im Terminal <code>Strg+C</code> und <code>./start.sh</code>.";
@@ -730,8 +739,100 @@ function drawThumbs() {
 }
 function dropRef(i) { refs.splice(i, 1); refPrompts.splice(i, 1); drawThumbs(); setMode(mode); }
 
-// ---------- Vorführung ----------
-let demoRef = null;
+// ---------- Ablauf ----------
+let demoRef = null, ABLAEUFE = [], bloecke = [];
+
+function blockZeichnen() {
+  $("bloecke").innerHTML = bloecke.map((b, i) => `
+    <div class="block" data-i="${i}">
+      <div class="blockkopf">
+        <input class="btitel" value="${esc(b.titel || "")}" placeholder="Name des Blocks">
+        <a href="#" data-tu="hoch" title="nach oben">&uarr;</a>
+        <a href="#" data-tu="runter" title="nach unten">&darr;</a>
+        <a href="#" data-tu="weg" title="entfernen">&times;</a>
+      </div>
+      <div class="row3">
+        <select class="bref">
+          <option value="start"${b.referenz !== "letztes" ? " selected" : ""}>vom Startbild</option>
+          <option value="letztes"${b.referenz === "letztes" ? " selected" : ""}>vom letzten Bild</option>
+        </select>
+        <select class="bart">
+          <option value="behutsam"${b.art !== "gruppe" && b.vorlage !== "verwandeln" ? " selected" : ""}>behutsam ändern</option>
+          <option value="verwandeln"${b.vorlage === "verwandeln" ? " selected" : ""}>verwandeln</option>
+          <option value="gruppe"${b.art === "gruppe" ? " selected" : ""}>Gruppenbild</option>
+        </select>
+        <select class="bseed">
+          <option value=""${!b.fest ? " selected" : ""}>eigener Seed</option>
+          <option value="1"${b.fest ? " selected" : ""}>Seed wie Start</option>
+        </select>
+      </div>
+      <label>Was bleibt unverändert?</label>
+      <input class="bbleibt" value="${esc(b.bleibt || "")}" placeholder="z. B. die Person, ihr Gesicht und ihre Haltung">
+      <label>Ein Bild je Zeile</label>
+      <textarea class="bbausteine"${b.art === "gruppe" ? " disabled" : ""}>${esc((b.bausteine || []).join("\n"))}</textarea>
+      <div class="check">
+        <input type="checkbox" class="bzurueck"${b.zurueck ? " checked" : ""}>
+        <label>danach wieder das Startbild zeigen</label>
+      </div>
+    </div>`).join("");
+
+  $("bloecke").querySelectorAll(".block").forEach(el => {
+    const i = +el.dataset.i;
+    el.querySelector(".btitel").oninput = e => bloecke[i].titel = e.target.value;
+    el.querySelector(".bbleibt").oninput = e => bloecke[i].bleibt = e.target.value;
+    el.querySelector(".bbausteine").oninput = e => {
+      bloecke[i].bausteine = e.target.value.split("\n").filter(z => z.trim());
+      demoDauer();
+    };
+    el.querySelector(".bref").onchange = e => bloecke[i].referenz = e.target.value;
+    el.querySelector(".bseed").onchange = e => bloecke[i].fest = !!e.target.value;
+    el.querySelector(".bzurueck").onchange = e => { bloecke[i].zurueck = e.target.checked; demoDauer(); };
+    el.querySelector(".bart").onchange = e => {
+      const w = e.target.value;
+      bloecke[i].art = w === "gruppe" ? "gruppe" : undefined;
+      bloecke[i].vorlage = w === "gruppe" ? undefined : w;
+      if (w === "gruppe") bloecke[i].bausteine = [""];
+      blockZeichnen(); demoDauer();
+    };
+    el.querySelectorAll("[data-tu]").forEach(a => a.onclick = ev => {
+      ev.preventDefault();
+      const tu = a.dataset.tu;
+      if (tu === "weg") bloecke.splice(i, 1);
+      else {
+        const j = tu === "hoch" ? i - 1 : i + 1;
+        if (j < 0 || j >= bloecke.length) return;
+        [bloecke[i], bloecke[j]] = [bloecke[j], bloecke[i]];
+      }
+      blockZeichnen(); demoDauer();
+    });
+  });
+}
+
+$("blockNeu").onclick = e => {
+  e.preventDefault();
+  bloecke.push({titel: "Neuer Block", referenz: "start", vorlage: "verwandeln",
+                bleibt: "die Person, ihr Gesicht und ihre Haltung", bausteine: [], zurueck: false});
+  blockZeichnen(); demoDauer();
+};
+$("alsText").onclick = e => {
+  e.preventDefault();
+  const t = $("ablaufText");
+  if (t.style.display === "none") {
+    t.value = JSON.stringify(bloecke, null, 1); t.style.display = "block";
+  } else {
+    try { bloecke = JSON.parse(t.value); blockZeichnen(); demoDauer(); } catch (x) {
+      return say("Der Text ist kein gültiges JSON: " + x.message, "err");
+    }
+    t.style.display = "none";
+  }
+};
+$("ablaufWahl").onchange = () => {
+  const a = ABLAEUFE.find(x => x.key === $("ablaufWahl").value);
+  if (!a) return;
+  bloecke = JSON.parse(JSON.stringify(a.bloecke));
+  $("ablaufInfo").textContent = a.label;
+  blockZeichnen(); demoDauer();
+};
 $("demoFile").onchange = e => {
   const f = e.target.files[0];
   if (!f) return;
@@ -747,10 +848,13 @@ $("demoFile").onchange = e => {
 };
 function demoDauer() {
   const n = parseInt($("demoSteps").value, 10) || 24;
-  // 38 Bilder, davon 36 in einer Serie: Modellladen faellt nur dreimal an.
-  const minuten = Math.round((3 * 60 + 38 * (n * 1.5 + 3)) / 60);
-  $("demoDauer").textContent = `38 Bilder, 40 im Video, grob ${minuten} Minuten. `
-    + "Solange ist die Grafikkarte belegt.";
+  const erzeugt = 1 + bloecke.reduce((s, b) => s + (b.bausteine || []).length, 0);
+  const imVideo = erzeugt + bloecke.filter(b => b.zurueck).length;
+  // Ein Ladevorgang je Block, der nicht vom Startbild ausgeht, plus einer.
+  const laden = 2 + bloecke.filter(b => b.referenz === "letztes" || b.art === "gruppe").length;
+  const minuten = Math.round((laden * 60 + erzeugt * (n * 1.5 + 3)) / 60);
+  $("demoDauer").textContent = `${erzeugt} Bilder erzeugen, ${imVideo} im Video, `
+    + `grob ${minuten} Minuten. Solange ist die Grafikkarte belegt.`;
 }
 ["demoSteps", "demoBase", "demoDuration"].forEach(id => $(id).addEventListener("input", demoDauer));
 
@@ -761,8 +865,7 @@ async function starteDemo() {
   const res = await fetch("/api/demo", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
-      image: demoRef, prompt: $("demoPrompt").value,
-      background_target: $("demoTarget").value,
+      image: demoRef, prompt: $("demoPrompt").value, bloecke,
       base: parseInt($("demoBase").value, 10),
       steps: parseInt($("demoSteps").value, 10) || 24,
       duration: parseInt($("demoDuration").value, 10) || 20
@@ -773,7 +876,7 @@ async function starteDemo() {
     buttonState("idle");
     return say(err.error || "Die Vorführung ließ sich nicht starten.", "err");
   }
-  startSlots(38);
+  startSlots(1 + bloecke.reduce((s, b) => s + (b.bausteine || []).length, 0));
   poll();
 }
 

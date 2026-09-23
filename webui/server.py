@@ -28,6 +28,7 @@ from engine import (  # noqa: E402
     ASPECT_RATIOS, MAX_REFERENCES, REFERENCE_TOKEN_BUDGET, Engine, dimensions_for,
 )
 import chat  # noqa: E402
+import ablauf  # noqa: E402
 import demo  # noqa: E402
 from presets import (  # noqa: E402
     AXIS_OFF, EFFECTS, GROUP_ACTIONS, PAINT_TARGET, catalog, overrides, parse_command,
@@ -198,34 +199,50 @@ class Abgebrochen(Exception):
     """Der Benutzer hat die Vorfuehrung gestoppt."""
 
 
-def _run_demo(params: dict) -> None:
-    """Erzeugt die Vorführung und baut daraus ein Video.
+def _bloecke_gruppieren(bloecke: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Faellige Ladevorgaenge buendeln.
 
-    Die Abwandlungen laufen als EINE Serie mit fertigen Prompts. Der Grund ist
-    Zeit: jedes Bild einzeln anzufordern kostet erneut eine Minute Modellladen,
-    bei 37 Bildern also über eine Stunde allein fürs Laden. Als Serie faellt
-    das einmal an.
+    Aufeinanderfolgende Bloecke, die auf dem Startbild aufsetzen, laufen als
+    eine Serie -- ein Ladevorgang statt einer je Bild. Ein Block, der auf dem
+    vorigen Bild aufsetzt, braucht zwangslaeufig einen eigenen.
     """
+    gebuendelt: list[tuple[str, list[dict]]] = []
+    for block in bloecke:
+        art = "gruppe" if block.get("art") == "gruppe" else block.get("referenz", "start")
+        if gebuendelt and gebuendelt[-1][0] == "start" == art:
+            gebuendelt[-1][1].append(block)
+        else:
+            gebuendelt.append((art, [block]))
+    return gebuendelt
+
+
+def _run_demo(params: dict) -> None:
+    """Arbeitet einen Ablauf ab und baut daraus ein Video."""
     try:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         fest = {"base": int(params.get("base", 1024)),
-                "steps": int(params.get("steps", 26)), "true_cfg_scale": 1.0}
+                "steps": int(params.get("steps", 24)), "true_cfg_scale": 1.0}
         seed = int(params.get("seed") or 3100)
 
-        # Nur was der Benutzer selbst eingibt, muss uebersetzt werden.
-        eigenes = {"prompt": params.get("prompt") or "",
-                   "background_target": params.get("background_target") or ""}
-        if any(v.strip() for v in eigenes.values()):
+        # Was hinter der Person steht. Ohne Angabe eine aus dem Seed
+        # abgeleitete -- so wechselt die Kulisse von Lauf zu Lauf.
+        kulisse = demo.kulisse_waehlen(params.get("kulisse") or "", seed)
+        bloecke = params.get("bloecke")
+        if not bloecke:
+            name = params.get("ablauf") or "reise"
+            eintrag = ablauf.ABLAEUFE.get(name) or ablauf.ABLAEUFE["reise"]
+            bloecke = eintrag["bauen"](kulisse)
+        gesamt = ablauf.zu_erzeugen(bloecke)
+
+        eigenes = {"prompt": params.get("prompt") or ""}
+        if eigenes["prompt"].strip():
             engine.note("loading", "Eingaben werden übersetzt …")
             current["translated"] = chat.translate(eigenes)
             eigenes.update(current["translated"])
-        ziel = eigenes["background_target"].strip() or "the car in the background"
-        folge = demo.folge(ziel)
 
-        gesammelt = []
+        gesammelt: list[str] = []
 
         def sammler(meta, image):
-            # Durchlaufende Nummer ueber alle Teilserien hinweg.
             name = _save(meta, image, stamp, "demo", nummer=len(current["files"]) + 1)
             current["files"].append(name)
             gesammelt.append(name)
@@ -234,69 +251,85 @@ def _run_demo(params: dict) -> None:
             if engine.aborted:
                 raise Abgebrochen()
 
-        # --- Basisbild --------------------------------------------------
+        def laden(datei):
+            bild = Image.open(os.path.join(OUTPUTS, datei))
+            bild.load()
+            return bild
+
+        # --- Startbild ---------------------------------------------------
         pruefe()
+        current["stage"] = f"Startbild · 1/{gesamt}"
         if params.get("image"):
             basis_bild = _decode(params["image"]).convert("RGBA")
-            basis_datei = _save({"index": 1, "seed": seed, "prompt": "hochgeladenes Basisbild"},
-                                basis_bild, stamp, "demo")
+            basis_datei = _save({"index": 1, "seed": seed, "prompt": "hochgeladenes Startbild"},
+                                basis_bild, stamp, "demo", nummer=1)
             current["files"].append(basis_datei)
         else:
-            current["stage"] = f"Basisbild · 1/{demo.ANZAHL}"
             engine.run_series(**_series_kwargs(
-                {"mode": "t2i", "prompt": eigenes["prompt"] or demo.BASIS_PROMPT,
+                {"mode": "t2i",
+                 "prompt": eigenes["prompt"] or demo.basis_prompt(kulisse),
                  "aspect": "3:2", "seed": seed, "count": 1, **fest}, [], "t2i", sammler))
             if not gesammelt:
                 pruefe()
-                raise RuntimeError("Das Basisbild konnte nicht erzeugt werden")
+                raise RuntimeError("Das Startbild konnte nicht erzeugt werden")
             basis_datei = gesammelt[-1]
-            basis_bild = Image.open(os.path.join(OUTPUTS, basis_datei))
-            basis_bild.load()
+            basis_bild = laden(basis_datei)
 
-        # --- Alle Abwandlungen in einem Ladevorgang ----------------------
-        pruefe()
-        einzeln = [s for s in folge if s["art"] != "gruppe"]
-        current["stage"] = f"Abwandlungen · {len(einzeln)} Bilder in einem Zug"
-        gesammelt.clear()
-        engine.run_series(**_series_kwargs(
-            {"mode": "edit", "prompt": "", "seed": seed, "follow_reference": True,
-             "lock_seed": True, **fest}, [basis_bild], "edit", sammler),
-            prompts=[s["prompt"] for s in einzeln],
-            # Behutsame Schritte teilen den Seed des Basisbilds, Stilwechsel
-            # bekommen einen eigenen -- sonst bleibt der Stil blass.
-            seeds=[seed if s["fest"] else seed + 1 + i
-                   for i, s in enumerate(einzeln)])
-        if len(gesammelt) < len(einzeln):
+        # --- Bloecke abarbeiten -------------------------------------------
+        je_block: dict[int, list[str]] = {}
+        letztes = basis_datei
+        zaehler = 1
+        for art, buendel in _bloecke_gruppieren(bloecke):
             pruefe()
-            raise RuntimeError(f"nur {len(gesammelt)} von {len(einzeln)} Abwandlungen")
-        abwandlungen = list(gesammelt)
+            namen = [b["titel"] for b in buendel]
+            current["stage"] = (f"{', '.join(namen)} · "
+                                f"{zaehler + 1}–{zaehler + sum(len(b['bausteine']) for b in buendel)}"
+                                f"/{gesamt}")
+            gesammelt.clear()
 
-        # --- Gruppenbild braucht zwei Vorlagen ---------------------------
-        pruefe()
-        current["stage"] = f"Gruppenbild · {demo.ANZAHL}/{demo.ANZAHL}"
-        zweites = Image.open(os.path.join(OUTPUTS, abwandlungen[len(demo.PERSONEN)]))
-        zweites.load()
-        gesammelt.clear()
-        engine.run_series(**_series_kwargs(
-            {"mode": "gruppe", "action": "zusammen", "prompt": "", "aspect": "3:2",
-             "follow_reference": False, "seed": seed, "count": 1, **fest},
-            [basis_bild, zweites], "gruppe", sammler))
-        pruefe()
-        gruppe_datei = gesammelt[-1] if gesammelt else None
-
-        # --- Reihenfolge fuer das Video ----------------------------------
-        nacheinander, rest = [], iter(abwandlungen)
-        for schritt in folge:
-            if schritt["art"] == "gruppe":
-                if gruppe_datei:
-                    nacheinander.append(gruppe_datei)
+            if art == "gruppe":
+                # Der Gruppen-Pfad, nicht der Bearbeiten-Pfad: letzterer
+                # verschmilzt zwei Ansichten derselben Person zu einer. Der
+                # Baustein des Blocks geht als Zusatz in die Anweisung und
+                # stellt klar, dass zwei Figuren gemeint sind.
+                engine.run_series(**_series_kwargs(
+                    {"mode": "gruppe", "action": "zusammen",
+                     "prompt": buendel[0]["bausteine"][0],
+                     "aspect": "3:2", "follow_reference": False, "seed": seed,
+                     "count": 1, **fest},
+                    [laden(letztes), basis_bild], "gruppe", sammler))
             else:
-                nacheinander.append(next(rest))
-        anzahl_personen = len(demo.PERSONEN)
-        reihenfolge = ([basis_datei] + nacheinander[:anzahl_personen]
-                       + [basis_datei] + nacheinander[anzahl_personen:] + [basis_datei])
+                vorlage = basis_bild if art == "start" else laden(letztes)
+                schritte = [s for b in buendel
+                            for s in ablauf.schritte([b])]
+                engine.run_series(
+                    **_series_kwargs(
+                        {"mode": "edit", "prompt": "", "seed": seed,
+                         "follow_reference": True, **fest}, [vorlage], "edit", sammler),
+                    prompts=[s["prompt"] for s in schritte],
+                    seeds=[seed if s["fest"] else seed + zaehler + i
+                           for i, s in enumerate(schritte)])
+
+            erwartet = sum(len(b["bausteine"]) for b in buendel)
+            if len(gesammelt) < erwartet:
+                pruefe()
+                raise RuntimeError(f"nur {len(gesammelt)} von {erwartet} Bildern")
+
+            rest = iter(gesammelt)
+            for block in buendel:
+                je_block[id(block)] = [next(rest) for _ in block["bausteine"]]
+            letztes = gesammelt[-1]
+            zaehler += erwartet
+
+        # --- Reihenfolge fuers Video ---------------------------------------
+        reihenfolge = [basis_datei]
+        for block in bloecke:
+            reihenfolge += je_block.get(id(block), [])
+            if block.get("zurueck"):
+                reihenfolge.append(basis_datei)
 
         if demo.available()["video"]:
+            pruefe()
             current["stage"] = "Video wird gebaut"
             video_ziel = os.path.join(OUTPUTS, f"{stamp}_demonstration.mp4")
             demo.baue_video([os.path.join(OUTPUTS, n) for n in reihenfolge], video_ziel,
@@ -304,7 +337,7 @@ def _run_demo(params: dict) -> None:
             current["video"] = os.path.basename(video_ziel)
 
         current["stage"] = ""
-        engine.note("idle", f"Vorführung fertig: {len(reihenfolge)} Bilder im Video")
+        engine.note("idle", f"Ablauf fertig: {len(reihenfolge)} Bilder im Video")
     except Abgebrochen:
         current["stage"] = ""
         engine.note("idle", f"abgebrochen nach {len(current['files'])} Bild(ern)")
@@ -378,6 +411,14 @@ class Handler(BaseHTTPRequestHandler):
                              if now.get(k) != SOURCE_AT_START.get(k))
             info["source"] = {"stale": bool(changed), "changed": changed}
             info["demo"] = demo.available()
+            info["kulissen"] = [{"key": k, "label": v[0]}
+                                for k, v in demo.KULISSEN.items()]
+            info["ablaeufe"] = [
+                {"key": k, "label": v["label"],
+                 "bilder": ablauf.anzahl_bilder(v["bauen"]("auto")),
+                 "erzeugt": ablauf.zu_erzeugen(v["bauen"]("auto")),
+                 "bloecke": v["bauen"]("auto")}
+                for k, v in ablauf.ABLAEUFE.items()]
             return self._json(200, info)
 
         if path == "/api/gallery":

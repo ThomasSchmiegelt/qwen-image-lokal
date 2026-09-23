@@ -119,62 +119,51 @@ dann prüfen, dann selbst auf Erzeugen klicken.
 Das Sprachmodell wird nach jeder Anfrage sofort wieder entladen
 (`keep_alive: 0`), damit die GPU frei für das Bildmodell bleibt.
 
-## Vorführung
+## Abläufe
 
-Der Reiter **Vorführung** erzeugt eine Bildfolge mit dramaturgischem Bogen und
-schneidet daraus ein Video:
+Der Reiter **Ablauf** erzeugt eine Bildfolge und schneidet daraus ein Video
+ohne Beschriftung, bei dem die Bilder ineinander blenden. Eine Folge ist eine
+**Datenstruktur aus Blöcken**, kein fest verdrahteter Code — jeder Block sagt:
 
-| Bilder | Was passiert |
+| Feld | Bedeutung |
 |---|---|
-| 1 | Basisbild |
-| 2 – 6 | nur **die Person** wird getauscht, Kleidung und Umgebung bleiben |
-| 7 | zurück zum Ausgangsbild, ab hier ist es die Grundlage für alles |
-| 8 – 12 | konservativ: Kleidungsfarbe, Perspektive, Hintergrund, Autolack, Gruppe |
-| 13 – 17 | Lichtstimmungen, noch fotografisch |
-| 18 – 23 | es wird kreativer und dystopischer, bis zur Ruine |
-| 24 – 28 | Aquarell, Öl, Comic, Zeichentrick, Anime |
-| 29 – 35 | Cyberpunk und immer knalligeres Neon |
-| 36 – 39 | zurück ins Realistische |
-| 40 | wieder das Ausgangsbild |
+| Referenz | vom Startbild oder vom letzten Bild des vorigen Blocks |
+| Vorlage | *behutsam ändern* (bewahrt) oder *verwandeln* (Stilwechsel) |
+| Seed | eigener oder wie das Startbild |
+| danach Startbild | blendet das Ausgangsbild wieder ein, ohne es neu zu rechnen |
+| was bleibt | die Ausnahme, die stehen bleiben muss |
+| Bausteine | ein Bild je Zeile |
 
-Alle Abwandlungen gehen vom selben Basisbild aus. Der Seed ist **pro Schritt**
-gesetzt: die behutsamen Schritte (Personentausch, Kleidungsfarbe, Perspektive,
-Hintergrund, Autolack) teilen den Seed des Basisbilds und liegen dadurch
-deckungsgleich übereinander; die Stilwechsel bekommen einen eigenen.
+Die beiden oberen Felder sind nicht kosmetisch. **Die Prompt-Vorlage:** die
+behutsame wiederholt „muss identisch bleiben" mehrfach; ein angehängter
+Stilbaustein geht darin unter und das Modell gibt schlicht die Vorlage zurück.
+**Der Seed:** ein für alle Bilder gesperrter Seed hält die Bildaufteilung ruhig,
+zementiert aber auch die Neigung dieses *einen* Rauschmusters — gemessen wurde
+aus „grellem Neon" ein violetter Hauch (Abweichung 42 statt 79).
 
-Das ist kein Detail, sondern der Unterschied zwischen funktionierend und
-kaputt: ein für alle Bilder gesperrter Seed zementiert auch die Neigung dieses
-*einen* Rauschmusters. Gemessen am selben Prompt und derselben Vorlage — mit
-gesperrtem Seed wurde aus „grellem Neon" ein violetter Hauch (Abweichung 42),
-mit freiem Seed volles Magenta-Cyan (Abweichung 79). Die Bildaufteilung bleibt
-trotzdem erhalten, weil die Referenz die Komposition ohnehin vorgibt.
+Zwei Abläufe sind mitgeliefert: **Bogen** (38 Bilder, konservativ über Comic
+und Neon und zurück) und **Reise** (43 Bilder: Beleuchtung, Kameraperspektiven,
+Person, Kameraschwenk, Hintergründe, Rollen, Szenen bis in den Cyberpunk — und
+dort bleibend für Neonkleidung, zum Schluss ein Gruppenbild aus letzter Ansicht
+und Startbild).
 
-Das Video ist ohne Beschriftung und ohne Schnitte: die Bilder blenden
-ineinander. Länge und Schrittzahl stellst du ein, Vorgabe 20 Sekunden.
-
-Die Person lässt sich austauschen: eigenes Foto hochladen oder beschreiben,
-wer erzeugt werden soll. Ebenso das Ziel des Teil-Hintergrund-Schritts
-(Vorgabe `das Auto im Hintergrund`, ohne Auto im Bild etwa `die Wand im
-Hintergrund`).
-
-Stilwechsel benutzen außerdem eine **andere Prompt-Vorlage** als die
-behutsamen Schritte. Die Varianten-Vorlage ist auf Beharren gebaut und
-wiederholt „muss identisch bleiben" mehrfach — ein angehängter Stilbaustein
-geht darin unter, und das Modell gibt schlicht die Vorlage zurück. Für die
-Stilschritte steht die Verwandlung deshalb vorn und das Bewahren als knappe
-Ausnahme dahinter.
-
-**Zur Laufzeit:** 38 Bilder, aber nur drei Ladevorgänge. Die 36 Abwandlungen
-laufen als *eine* Serie mit fertigen Prompts — einzeln angefordert würde allein
-das Modellladen über eine Stunde kosten. So sind es rund 25 Minuten bei
-24 Schritten. Dasselbe von der Kommandozeile:
+Im Editor lassen sich Blöcke hinzufügen, verschieben, löschen und über **als
+Text** als JSON sichern und zurückspielen. Die Kommandozeile nimmt so eine
+Datei:
 
 ```bash
-./qwen_bild/bin/python demo/demonstration.py --steps 24
-./qwen_bild/bin/python demo/demonstration.py --foto ich.png --ziel "die Wand im Hintergrund"
+./qwen_bild/bin/python demo/demonstration.py --ablauf reise
+./qwen_bild/bin/python demo/demonstration.py --datei eigener_ablauf.json --foto ich.png
 ```
 
-Ohne ffmpeg entstehen nur die Einzelbilder, kein Video.
+**Zur Laufzeit:** aufeinanderfolgende Blöcke, die vom Startbild ausgehen, laufen
+als *eine* Serie. Bei der Reise sind das 36 Bilder in einem Ladevorgang; nur die
+Blöcke, die auf dem letzten Bild aufsetzen, brauchen einen eigenen. 43 Bilder
+kosten so rund 29 Minuten statt über einer Stunde.
+
+Die **Kulisse** hinter der Person — Auto, Raumschiff, Fangemeinde, Pferd,
+Bagger, Bücherwand und weitere — wird ohne Angabe aus dem Seed abgeleitet und
+wechselt damit von Lauf zu Lauf, bleibt aber reproduzierbar.
 
 ## GIMP-Plugin
 
