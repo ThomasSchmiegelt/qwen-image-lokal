@@ -284,6 +284,8 @@ class Engine:
         material=None,
         subject: str = "fahrzeug",
         image_prompts: list | None = None,
+        prompts: list | None = None,
+        seeds: list | None = None,
         action: str = "zusammen",
         group_size: int = 2,
         paint_target: str = "",
@@ -334,9 +336,20 @@ class Engine:
         if transparent:
             text = TRANSPARENT_TEMPLATE.format(extra=text)
 
-        jobs = self.plan(text, count, seed, sweep, view, style, light, camera,
-                         paint, scene, angle, device, scenario, material, subject,
-                         paint_target, lock_seed)
+        if prompts:
+            # Fertige Prompts, einer je Bild. Damit laesst sich eine ganze Folge
+            # verschiedener Bilder in einem einzigen Ladevorgang abarbeiten --
+            # sonst kostet jedes Bild erneut eine Minute Modellladen.
+            jobs = [{"seed": (seeds[i] if seeds and i < len(seeds)
+                              else (seed if lock_seed else seed + i)), "prompt": p,
+                     "view": None, "style": None, "light": None, "camera": None,
+                     "paint": None, "scene": None, "angle": None, "device": None,
+                     "scenario": None, "material": None}
+                    for i, p in enumerate(prompts)]
+        else:
+            jobs = self.plan(text, count, seed, sweep, view, style, light, camera,
+                             paint, scene, angle, device, scenario, material, subject,
+                             paint_target, lock_seed)
 
         self._cancel = False
         self._set(state="loading", image=0, count=len(jobs), step=0, total=steps,

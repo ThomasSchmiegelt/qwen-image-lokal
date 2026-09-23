@@ -73,9 +73,15 @@ def _decode(data_url: str) -> Image.Image:
     return img
 
 
-def _save(meta: dict, image: Image.Image, stamp: str, kind: str) -> str:
-    """Legt das Bild ab und schreibt Prompt/Seed als PNG-Textfelder mit hinein."""
-    name = f"{stamp}_{kind}_{meta['index']:02d}_seed{meta['seed']}.png"
+def _save(meta: dict, image: Image.Image, stamp: str, kind: str,
+          nummer: int | None = None) -> str:
+    """Legt das Bild ab und schreibt Prompt/Seed als PNG-Textfelder mit hinein.
+
+    `meta["index"]` zaehlt je Serienaufruf ab 1. Wer mehrere Serien unter
+    demselben Zeitstempel ablegt, muss die Nummer deshalb selbst vergeben --
+    sonst ueberschreiben sich die Dateien gegenseitig.
+    """
+    name = f"{stamp}_{kind}_{(nummer if nummer is not None else meta['index']):02d}_seed{meta['seed']}.png"
     info = PngImagePlugin.PngInfo()
     for key in ("prompt", "seed", "view", "style", "light", "camera", "effect",
                 "form", "paint", "scene", "angle", "device", "scenario", "material"):
@@ -193,83 +199,112 @@ class Abgebrochen(Exception):
 
 
 def _run_demo(params: dict) -> None:
-    """Fuehrt die sieben Schritte nacheinander aus und baut daraus ein Video."""
+    """Erzeugt die Vorführung und baut daraus ein Video.
+
+    Die Abwandlungen laufen als EINE Serie mit fertigen Prompts. Der Grund ist
+    Zeit: jedes Bild einzeln anzufordern kostet erneut eine Minute Modellladen,
+    bei 37 Bildern also über eine Stunde allein fürs Laden. Als Serie faellt
+    das einmal an.
+    """
     try:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         fest = {"base": int(params.get("base", 1024)),
-                "steps": int(params.get("steps", 30)), "true_cfg_scale": 1.0}
-        folge = demo.schritte(params.get("background_target") or demo.HINTERGRUND_ZIEL)
+                "steps": int(params.get("steps", 26)), "true_cfg_scale": 1.0}
+        seed = int(params.get("seed") or 3100)
 
-        # Alle deutschen Texte der Vorfuehrung in einem Zug uebersetzen, statt
-        # sieben Mal einzeln das Sprachmodell zu laden.
-        engine.note("loading", "Eingaben werden übersetzt …")
-        texte = {}
-        for nummer, spec in enumerate(folge):
-            for feld in ("keep", "paint_target"):
-                wert = spec["params"].get(feld)
-                if wert:
-                    texte[f"s{nummer}_{feld}"] = wert
-        fertig = chat.translate(texte)
-        for nummer, spec in enumerate(folge):
-            for feld in ("keep", "paint_target"):
-                neu = fertig.get(f"s{nummer}_{feld}")
-                if neu:
-                    spec["params"][feld] = neu
-        current["translated"] = fertig
+        # Nur was der Benutzer selbst eingibt, muss uebersetzt werden.
+        eigenes = {"prompt": params.get("prompt") or "",
+                   "background_target": params.get("background_target") or ""}
+        if any(v.strip() for v in eigenes.values()):
+            engine.note("loading", "Eingaben werden übersetzt …")
+            current["translated"] = chat.translate(eigenes)
+            eigenes.update(current["translated"])
+        ziel = eigenes["background_target"].strip() or "the car in the background"
+        folge = demo.folge(ziel)
 
-        tafeln = []
+        gesammelt = []
 
-        def einer(spec, refs, nummer):
+        def sammler(meta, image):
+            # Durchlaufende Nummer ueber alle Teilserien hinweg.
+            name = _save(meta, image, stamp, "demo", nummer=len(current["files"]) + 1)
+            current["files"].append(name)
+            gesammelt.append(name)
+
+        def pruefe():
             if engine.aborted:
                 raise Abgebrochen()
-            current["stage"] = f"Schritt {nummer}/{demo.ANZAHL} · {spec['titel']}"
-            gemerkt = []
 
-            def on_image(meta, image):
-                name = _save(meta, image, stamp, "demo")
-                current["files"].append(name)
-                gemerkt.append(name)
-
-            werte = {**spec["params"], **fest}
-            engine.run_series(**_series_kwargs(werte, refs, werte["mode"], on_image))
-            if not gemerkt:
-                if engine.aborted:
-                    raise Abgebrochen()
-                raise RuntimeError(f"Schritt „{spec['titel']}“ lieferte kein Bild")
-            tafeln.append(os.path.join(OUTPUTS, gemerkt[0]))
-            return gemerkt[0]
-
-        # Schritt 0: eigenes Foto oder ein erzeugtes Basisbild.
+        # --- Basisbild --------------------------------------------------
+        pruefe()
         if params.get("image"):
-            basis_bild = _decode(params["image"])
-            name = _save({"index": 1, "seed": 0, "prompt": "hochgeladenes Basisbild"},
-                         basis_bild.convert("RGBA"), stamp, "demo")
-            current["files"].append(name)
-            tafeln.append(os.path.join(OUTPUTS, name))
-            current["stage"] = f"Schritt 1/{demo.ANZAHL} · Basisbild"
+            basis_bild = _decode(params["image"]).convert("RGBA")
+            basis_datei = _save({"index": 1, "seed": seed, "prompt": "hochgeladenes Basisbild"},
+                                basis_bild, stamp, "demo")
+            current["files"].append(basis_datei)
         else:
-            spec = demo.basis(params.get("prompt") or "")
-            basis_name = einer(spec, [], 1)
-            basis_bild = Image.open(os.path.join(OUTPUTS, basis_name))
+            current["stage"] = f"Basisbild · 1/{demo.ANZAHL}"
+            engine.run_series(**_series_kwargs(
+                {"mode": "t2i", "prompt": eigenes["prompt"] or demo.BASIS_PROMPT,
+                 "aspect": "3:2", "seed": seed, "count": 1, **fest}, [], "t2i", sammler))
+            if not gesammelt:
+                pruefe()
+                raise RuntimeError("Das Basisbild konnte nicht erzeugt werden")
+            basis_datei = gesammelt[-1]
+            basis_bild = Image.open(os.path.join(OUTPUTS, basis_datei))
             basis_bild.load()
 
-        erstes = None
-        for nummer, spec in enumerate(folge, start=2):
-            name = einer(spec, [basis_bild], nummer)
-            if spec["name"] == "kleidung":
-                erstes = Image.open(os.path.join(OUTPUTS, name))
-                erstes.load()
+        # --- Alle Abwandlungen in einem Ladevorgang ----------------------
+        pruefe()
+        einzeln = [s for s in folge if s["art"] != "gruppe"]
+        current["stage"] = f"Abwandlungen · {len(einzeln)} Bilder in einem Zug"
+        gesammelt.clear()
+        engine.run_series(**_series_kwargs(
+            {"mode": "edit", "prompt": "", "seed": seed, "follow_reference": True,
+             "lock_seed": True, **fest}, [basis_bild], "edit", sammler),
+            prompts=[s["prompt"] for s in einzeln],
+            # Behutsame Schritte teilen den Seed des Basisbilds, Stilwechsel
+            # bekommen einen eigenen -- sonst bleibt der Stil blass.
+            seeds=[seed if s["fest"] else seed + 1 + i
+                   for i, s in enumerate(einzeln)])
+        if len(gesammelt) < len(einzeln):
+            pruefe()
+            raise RuntimeError(f"nur {len(gesammelt)} von {len(einzeln)} Abwandlungen")
+        abwandlungen = list(gesammelt)
 
-        einer(demo.GRUPPE, [basis_bild, erstes or basis_bild], demo.ANZAHL)
+        # --- Gruppenbild braucht zwei Vorlagen ---------------------------
+        pruefe()
+        current["stage"] = f"Gruppenbild · {demo.ANZAHL}/{demo.ANZAHL}"
+        zweites = Image.open(os.path.join(OUTPUTS, abwandlungen[len(demo.PERSONEN)]))
+        zweites.load()
+        gesammelt.clear()
+        engine.run_series(**_series_kwargs(
+            {"mode": "gruppe", "action": "zusammen", "prompt": "", "aspect": "3:2",
+             "follow_reference": False, "seed": seed, "count": 1, **fest},
+            [basis_bild, zweites], "gruppe", sammler))
+        pruefe()
+        gruppe_datei = gesammelt[-1] if gesammelt else None
+
+        # --- Reihenfolge fuer das Video ----------------------------------
+        nacheinander, rest = [], iter(abwandlungen)
+        for schritt in folge:
+            if schritt["art"] == "gruppe":
+                if gruppe_datei:
+                    nacheinander.append(gruppe_datei)
+            else:
+                nacheinander.append(next(rest))
+        anzahl_personen = len(demo.PERSONEN)
+        reihenfolge = ([basis_datei] + nacheinander[:anzahl_personen]
+                       + [basis_datei] + nacheinander[anzahl_personen:] + [basis_datei])
 
         if demo.available()["video"]:
             current["stage"] = "Video wird gebaut"
-            ziel = os.path.join(OUTPUTS, f"{stamp}_demonstration.mp4")
-            demo.baue_video(tafeln, ziel)
-            current["video"] = os.path.basename(ziel)
+            video_ziel = os.path.join(OUTPUTS, f"{stamp}_demonstration.mp4")
+            demo.baue_video([os.path.join(OUTPUTS, n) for n in reihenfolge], video_ziel,
+                            gesamtdauer=float(params.get("duration") or 20.0))
+            current["video"] = os.path.basename(video_ziel)
 
         current["stage"] = ""
-        engine.note("idle", f"Vorführung fertig: {len(current['files'])} Bilder")
+        engine.note("idle", f"Vorführung fertig: {len(reihenfolge)} Bilder im Video")
     except Abgebrochen:
         current["stage"] = ""
         engine.note("idle", f"abgebrochen nach {len(current['files'])} Bild(ern)")

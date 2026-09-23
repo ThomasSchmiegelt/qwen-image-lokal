@@ -121,25 +121,56 @@ Das Sprachmodell wird nach jeder Anfrage sofort wieder entladen
 
 ## Vorführung
 
-Der Reiter **Vorführung** erzeugt sieben Bilder, die zeigen was sich einzeln
-steuern lässt: Kleidungsfarbe, Perspektive, Hintergrund, *ein Teil* des
-Hintergrunds, die Darstellung, und zum Schluss eine Gruppe. Jeder Schritt geht
-vom selben Basisbild aus und ändert genau eine Sache — was dabei stehen
-bleibt, ist der eigentliche Punkt.
+Der Reiter **Vorführung** erzeugt eine Bildfolge mit dramaturgischem Bogen und
+schneidet daraus ein Video:
 
-Die Person lässt sich austauschen: entweder ein eigenes Foto hochladen, oder
-beschreiben wer erzeugt werden soll. Das Ziel des Teil-Hintergrund-Schritts
-gibst du ebenfalls an (Vorgabe `das Auto im Hintergrund`, bei einem eigenen
-Foto ohne Auto etwa `die Wand im Hintergrund`).
+| Bilder | Was passiert |
+|---|---|
+| 1 | Basisbild |
+| 2 – 6 | nur **die Person** wird getauscht, Kleidung und Umgebung bleiben |
+| 7 | zurück zum Ausgangsbild, ab hier ist es die Grundlage für alles |
+| 8 – 12 | konservativ: Kleidungsfarbe, Perspektive, Hintergrund, Autolack, Gruppe |
+| 13 – 17 | Lichtstimmungen, noch fotografisch |
+| 18 – 23 | es wird kreativer und dystopischer, bis zur Ruine |
+| 24 – 28 | Aquarell, Öl, Comic, Zeichentrick, Anime |
+| 29 – 35 | Cyberpunk und immer knalligeres Neon |
+| 36 – 39 | zurück ins Realistische |
+| 40 | wieder das Ausgangsbild |
 
-Zum Schluss baut ffmpeg daraus ein Video: keine Beschriftung, keine Schnitte —
-die Bilder blenden ineinander. Weil alle Schritte deckungsgleich übereinander
-liegen, zeigt die Überblendung die Änderung von selbst.
+Alle Abwandlungen gehen vom selben Basisbild aus. Der Seed ist **pro Schritt**
+gesetzt: die behutsamen Schritte (Personentausch, Kleidungsfarbe, Perspektive,
+Hintergrund, Autolack) teilen den Seed des Basisbilds und liegen dadurch
+deckungsgleich übereinander; die Stilwechsel bekommen einen eigenen.
 
-Dauer rund 13 Minuten bei 30 Schritten. Dasselbe von der Kommandozeile:
+Das ist kein Detail, sondern der Unterschied zwischen funktionierend und
+kaputt: ein für alle Bilder gesperrter Seed zementiert auch die Neigung dieses
+*einen* Rauschmusters. Gemessen am selben Prompt und derselben Vorlage — mit
+gesperrtem Seed wurde aus „grellem Neon" ein violetter Hauch (Abweichung 42),
+mit freiem Seed volles Magenta-Cyan (Abweichung 79). Die Bildaufteilung bleibt
+trotzdem erhalten, weil die Referenz die Komposition ohnehin vorgibt.
+
+Das Video ist ohne Beschriftung und ohne Schnitte: die Bilder blenden
+ineinander. Länge und Schrittzahl stellst du ein, Vorgabe 20 Sekunden.
+
+Die Person lässt sich austauschen: eigenes Foto hochladen oder beschreiben,
+wer erzeugt werden soll. Ebenso das Ziel des Teil-Hintergrund-Schritts
+(Vorgabe `das Auto im Hintergrund`, ohne Auto im Bild etwa `die Wand im
+Hintergrund`).
+
+Stilwechsel benutzen außerdem eine **andere Prompt-Vorlage** als die
+behutsamen Schritte. Die Varianten-Vorlage ist auf Beharren gebaut und
+wiederholt „muss identisch bleiben" mehrfach — ein angehängter Stilbaustein
+geht darin unter, und das Modell gibt schlicht die Vorlage zurück. Für die
+Stilschritte steht die Verwandlung deshalb vorn und das Bewahren als knappe
+Ausnahme dahinter.
+
+**Zur Laufzeit:** 38 Bilder, aber nur drei Ladevorgänge. Die 36 Abwandlungen
+laufen als *eine* Serie mit fertigen Prompts — einzeln angefordert würde allein
+das Modellladen über eine Stunde kosten. So sind es rund 25 Minuten bei
+24 Schritten. Dasselbe von der Kommandozeile:
 
 ```bash
-./qwen_bild/bin/python demo/demonstration.py --steps 30
+./qwen_bild/bin/python demo/demonstration.py --steps 24
 ./qwen_bild/bin/python demo/demonstration.py --foto ich.png --ziel "die Wand im Hintergrund"
 ```
 

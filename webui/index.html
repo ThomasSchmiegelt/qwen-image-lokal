@@ -201,11 +201,14 @@
 
     <fieldset id="demoBox" style="display:none">
       <legend>Vorführung</legend>
-      <p class="hint">Sieben Bilder, die zeigen was sich einzeln steuern lässt:
-        Kleidungsfarbe, Perspektive, Hintergrund, ein Teil des Hintergrunds,
-        die Darstellung, und zum Schluss eine Gruppe. Jeder Schritt geht vom
-        selben Basisbild aus und ändert genau eine Sache. Daraus entsteht ein
-        Video mit Beschriftung.</p>
+      <p class="hint">Vierzig Bilder mit Bogen: erst wird nur <b>die Person</b>
+        getauscht, Kleidung und Umgebung bleiben. Dann zurück zum Ausgangsbild
+        und von dort konservativ los — Kleidungsfarbe, Perspektive, Hintergrund,
+        ein Teil des Hintergrunds, Gruppe. Danach Lichtstimmungen, dann wird es
+        dystopisch, dann Malerei und Comic, dann Cyberpunk und immer knalliger
+        ins Neon. Am Ende zurück ins Realistische und wieder das Ausgangsbild.
+        Alles mit festem Seed, damit die Bilder deckungsgleich übereinander
+        liegen und nahtlos ineinander blenden.</p>
 
       <label for="demoFile">Eigenes Foto einer Person (optional)</label>
       <input type="file" id="demoFile" accept="image/*">
@@ -221,7 +224,7 @@
       <p class="hint">Schritt 4 färbt nur dieses eine Ding um. Bei einem eigenen
         Foto ohne Auto etwa <code>die Wand im Hintergrund</code>.</p>
 
-      <div class="row">
+      <div class="row3">
         <div>
           <label for="demoBase">Auflösung</label>
           <select id="demoBase">
@@ -231,7 +234,11 @@
         </div>
         <div>
           <label for="demoSteps">Schritte</label>
-          <input type="number" id="demoSteps" value="30" min="8" max="60">
+          <input type="number" id="demoSteps" value="24" min="8" max="60">
+        </div>
+        <div>
+          <label for="demoDuration">Video (s)</label>
+          <input type="number" id="demoDuration" value="20" min="8" max="90">
         </div>
       </div>
       <p class="hint" id="demoDauer"></p>
@@ -739,12 +746,13 @@ $("demoFile").onchange = e => {
   leser.readAsDataURL(f);
 };
 function demoDauer() {
-  const n = parseInt($("demoSteps").value, 10) || 30;
-  const proBild = Math.round(60 + n * 2.6);
-  $("demoDauer").textContent = `Sieben Bilder, grob ${Math.round(7 * proBild / 60)} Minuten. `
+  const n = parseInt($("demoSteps").value, 10) || 24;
+  // 38 Bilder, davon 36 in einer Serie: Modellladen faellt nur dreimal an.
+  const minuten = Math.round((3 * 60 + 38 * (n * 1.5 + 3)) / 60);
+  $("demoDauer").textContent = `38 Bilder, 40 im Video, grob ${minuten} Minuten. `
     + "Solange ist die Grafikkarte belegt.";
 }
-["demoSteps", "demoBase"].forEach(id => $(id).addEventListener("input", demoDauer));
+["demoSteps", "demoBase", "demoDuration"].forEach(id => $(id).addEventListener("input", demoDauer));
 
 async function starteDemo() {
   buttonState("busy");
@@ -756,7 +764,8 @@ async function starteDemo() {
       image: demoRef, prompt: $("demoPrompt").value,
       background_target: $("demoTarget").value,
       base: parseInt($("demoBase").value, 10),
-      steps: parseInt($("demoSteps").value, 10) || 30
+      steps: parseInt($("demoSteps").value, 10) || 24,
+      duration: parseInt($("demoDuration").value, 10) || 20
     })
   }).catch(() => null);
   if (!res || !res.ok) {
@@ -764,7 +773,7 @@ async function starteDemo() {
     buttonState("idle");
     return say(err.error || "Die Vorführung ließ sich nicht starten.", "err");
   }
-  startSlots(7);
+  startSlots(38);
   poll();
 }
 
