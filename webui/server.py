@@ -64,7 +64,8 @@ SOURCE_AT_START = _source_state()
 
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
-current = {"files": [], "error": None, "translated": {}, "stage": "", "video": None}
+current = {"files": [], "error": None, "translated": {}, "stage": "",
+           "video": None, "gelesen": {}}
 
 
 def _decode(data_url: str) -> Image.Image:
@@ -269,15 +270,22 @@ def _run_demo(params: dict) -> None:
             basis_datei = gesammelt[-1]
             basis_bild = laden(basis_datei)
 
-        # Der Ablauf wird erst jetzt gebaut: manche Schritte passen nicht zu
-        # jedem Startbild. Ein Bart-Schritt ergibt bei einer Frau keinen Sinn.
+        # Erst das Startbild ansehen, dann den Ablauf bauen. Zweierlei kommt
+        # dabei heraus: manche Schritte passen nicht zu jedem Bild (ein Bart
+        # bei einer Frau), und die Beschreibung der Person schaerft danach
+        # jede Bewahrungsklausel.
+        current["stage"] = "Startbild wird gelesen"
+        with open(os.path.join(OUTPUTS, basis_datei), "rb") as fh:
+            gelesen = chat.bild_lesen(fh.read())
+        current["gelesen"] = gelesen
+
         bloecke = params.get("bloecke")
         if not bloecke:
-            with open(os.path.join(OUTPUTS, basis_datei), "rb") as fh:
-                weiblich = chat.ist_weiblich(fh.read())
             name = params.get("ablauf") or "reise"
             eintrag = ablauf.ABLAEUFE.get(name) or ablauf.ABLAEUFE["reise"]
-            bloecke = eintrag["bauen"](kulisse, weiblich)
+            bloecke = eintrag["bauen"](kulisse, gelesen["geschlecht"] == "frau")
+        # Auch ein selbst zusammengestellter Ablauf profitiert davon.
+        bloecke = ablauf.mit_beschreibung(bloecke, gelesen["beschreibung"])
         gesamt = ablauf.zu_erzeugen(bloecke)
 
         # --- Bloecke abarbeiten -------------------------------------------
@@ -288,7 +296,7 @@ def _run_demo(params: dict) -> None:
             pruefe()
             namen = [b["titel"] for b in buendel]
             current["stage"] = (f"{', '.join(namen)} · "
-                                f"{zaehler + 1}–{zaehler + sum(len(b['bausteine']) for b in buendel)}"
+                                f"{zaehler + 1}–{zaehler + sum(len(ablauf.bausteine_von(b)) for b in buendel)}"
                                 f"/{gesamt}")
             gesammelt.clear()
 
@@ -315,14 +323,14 @@ def _run_demo(params: dict) -> None:
                     seeds=[seed if s["fest"] else seed + zaehler + i
                            for i, s in enumerate(schritte)])
 
-            erwartet = sum(len(b["bausteine"]) for b in buendel)
+            erwartet = sum(len(ablauf.bausteine_von(b)) for b in buendel)
             if len(gesammelt) < erwartet:
                 pruefe()
                 raise RuntimeError(f"nur {len(gesammelt)} von {erwartet} Bildern")
 
             rest = iter(gesammelt)
             for block in buendel:
-                je_block[id(block)] = [next(rest) for _ in block["bausteine"]]
+                je_block[id(block)] = [next(rest) for _ in ablauf.bausteine_von(block)]
             letztes = gesammelt[-1]
             zaehler += erwartet
 
@@ -399,6 +407,7 @@ class Handler(BaseHTTPRequestHandler):
             status["translated"] = dict(current["translated"])
             status["stage"] = current["stage"]
             status["video"] = current["video"]
+            status["gelesen"] = dict(current["gelesen"])
             return self._json(200, status)
 
         if path == "/api/info":
@@ -517,6 +526,7 @@ class Handler(BaseHTTPRequestHandler):
             current["translated"] = {}
             current["stage"] = "wird vorbereitet"
             current["video"] = None
+            current["gelesen"] = {}
             threading.Thread(target=_run_demo, args=(params,), daemon=True).start()
             return self._json(202, {"ok": True})
 
@@ -590,6 +600,7 @@ class Handler(BaseHTTPRequestHandler):
         current["translated"] = {}
         current["stage"] = ""
         current["video"] = None
+        current["gelesen"] = {}
         threading.Thread(target=_run_job, args=(params,), daemon=True).start()
         return self._json(202, {"ok": True})
 

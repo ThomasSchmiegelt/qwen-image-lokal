@@ -131,6 +131,7 @@ ohne Beschriftung, bei dem die Bilder ineinander blenden. Eine Folge ist eine
 | Vorlage | *behutsam ändern* (bewahrt), *verwandeln* (Stilwechsel) oder *Bewegung* |
 | Seed | eigener oder wie das Startbild |
 | danach Startbild | blendet das Ausgangsbild wieder ein, ohne es neu zu rechnen |
+| Anzahl | wie viele Bilder der Block liefert; mehr als Zeilen heißt, die Zeilen werden der Reihe nach wiederholt |
 | was bleibt | die Ausnahme, die stehen bleiben muss |
 | Bausteine | ein Bild je Zeile |
 
@@ -153,10 +154,21 @@ Sieben Abläufe sind mitgeliefert:
 | **Neonstadt** | 11 | eine Eskalation, jeder Schritt auf dem vorigen: Neon, Regen, Hologramme, Implantate, Drohnenblick, Glitch — und zurück auf die Straße |
 | **Elemente** | 14 | aus Feuer, Wasser, Erde, Luft; dann als Bronze, Marmor, Glas, Holz, Origami, Klemmbaustein; zum Schluss in Bewegung |
 
-Der Ablauf **passt sich dem Startbild an**: bevor die Blöcke gebaut werden,
-sieht sich dasselbe Sprachmodell das Startbild an. Ist dort eine Frau zu sehen,
-wird aus dem Bart-Schritt ein Haarfarben-Schritt. Bei unklarem Befund bleibt es
-beim Regelfall, statt zu raten.
+Der Ablauf **passt sich dem Startbild an**. Bevor die Blöcke gebaut werden,
+beschreibt dasselbe Sprachmodell das Bild — Geschlecht, ungefähres Alter,
+Haare, auffällige Kleidung, Umgebung. Daraus folgt zweierlei:
+
+- Ist eine Frau zu sehen, wird aus dem Bart-Schritt ein Haarfarben-Schritt.
+  Bei unklarem Befund bleibt es beim Regelfall, statt zu raten.
+- Die Beschreibung wandert in jede Bewahrungsklausel. „Die Person muss gleich
+  bleiben" trifft das Modell besser, wenn dort steht, *wen* es gleich lassen
+  soll — also „die Person (eine Frau Mitte zwanzig mit langen braunen Haaren,
+  schwarzes Oberteil)". Was erkannt wurde, steht unter dem hochgeladenen Bild.
+
+Jede Anweisung endet mit einem Hinweis zu den **Zähnen**. Diffusionsmodelle
+verzeichnen sie notorisch — zu viele, verschmiert, doppelte Reihen. Der kurze
+Zusatz („gleichmäßig, richtig geformt, die richtige Anzahl, nicht verschmiert
+oder verdoppelt") hilft spürbar.
 
 Im Editor lassen sich Blöcke hinzufügen, verschieben, löschen und über **als
 Text** als JSON sichern und zurückspielen. Die Kommandozeile nimmt so eine

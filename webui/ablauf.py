@@ -11,6 +11,9 @@ in genau einem Merkmal unterscheiden, und sagt dabei drei Dinge:
   fest       gleicher Seed wie das Ausgangsbild? Nur für behutsame Blöcke
              sinnvoll -- bei Stilwechseln bleibt der Stil sonst blass
 
+Optional sagt `anzahl`, wie viele Bilder der Block liefern soll -- sind es
+mehr als Bausteine, werden die Bausteine der Reihe nach wiederholt.
+
 Nach jedem Block kann das Ausgangsbild wieder eingeblendet werden
 (`zurueck`), ohne dass es neu berechnet wird.
 """
@@ -36,6 +39,11 @@ _AKTION = (
     "{bleibt} must stay clearly recognisable."
 )
 
+# Zaehne geraten Diffusionsmodellen notorisch schief -- zu viele, verschmiert,
+# doppelte Reihen. Ein knapper Hinweis am Ende jeder Anweisung hilft spuerbar.
+_ZAEHNE = ("If teeth are visible, draw them cleanly: even, correctly shaped, "
+           "the right number, never smeared or doubled.")
+
 PERSON = "the person, their face and their pose"
 PERSON_ORT = "the person, their face, their pose and their position in the frame"
 ALLES = "the person, their clothing and the surroundings"
@@ -44,27 +52,49 @@ PERSON_GESICHT = "the person's face, their clothing and the surroundings"
 
 def prompt_fuer(block: dict, baustein: str) -> str:
     if block.get("vorlage") == "aktion":
-        return _AKTION.format(aktion=baustein,
+        text = _AKTION.format(aktion=baustein,
                               bleibt=block.get("bleibt") or PERSON_GESICHT)
-    if block.get("vorlage") == "verwandeln":
-        return _VERWANDELN.format(stil=baustein, bleibt=block.get("bleibt") or PERSON)
-    kopf = _BEHUTSAM.format(keep=block.get("bleibt") or PERSON_ORT, extra="").strip()
-    return f"{kopf}, {baustein}"
+    elif block.get("vorlage") == "verwandeln":
+        text = _VERWANDELN.format(stil=baustein, bleibt=block.get("bleibt") or PERSON)
+    else:
+        kopf = _BEHUTSAM.format(keep=block.get("bleibt") or PERSON_ORT, extra="").strip()
+        text = f"{kopf}, {baustein}"
+    return f"{text} {_ZAEHNE}"
+
+
+def bausteine_von(block: dict) -> list[str]:
+    """Die Bausteine eines Blocks, auf seine Anzahl gebracht.
+
+    Ohne Angabe ergibt jede Zeile ein Bild. Steht eine Anzahl darüber, werden
+    die Zeilen der Reihe nach wiederholt -- fünf Zeilen und Anzahl zehn heißt
+    also jede Zeile zweimal, mit verschiedenen Seeds. Eine kleinere Anzahl
+    schneidet ab.
+    """
+    liste = [z for z in (block.get("bausteine") or [])]
+    anzahl = block.get("anzahl")
+    try:
+        anzahl = int(anzahl)
+    except (TypeError, ValueError):
+        anzahl = 0
+    if anzahl <= 0 or not liste:
+        return liste
+    return [liste[i % len(liste)] for i in range(anzahl)]
 
 
 def schritte(ablauf: list[dict]) -> list[dict]:
     """Rechnet die Blöcke in eine flache Liste von Bildern um."""
     flach = []
     for block in ablauf:
-        for nummer, baustein in enumerate(block["bausteine"]):
+        gefuellt = bausteine_von(block)
+        for nummer, baustein in enumerate(gefuellt):
             flach.append({
                 "titel": f"{block['titel']} {nummer + 1}",
                 "prompt": prompt_fuer(block, baustein),
                 "referenz": block.get("referenz", "start"),
                 "fest": bool(block.get("fest")),
                 "block": block["titel"],
-                "letzter_im_block": nummer == len(block["bausteine"]) - 1,
-                "zurueck": bool(block.get("zurueck")) and nummer == len(block["bausteine"]) - 1,
+                "letzter_im_block": nummer == len(gefuellt) - 1,
+                "zurueck": bool(block.get("zurueck")) and nummer == len(gefuellt) - 1,
                 "gruppe": block.get("art") == "gruppe",
             })
     return flach
@@ -72,11 +102,29 @@ def schritte(ablauf: list[dict]) -> list[dict]:
 
 def anzahl_bilder(ablauf: list[dict]) -> int:
     """Wie viele Bilder das Video zeigt -- samt der Rückgriffe aufs Startbild."""
-    return 1 + sum(len(b["bausteine"]) + (1 if b.get("zurueck") else 0) for b in ablauf)
+    return 1 + sum(len(bausteine_von(b)) + (1 if b.get("zurueck") else 0) for b in ablauf)
 
 
 def zu_erzeugen(ablauf: list[dict]) -> int:
-    return 1 + sum(len(b["bausteine"]) for b in ablauf)
+    return 1 + sum(len(bausteine_von(b)) for b in ablauf)
+
+
+def mit_beschreibung(ablauf: list[dict], beschreibung: str) -> list[dict]:
+    """Traegt die Beschreibung des Startbilds in die Bewahrungsklauseln ein.
+
+    "die Person muss gleich bleiben" trifft das Modell besser, wenn dort steht,
+    wen es gleich lassen soll. Angehaengt wird nur dort, wo ueberhaupt von
+    einer Person die Rede ist.
+    """
+    text = (beschreibung or "").strip()
+    if not text:
+        return ablauf
+    zusatz = f" ({text})"
+    for block in ablauf:
+        bleibt = block.get("bleibt") or ""
+        if "person" in bleibt.lower() and zusatz not in bleibt:
+            block["bleibt"] = bleibt + zusatz
+    return ablauf
 
 
 # --- Mitgelieferte Abläufe ----------------------------------------------

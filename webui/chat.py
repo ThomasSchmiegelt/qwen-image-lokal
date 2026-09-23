@@ -340,3 +340,61 @@ def ist_weiblich(bild_bytes: bytes, model: str | None = None) -> bool | None:
     if "mann" in antwort or "männlich" in antwort or "man" in antwort:
         return False
     return None
+
+
+BILD_SYSTEM = """Du beschreibst ein Foto für ein Bildgenerierungsmodell.
+
+Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
+
+"geschlecht"   "frau", "mann" oder "unklar"
+"beschreibung" EIN kurzer englischer Halbsatz, der die abgebildete Person
+               greifbar macht: ungefähres Alter, Haare, auffällige Kleidung.
+               Keine Wertung, keine Namen, keine Vermutungen über Herkunft.
+               Beispiel: "a woman in her thirties with shoulder-length dark
+               hair, wearing a grey hooded jacket"
+"umgebung"     EIN kurzer englischer Halbsatz zur Umgebung.
+
+Ist keine Person zu sehen, setze "geschlecht" auf "unklar" und beschreibe in
+"beschreibung" den Hauptgegenstand."""
+
+
+def bild_lesen(bild_bytes: bytes, model: str | None = None) -> dict:
+    """Liest Geschlecht, Personenbeschreibung und Umgebung aus einem Bild.
+
+    Die Beschreibung wandert spaeter in die Anweisungen: was das Modell
+    bewahren soll, trifft es besser, wenn dort steht, wen es bewahren soll.
+    Faellt Ollama aus, kommt ein leeres Ergebnis und alles laeuft wie bisher.
+    """
+    body = {
+        "model": model or MODEL,
+        "format": "json",
+        "stream": False,
+        "think": False,
+        "keep_alive": 0,
+        "options": {"temperature": 0.0, "num_predict": 200},
+        "messages": [
+            {"role": "system", "content": BILD_SYSTEM},
+            {"role": "user", "content": "Beschreibe dieses Bild.",
+             "images": [base64.b64encode(bild_bytes).decode("ascii")]},
+        ],
+    }
+    request = urllib.request.Request(
+        OLLAMA.rstrip("/") + "/api/chat", json.dumps(body).encode("utf-8"),
+        {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            roh = json.loads(THINK.sub(
+                "", json.load(response)["message"]["content"]).strip())
+    except Exception:
+        return {"geschlecht": "unklar", "beschreibung": "", "umgebung": ""}
+    if not isinstance(roh, dict):
+        return {"geschlecht": "unklar", "beschreibung": "", "umgebung": ""}
+
+    geschlecht = str(roh.get("geschlecht") or "").strip().lower()
+    if geschlecht not in ("frau", "mann"):
+        geschlecht = "unklar"
+    return {
+        "geschlecht": geschlecht,
+        "beschreibung": str(roh.get("beschreibung") or "").strip()[:200],
+        "umgebung": str(roh.get("umgebung") or "").strip()[:200],
+    }

@@ -59,6 +59,7 @@
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .axis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+  .row4 { display: grid; grid-template-columns: 4.5em 1fr 1fr 1fr; gap: 8px; }
   .block { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
   .blockkopf { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   .blockkopf input { flex: 1; font-weight: 600; }
@@ -772,7 +773,10 @@ function blockZeichnen() {
         <a href="#" data-tu="runter" title="nach unten">&darr;</a>
         <a href="#" data-tu="weg" title="entfernen">&times;</a>
       </div>
-      <div class="row3">
+      <div class="row4">
+        <input type="number" class="banzahl" min="0" max="40" placeholder="Anzahl"
+               title="Wie viele Bilder? Leer = eine je Zeile"
+               value="${b.anzahl || ""}">
         <select class="bref">
           <option value="start"${b.referenz !== "letztes" ? " selected" : ""}>vom Startbild</option>
           <option value="letztes"${b.referenz === "letztes" ? " selected" : ""}>vom letzten Bild</option>
@@ -790,7 +794,7 @@ function blockZeichnen() {
       </div>
       <label>Was bleibt unverändert?</label>
       <input class="bbleibt" value="${esc(b.bleibt || "")}" placeholder="z. B. die Person, ihr Gesicht und ihre Haltung">
-      <label>Ein Bild je Zeile</label>
+      <label>Ein Bild je Zeile &ndash; oder oben eine Anzahl angeben</label>
       <textarea class="bbausteine"${b.art === "gruppe" ? " disabled" : ""}>${esc((b.bausteine || []).join("\n"))}</textarea>
       <div class="check">
         <input type="checkbox" class="bzurueck"${b.zurueck ? " checked" : ""}>
@@ -804,6 +808,11 @@ function blockZeichnen() {
     el.querySelector(".bbleibt").oninput = e => bloecke[i].bleibt = e.target.value;
     el.querySelector(".bbausteine").oninput = e => {
       bloecke[i].bausteine = e.target.value.split("\n").filter(z => z.trim());
+      demoDauer();
+    };
+    el.querySelector(".banzahl").oninput = e => {
+      const n = parseInt(e.target.value, 10);
+      bloecke[i].anzahl = Number.isFinite(n) && n > 0 ? n : undefined;
       demoDauer();
     };
     el.querySelector(".bref").onchange = e => bloecke[i].referenz = e.target.value;
@@ -870,7 +879,12 @@ $("demoFile").onchange = e => {
 };
 function demoDauer() {
   const n = parseInt($("demoSteps").value, 10) || 24;
-  const erzeugt = 1 + bloecke.reduce((s, b) => s + (b.bausteine || []).length, 0);
+  // Dieselbe Regel wie im Server: Anzahl schlaegt die Zahl der Zeilen.
+  const proBlock = b => {
+    const zeilen = (b.bausteine || []).length;
+    return b.anzahl > 0 && zeilen ? b.anzahl : zeilen;
+  };
+  const erzeugt = 1 + bloecke.reduce((s, b) => s + proBlock(b), 0);
   const imVideo = erzeugt + bloecke.filter(b => b.zurueck).length;
   // Ein Ladevorgang je Block, der nicht vom Startbild ausgeht, plus einer.
   const laden = 2 + bloecke.filter(b => b.referenz === "letztes" || b.art === "gruppe").length;
@@ -898,7 +912,10 @@ async function starteDemo() {
     buttonState("idle");
     return say(err.error || "Die Vorführung ließ sich nicht starten.", "err");
   }
-  startSlots(1 + bloecke.reduce((s, b) => s + (b.bausteine || []).length, 0));
+  startSlots(1 + bloecke.reduce((s, b) => {
+    const zeilen = (b.bausteine || []).length;
+    return s + (b.anzahl > 0 && zeilen ? b.anzahl : zeilen);
+  }, 0));
   poll();
 }
 
@@ -1034,6 +1051,7 @@ function poll() {
     if (!s) return;
 
     zeigeUebersetzung(s.translated);
+    zeigeGelesen(s.gelesen);
     const done = s.results.length;
     const perImage = s.total ? s.step / s.total : 0;
     $("fill").style.width = (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
@@ -1052,6 +1070,14 @@ function poll() {
   }, 900);
 }
 const fmt = sec => sec < 90 ? `${Math.round(sec)}s` : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")} min`;
+
+// Was der Server im Startbild erkannt hat. Die Beschreibung landet in den
+// Bewahrungsklauseln, deshalb soll sichtbar sein, was dort gelesen wurde.
+function zeigeGelesen(g) {
+  if (!g || !g.beschreibung) return;
+  $("demoRefNote").textContent = "Im Startbild erkannt: " + g.beschreibung
+    + (g.geschlecht && g.geschlecht !== "unklar" ? ` (${g.geschlecht})` : "");
+}
 
 // Was der Server vor dem Auftrag übersetzt hat — damit nachvollziehbar ist,
 // was das Bildmodell tatsächlich gelesen hat.
