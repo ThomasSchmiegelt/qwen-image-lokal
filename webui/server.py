@@ -28,6 +28,7 @@ from engine import (  # noqa: E402
     ASPECT_RATIOS, MAX_REFERENCES, REFERENCE_TOKEN_BUDGET, Engine, dimensions_for,
 )
 import chat  # noqa: E402
+import demo  # noqa: E402
 from presets import (  # noqa: E402
     AXIS_OFF, EFFECTS, GROUP_ACTIONS, PAINT_TARGET, catalog, overrides, parse_command,
 )
@@ -37,7 +38,7 @@ ROOT = os.path.dirname(HERE)
 OUTPUTS = os.path.join(ROOT, "outputs")
 HOST = os.environ.get("QWEN_HOST", "127.0.0.1")
 PORT = int(os.environ.get("QWEN_PORT", "7860"))
-SAFE_NAME = re.compile(r"[\w.\-]+\.(png|jsonl)")
+SAFE_NAME = re.compile(r"[\w.\-]+\.(png|jsonl|mp4)")
 # Fester Befehl, keine Shell: der Aufruf kann nur eine Datei aus outputs/ oeffnen.
 GIMP_CMD = os.environ.get("QWEN_GIMP", "gimp")
 
@@ -62,7 +63,7 @@ SOURCE_AT_START = _source_state()
 
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
-current = {"files": [], "error": None, "translated": {}}
+current = {"files": [], "error": None, "translated": {}, "stage": "", "video": None}
 
 
 def _decode(data_url: str) -> Image.Image:
@@ -113,6 +114,49 @@ def _translate_inputs(params: dict) -> dict:
     return fertig
 
 
+def _series_kwargs(params: dict, refs: list, kind: str, on_image) -> dict:
+    """Uebersetzt einen Parametersatz der Schnittstelle in Engine-Argumente.
+
+    Auftrag und Vorfuehrung teilen sich diese Abbildung -- die Vorfuehrung soll
+    ausdruecklich denselben Weg nehmen wie ein normaler Auftrag.
+    """
+    return dict(
+        prompt=params.get("prompt", ""),
+        negative_prompt=params.get("negative_prompt", ""),
+        images=refs,
+        mode=kind,
+        aspect=params.get("aspect", "1:1"),
+        base=int(params.get("base", 1024)),
+        follow_reference=bool(params.get("follow_reference", True)),
+        steps=int(params.get("steps", 40)),
+        seed=int(params.get("seed", 42)),
+        true_cfg_scale=float(params.get("true_cfg_scale", 1.0)),
+        transparent=bool(params.get("transparent", False)),
+        effect=params.get("effect") or None,
+        form=params.get("form") or None,
+        keep=params.get("keep") or "The main subject",
+        paint=params.get("paint") or None,
+        scene=params.get("scene") or None,
+        angle=params.get("angle") or None,
+        device=params.get("device") or None,
+        paint_target=params.get("paint_target") or "",
+        scenario=params.get("scenario") or None,
+        material=params.get("material") or None,
+        subject=params.get("subject") or "fahrzeug",
+        image_prompts=params.get("image_prompts") or [],
+        action=params.get("action") or "zusammen",
+        group_size=int(params.get("group_size") or 2),
+        count=int(params.get("count", 1)),
+        sweep=params.get("sweep") or None,
+        lock_seed=bool(params.get("lock_seed", False)),
+        view=params.get("view") or None,
+        style=params.get("style") or None,
+        light=params.get("light") or None,
+        camera=params.get("camera") or None,
+        on_image=on_image,
+    )
+
+
 def _run_job(params: dict) -> None:
     try:
         current["translated"] = _translate_inputs(params)
@@ -132,43 +176,103 @@ def _run_job(params: dict) -> None:
                 with open(manifest, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-        engine.run_series(
-            prompt=params.get("prompt", ""),
-            negative_prompt=params.get("negative_prompt", ""),
-            images=refs,
-            mode=kind,
-            aspect=params.get("aspect", "1:1"),
-            base=int(params.get("base", 1024)),
-            follow_reference=bool(params.get("follow_reference", True)),
-            steps=int(params.get("steps", 40)),
-            seed=int(params.get("seed", 42)),
-            true_cfg_scale=float(params.get("true_cfg_scale", 1.0)),
-            transparent=bool(params.get("transparent", False)),
-            effect=params.get("effect") or None,
-            form=params.get("form") or None,
-            keep=params.get("keep") or "The main subject",
-            paint=params.get("paint") or None,
-            scene=params.get("scene") or None,
-            angle=params.get("angle") or None,
-            device=params.get("device") or None,
-            paint_target=params.get("paint_target") or "",
-            scenario=params.get("scenario") or None,
-            material=params.get("material") or None,
-            subject=params.get("subject") or "fahrzeug",
-            image_prompts=params.get("image_prompts") or [],
-            action=params.get("action") or "zusammen",
-            group_size=int(params.get("group_size") or 2),
-            count=int(params.get("count", 1)),
-            sweep=params.get("sweep") or None,
-            lock_seed=bool(params.get("lock_seed", False)),
-            view=params.get("view") or None,
-            style=params.get("style") or None,
-            light=params.get("light") or None,
-            camera=params.get("camera") or None,
-            on_image=on_image,
-        )
+        engine.run_series(**_series_kwargs(params, refs, kind, on_image))
         done = len(current["files"])
         engine.note("idle", f"fertig: {done} Bild(er)" if done else "abgebrochen")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        engine.note("error", current["error"])
+    finally:
+        engine.lock.release()
+
+
+class Abgebrochen(Exception):
+    """Der Benutzer hat die Vorfuehrung gestoppt."""
+
+
+def _run_demo(params: dict) -> None:
+    """Fuehrt die sieben Schritte nacheinander aus und baut daraus ein Video."""
+    try:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        fest = {"base": int(params.get("base", 1024)),
+                "steps": int(params.get("steps", 30)), "true_cfg_scale": 1.0}
+        folge = demo.schritte(params.get("background_target") or demo.HINTERGRUND_ZIEL)
+
+        # Alle deutschen Texte der Vorfuehrung in einem Zug uebersetzen, statt
+        # sieben Mal einzeln das Sprachmodell zu laden.
+        engine.note("loading", "Eingaben werden übersetzt …")
+        texte = {}
+        for nummer, spec in enumerate(folge):
+            for feld in ("keep", "paint_target"):
+                wert = spec["params"].get(feld)
+                if wert:
+                    texte[f"s{nummer}_{feld}"] = wert
+        fertig = chat.translate(texte)
+        for nummer, spec in enumerate(folge):
+            for feld in ("keep", "paint_target"):
+                neu = fertig.get(f"s{nummer}_{feld}")
+                if neu:
+                    spec["params"][feld] = neu
+        current["translated"] = fertig
+
+        tafeln = []
+
+        def einer(spec, refs, nummer):
+            if engine.aborted:
+                raise Abgebrochen()
+            current["stage"] = f"Schritt {nummer}/{demo.ANZAHL} · {spec['titel']}"
+            gemerkt = []
+
+            def on_image(meta, image):
+                name = _save(meta, image, stamp, "demo")
+                current["files"].append(name)
+                gemerkt.append(name)
+
+            werte = {**spec["params"], **fest}
+            engine.run_series(**_series_kwargs(werte, refs, werte["mode"], on_image))
+            if not gemerkt:
+                if engine.aborted:
+                    raise Abgebrochen()
+                raise RuntimeError(f"Schritt „{spec['titel']}“ lieferte kein Bild")
+            tafeln.append(os.path.join(OUTPUTS, gemerkt[0]))
+            return gemerkt[0]
+
+        # Schritt 0: eigenes Foto oder ein erzeugtes Basisbild.
+        if params.get("image"):
+            basis_bild = _decode(params["image"])
+            name = _save({"index": 1, "seed": 0, "prompt": "hochgeladenes Basisbild"},
+                         basis_bild.convert("RGBA"), stamp, "demo")
+            current["files"].append(name)
+            tafeln.append(os.path.join(OUTPUTS, name))
+            current["stage"] = f"Schritt 1/{demo.ANZAHL} · Basisbild"
+        else:
+            spec = demo.basis(params.get("prompt") or "")
+            basis_name = einer(spec, [], 1)
+            basis_bild = Image.open(os.path.join(OUTPUTS, basis_name))
+            basis_bild.load()
+
+        erstes = None
+        for nummer, spec in enumerate(folge, start=2):
+            name = einer(spec, [basis_bild], nummer)
+            if spec["name"] == "kleidung":
+                erstes = Image.open(os.path.join(OUTPUTS, name))
+                erstes.load()
+
+        einer(demo.GRUPPE, [basis_bild, erstes or basis_bild], demo.ANZAHL)
+
+        if demo.available()["video"]:
+            current["stage"] = "Video wird gebaut"
+            ziel = os.path.join(OUTPUTS, f"{stamp}_demonstration.mp4")
+            demo.baue_video(tafeln, ziel)
+            current["video"] = os.path.basename(ziel)
+
+        current["stage"] = ""
+        engine.note("idle", f"Vorführung fertig: {len(current['files'])} Bilder")
+    except Abgebrochen:
+        current["stage"] = ""
+        engine.note("idle", f"abgebrochen nach {len(current['files'])} Bild(ern)")
     except Exception:
         err = traceback.format_exc()
         print(err, file=sys.stderr)
@@ -220,6 +324,8 @@ class Handler(BaseHTTPRequestHandler):
             status["results"] = list(current["files"])
             status["error"] = current["error"]
             status["translated"] = dict(current["translated"])
+            status["stage"] = current["stage"]
+            status["video"] = current["video"]
             return self._json(200, status)
 
         if path == "/api/info":
@@ -236,6 +342,7 @@ class Handler(BaseHTTPRequestHandler):
             changed = sorted(k for k in set(now) | set(SOURCE_AT_START)
                              if now.get(k) != SOURCE_AT_START.get(k))
             info["source"] = {"stale": bool(changed), "changed": changed}
+            info["demo"] = demo.available()
             return self._json(200, info)
 
         if path == "/api/gallery":
@@ -315,6 +422,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(500, {"error": f"GIMP liess sich nicht starten: {exc}"})
             return self._json(200, {"ok": True})
 
+        if path == "/api/demo":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                params = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError as exc:
+                return self._json(400, {"error": f"ungueltiges JSON: {exc}"})
+            if not engine.lock.acquire(blocking=False):
+                return self._json(409, {"error": "Es laeuft bereits ein Auftrag"})
+            engine.aborted = False
+            current["files"] = []
+            current["error"] = None
+            current["translated"] = {}
+            current["stage"] = "wird vorbereitet"
+            current["video"] = None
+            threading.Thread(target=_run_demo, args=(params,), daemon=True).start()
+            return self._json(202, {"ok": True})
+
         if path == "/api/chat":
             length = int(self.headers.get("Content-Length", 0))
             try:
@@ -379,9 +503,12 @@ class Handler(BaseHTTPRequestHandler):
         if not engine.lock.acquire(blocking=False):
             return self._json(409, {"error": "Es laeuft bereits ein Auftrag"})
 
+        engine.aborted = False
         current["files"] = []
         current["error"] = None
         current["translated"] = {}
+        current["stage"] = ""
+        current["video"] = None
         threading.Thread(target=_run_job, args=(params,), daemon=True).start()
         return self._json(202, {"ok": True})
 

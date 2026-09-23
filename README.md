@@ -119,6 +119,32 @@ dann prüfen, dann selbst auf Erzeugen klicken.
 Das Sprachmodell wird nach jeder Anfrage sofort wieder entladen
 (`keep_alive: 0`), damit die GPU frei für das Bildmodell bleibt.
 
+## Vorführung
+
+Der Reiter **Vorführung** erzeugt sieben Bilder, die zeigen was sich einzeln
+steuern lässt: Kleidungsfarbe, Perspektive, Hintergrund, *ein Teil* des
+Hintergrunds, die Darstellung, und zum Schluss eine Gruppe. Jeder Schritt geht
+vom selben Basisbild aus und ändert genau eine Sache — was dabei stehen
+bleibt, ist der eigentliche Punkt.
+
+Die Person lässt sich austauschen: entweder ein eigenes Foto hochladen, oder
+beschreiben wer erzeugt werden soll. Das Ziel des Teil-Hintergrund-Schritts
+gibst du ebenfalls an (Vorgabe `das Auto im Hintergrund`, bei einem eigenen
+Foto ohne Auto etwa `die Wand im Hintergrund`).
+
+Zum Schluss baut ffmpeg daraus ein Video: keine Beschriftung, keine Schnitte —
+die Bilder blenden ineinander. Weil alle Schritte deckungsgleich übereinander
+liegen, zeigt die Überblendung die Änderung von selbst.
+
+Dauer rund 13 Minuten bei 30 Schritten. Dasselbe von der Kommandozeile:
+
+```bash
+./qwen_bild/bin/python demo/demonstration.py --steps 30
+./qwen_bild/bin/python demo/demonstration.py --foto ich.png --ziel "die Wand im Hintergrund"
+```
+
+Ohne ffmpeg entstehen nur die Einzelbilder, kein Video.
+
 ## GIMP-Plugin
 
 ```bash
@@ -210,6 +236,8 @@ webui/server.py       HTTP-Server, nur Standardbibliothek
 webui/engine.py       zweiphasige Pipeline
 webui/presets.py      Stile, Lichter, Kameras, Blickwinkel, Vorlagen, Effekte
 webui/chat.py         Freitext über Ollama deuten und prüfen
+webui/demo.py         Schritte der Vorführung und der Videobau
+demo/demonstration.py dieselbe Vorführung von der Kommandozeile
 webui/index.html      Oberfläche
 gimp/qwen-image/      GIMP-3-Plugin
 gimp/install.sh       Plugin verknüpfen

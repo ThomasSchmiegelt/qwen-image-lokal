@@ -6,6 +6,8 @@ outputs/
 
 # Eigene Vorlagen und was daraus entsteht bleiben ebenfalls lokal
 basis/
+demo/bilder/
+demo/*.mp4
 
 # Reste einer verunglueckten pip-Zeile: `pip install torch>=2.4.0` ohne
 # Anfuehrungszeichen hat die Ausgabe in Dateien umgeleitet.

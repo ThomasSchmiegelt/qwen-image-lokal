@@ -142,6 +142,10 @@ class Engine:
             "elapsed": 0.0,
         }
         self._cancel = False
+        # Bleibt gesetzt, bis ein neuer Auftrag beginnt. `_cancel` gilt nur fuer
+        # den laufenden Durchgang und wird von jedem run_series zurueckgesetzt --
+        # eine mehrstufige Vorfuehrung liefe damit einfach weiter.
+        self.aborted = False
         self._active_pipe = None
 
     # -- Status -----------------------------------------------------------
@@ -163,6 +167,7 @@ class Engine:
 
     def cancel(self) -> None:
         self._cancel = True
+        self.aborted = True
         pipe = self._active_pipe
         if pipe is not None:
             pipe._interrupt = True

@@ -181,6 +181,7 @@
       <button id="tab-gruppe">Gruppe</button>
       <button id="tab-person">Perspektiven</button>
       <button id="tab-varianten">Varianten</button>
+      <button id="tab-demo">Vorführung</button>
     </div>
 
     <div id="uploadBox" style="display:none">
@@ -198,6 +199,44 @@
     <p class="hint" id="transNote" style="display:none"></p>
     <p class="hint" id="tplHint" style="display:none"></p>
 
+    <fieldset id="demoBox" style="display:none">
+      <legend>Vorführung</legend>
+      <p class="hint">Sieben Bilder, die zeigen was sich einzeln steuern lässt:
+        Kleidungsfarbe, Perspektive, Hintergrund, ein Teil des Hintergrunds,
+        die Darstellung, und zum Schluss eine Gruppe. Jeder Schritt geht vom
+        selben Basisbild aus und ändert genau eine Sache. Daraus entsteht ein
+        Video mit Beschriftung.</p>
+
+      <label for="demoFile">Eigenes Foto einer Person (optional)</label>
+      <input type="file" id="demoFile" accept="image/*">
+      <img id="demoPreview" alt="Basisbild" style="display:none;max-width:100%;border-radius:6px;margin-top:8px">
+      <p class="hint" id="demoRefNote"></p>
+
+      <label for="demoPrompt">…oder beschreiben, wer erzeugt werden soll</label>
+      <textarea id="demoPrompt" style="min-height:52px"
+        placeholder="leer lassen für die Vorgabe: eine Person vor einem geparkten Auto"></textarea>
+
+      <label for="demoTarget">Was im Hintergrund umgefärbt werden soll</label>
+      <input id="demoTarget" value="das Auto im Hintergrund">
+      <p class="hint">Schritt 4 färbt nur dieses eine Ding um. Bei einem eigenen
+        Foto ohne Auto etwa <code>die Wand im Hintergrund</code>.</p>
+
+      <div class="row">
+        <div>
+          <label for="demoBase">Auflösung</label>
+          <select id="demoBase">
+            <option value="1024">1024</option>
+            <option value="1536">1536</option>
+          </select>
+        </div>
+        <div>
+          <label for="demoSteps">Schritte</label>
+          <input type="number" id="demoSteps" value="30" min="8" max="60">
+        </div>
+      </div>
+      <p class="hint" id="demoDauer"></p>
+    </fieldset>
+
     <fieldset id="gruppeBox" style="display:none">
       <legend>Gruppe</legend>
       <label for="action">Was soll geschehen?</label>
@@ -210,10 +249,6 @@
           sollen.</p>
       </div>
 
-      <label for="scenario">Inszenierung</label>
-      <select id="scenario"></select>
-      <p class="hint">Die Inszenierung beschreibt das Aussehen der Gruppe, nicht
-        einen Filmtitel &ndash; das trifft das Modell zuverlässiger.</p>
     </fieldset>
 
     <fieldset id="variantenBox" style="display:none">
@@ -275,7 +310,7 @@
         für die ganze Serie. Deutsch ist überall in Ordnung.</p>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="boxVorlage">
       <legend>Vorlage &amp; Effekt</legend>
       <div class="row">
         <div>
@@ -290,7 +325,7 @@
       <p class="hint" id="cmdHint"></p>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="boxDarstellung">
       <legend>Darstellung</legend>
       <label for="view">Blickwinkel</label>
       <select id="view"></select>
@@ -309,6 +344,12 @@
           <select id="camera"></select>
         </div>
       </div>
+
+      <label for="scenario">Inszenierung</label>
+      <select id="scenario"></select>
+      <p class="hint">Beschreibt das Aussehen &ndash; leuchtende Geister,
+        Tafelrunde, Detektive. Ausformuliert statt als Filmtitel, das trifft
+        das Modell zuverlässiger.</p>
 
       <label for="sweep">Serie variieren</label>
       <select id="sweep">
@@ -340,7 +381,7 @@
         gut anderthalb Minuten, jedes weitere nur noch die reine Rechenzeit.</p>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="boxBild">
       <legend>Bild</legend>
       <div class="row">
         <div>
@@ -366,7 +407,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="boxFein">
       <legend>Feineinstellung</legend>
       <div class="row">
         <div>
@@ -420,6 +461,7 @@ const MODES = {
   person: {label: "Umrundung erzeugen", refs: 1, sweep: "view", count: 10, follow: false, lock: true,
            ph: "standing in a city street, wearing a dark coat",
            hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."},
+  demo: {label: "Vorführung starten", refs: 0, ph: "", hint: () => ""},
   varianten: {label: "Varianten erzeugen", refs: 1, sweep: "varianten", count: 12,
               follow: true, lock: false,
               ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
@@ -584,6 +626,17 @@ function setMode(next) {
   sweepChanged();
 
   const tpl = templates[next];
+  const istDemo = next === "demo";
+  $("demoBox").style.display = istDemo ? "block" : "none";
+  ["boxVorlage", "boxDarstellung", "boxBild", "boxFein", "uploadBox"].forEach(
+    id => { if (istDemo) $(id).style.display = "none"; });
+  $("prompt").parentElement.querySelectorAll("#prompt, #transNote, #tplHint")
+    .forEach(el => { el.style.display = istDemo ? "none" : ""; });
+  document.querySelectorAll("label[for=prompt]").forEach(
+    el => el.style.display = istDemo ? "none" : "");
+  if (!istDemo) { $("boxVorlage").style.display = ""; $("boxDarstellung").style.display = "";
+                  $("boxBild").style.display = ""; $("boxFein").style.display = ""; }
+  demoDauer();
   const istVarianten = next === "varianten";
   $("gruppeBox").style.display = next === "gruppe" ? "block" : "none";
   groupSizeSichtbar();
@@ -670,6 +723,51 @@ function drawThumbs() {
 }
 function dropRef(i) { refs.splice(i, 1); refPrompts.splice(i, 1); drawThumbs(); setMode(mode); }
 
+// ---------- Vorführung ----------
+let demoRef = null;
+$("demoFile").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const leser = new FileReader();
+  leser.onload = () => {
+    demoRef = leser.result;
+    $("demoPreview").src = demoRef; $("demoPreview").style.display = "block";
+    $("demoRefNote").textContent = "Dein Foto wird als Basisbild verwendet; "
+      + "der Beschreibungstext wird dann ignoriert.";
+    $("demoPrompt").disabled = true;
+  };
+  leser.readAsDataURL(f);
+};
+function demoDauer() {
+  const n = parseInt($("demoSteps").value, 10) || 30;
+  const proBild = Math.round(60 + n * 2.6);
+  $("demoDauer").textContent = `Sieben Bilder, grob ${Math.round(7 * proBild / 60)} Minuten. `
+    + "Solange ist die Grafikkarte belegt.";
+}
+["demoSteps", "demoBase"].forEach(id => $(id).addEventListener("input", demoDauer));
+
+async function starteDemo() {
+  buttonState("busy");
+  $("stage").dataset.file = "";
+  say("Vorführung wird vorbereitet …");
+  const res = await fetch("/api/demo", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      image: demoRef, prompt: $("demoPrompt").value,
+      background_target: $("demoTarget").value,
+      base: parseInt($("demoBase").value, 10),
+      steps: parseInt($("demoSteps").value, 10) || 30
+    })
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    buttonState("idle");
+    return say(err.error || "Die Vorführung ließ sich nicht starten.", "err");
+  }
+  startSlots(7);
+  poll();
+}
+
 // ---------- Start ----------
 function say(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
 
@@ -743,7 +841,7 @@ async function start() {
   }
   poll();
 }
-$("go").onclick = start;
+$("go").onclick = () => (mode === "demo" ? starteDemo() : start());
 $("stop").onclick = () => { fetch("/api/cancel", {method: "POST"}); say("Abbruch angefordert …"); };
 
 // ---------- Freitexteingabe ----------
@@ -807,11 +905,13 @@ function poll() {
     $("fill").style.width = (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
     paintSeries(s.results, s.count, s.image);
 
-    if (s.busy) return say(`${s.message} · ${fmt(s.elapsed)}`);
+    if (s.busy) return say((s.stage ? s.stage + " · " : "") + s.message
+                          + " · " + fmt(s.elapsed));
 
     clearInterval(polling);
     if (s.error) { buttonState("idle"); $("fill").style.width = "0"; return say(s.error, "err"); }
     buttonState(done ? "done" : "idle");
+    if (s.video) zeigeVideo(s.video);
     if (done) say(`${s.message} in ${fmt(s.elapsed)}`, "ok");
     else { $("fill").style.width = "0"; say(s.message); }
     loadGallery();
@@ -859,6 +959,14 @@ function paintSeries(files, count, active) {
                               || m.view || m.camera || m.style || "";
     }).catch(() => {}));
   if (files.length && !$("stage").dataset.file) show(files[0]);
+}
+
+function zeigeVideo(datei) {
+  $("stage").dataset.file = "";
+  $("stage").innerHTML = `<video src="/outputs/${datei}" controls autoplay muted loop`
+    + ` style="max-width:100%;max-height:68vh;border-radius:6px"></video>`;
+  $("meta").innerHTML = `<div><a href="/outputs/${datei}" download>${esc(datei)}</a>`
+    + ` · Video der Vorführung</div>`;
 }
 
 // ---------- Große Anzeige ----------
