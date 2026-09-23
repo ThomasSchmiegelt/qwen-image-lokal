@@ -259,7 +259,162 @@ def bogen(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
             "a plain realistic photograph, natural colours, no stylisation at all"]},
     ]
 
+# --- Klassisch: Porträtstudio -------------------------------------------
+def klassisch(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
+    """Ruhig und fotografisch: Lichtführung, Brennweite, Hintergrund, Schwarzweiß.
+
+    Keine Stilbrüche -- dieser Ablauf zeigt, wie viel sich allein mit den
+    Mitteln eines Fotostudios ändern lässt.
+    """
+    return [
+        {"titel": "Lichtführung", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": PERSON_ORT, "zurueck": True, "bausteine": [
+            "classic Rembrandt lighting, a small triangle of light on the shadowed cheek",
+            "butterfly lighting from straight above, a small shadow under the nose",
+            "split lighting, one half of the face lit, the other in darkness",
+            "soft window light from the side, gentle falloff, no harsh shadow",
+            "high key lighting, bright and almost shadowless, airy",
+            "low key lighting, deep shadows, only the face picked out"]},
+
+        {"titel": "Brennweite", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": PERSON, "zurueck": True, "bausteine": [
+            "shot on a 35mm lens, full body with room around them",
+            "shot on a 50mm lens, natural perspective, waist up",
+            "shot on an 85mm portrait lens, head and shoulders, creamy bokeh",
+            "shot on a 135mm lens, a tight portrait, background fully blurred",
+            "an over the shoulder shot with a soft foreground edge"]},
+
+        {"titel": "Hintergrund", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": PERSON_ORT, "zurueck": True, "bausteine": [
+            "in front of seamless mid grey studio paper",
+            "in front of deep black velvet, the edges falling into darkness",
+            "in front of clean white, brightly lit, no visible horizon",
+            "in front of a mottled painted canvas backdrop, old master style",
+            "in front of weathered wooden boards"]},
+
+        {"titel": "Schwarzweiß", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": ALLES, "bausteine": [
+            "a classic black and white photograph, full tonal range, fine grain",
+            "high contrast black and white, deep blacks and bright whites",
+            "warm sepia toned, like an old print",
+            "a platinum print, soft silvery greys, matte paper"]},
+    ]
+
+
+# --- Zeitreise -----------------------------------------------------------
+def zeitreise(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
+    """Dieselbe Person durch zwölf Epochen und sechs Aufnahmeverfahren."""
+    return [
+        {"titel": "Epoche", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": "the person and their face", "zurueck": True, "bausteine": [
+            "as a stone age human in furs beside a cave wall with painted animals",
+            "as an ancient egyptian in linen beside carved hieroglyphs",
+            "as a roman citizen in a toga on marble steps",
+            "as a medieval villager in rough wool in a muddy lane",
+            "as a renaissance merchant in velvet, painted in oil",
+            "as a baroque noble in lace and a powdered wig",
+            "as a victorian in a stiff collar, photographed in a studio",
+            "in 1920s dress on a city street with early motor cars",
+            "in 1950s clothing beside a chrome car diner",
+            "in 1970s clothing with warm faded film colours",
+            "in 1990s clothing photographed on grainy consumer film",
+            "in near future clothing, clean materials, soft technology"]},
+
+        {"titel": "Aufnahmeverfahren", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": ALLES, "bausteine": [
+            "a daguerreotype, mirror like silver surface, slight tarnish at the edges",
+            "a wet plate tintype, dark and scratched, shallow depth",
+            "an autochrome, soft pastel colours, visible starch grain",
+            "a kodachrome slide, saturated reds, fine grain",
+            "an instant polaroid with a white border and colour shift",
+            "a modern phone photograph, over sharpened, slightly too bright"]},
+    ]
+
+
+# --- Comicheft -----------------------------------------------------------
+def comicheft(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
+    """Durch die Zeichenstile und dann immer weiter ins Heft hinein."""
+    return [
+        {"titel": "Zeichenstil", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": PERSON, "zurueck": True, "bausteine": [
+            "ligne claire, even black outlines, flat colours, no hatching",
+            "manga, screentone shading, large expressive eyes, speed lines",
+            "american superhero comic, heavy inks, dramatic musculature, bold colours",
+            "underground comix, scratchy nervous pen work, sour colours",
+            "a woodcut print, coarse carved lines, two colours only",
+            "a watercolour comic page, soft washes over loose ink",
+            "a newspaper strip, four flat colours and a coarse dot screen",
+            "pop art, benday dots, thick black outline, primary colours",
+            "a noir graphic novel, heavy black shadows, one spot colour",
+            "a children's picture book, soft crayon texture, friendly shapes"]},
+
+        # Aufeinander aufbauend: das Heft wird Seite um Seite lauter.
+        {"titel": "Ins Heft", "referenz": "letztes", "vorlage": "verwandeln",
+         "bleibt": PERSON, "bausteine": [
+            "drawn as one comic panel with a black border and a caption box",
+            "with a speech bubble above them and bold lettering",
+            "with a big hand drawn sound effect bursting across the panel",
+            "the panel exploding into radiating speed lines and impact stars",
+            "the halftone dots blown up until the whole page is raster"]},
+    ]
+
+
+# --- Neonstadt -----------------------------------------------------------
+def neonstadt(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
+    """Eine Eskalation: jeder Schritt setzt auf dem vorigen auf, es wird lauter."""
+    return [
+        {"titel": "Eskalation", "referenz": "letztes", "vorlage": "verwandeln",
+         "bleibt": PERSON, "bausteine": [
+            "a cyberpunk street at night, wet asphalt, a few neon signs",
+            "denser neon signage in three languages filling the background",
+            "heavy rain falling, every light smeared into long reflections",
+            "holographic advertisements drifting through the air around them",
+            "chrome implants at the temple and along the jaw, faintly lit",
+            "seen from a drone high above, the street a canyon of light",
+            "the image glitching, scanlines and colour channels torn apart",
+            "total neon overload, the frame blown out in magenta and cyan"]},
+
+        {"titel": "Zurück auf die Straße", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": ALLES, "bausteine": [
+            "the neon fading, a quiet rainy street at dawn",
+            "a plain photograph again, natural daylight, no stylisation"]},
+    ]
+
+
+# --- Elemente und Werkstoffe ---------------------------------------------
+def elemente(kulisse: str = "auto", weiblich: bool | None = None) -> list[dict]:
+    """Vier Elemente, sechs Werkstoffe, drei Bewegungen -- der schrägste Ablauf."""
+    return [
+        {"titel": "Element", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": PERSON, "zurueck": True, "bausteine": [
+            "made of fire, the body formed from flame and rising embers",
+            "made of water, the body a clear standing wave, droplets in the air",
+            "made of earth, the body of cracked soil with moss and small stones",
+            "made of air, the body half transparent, dust and wind passing through"]},
+
+        {"titel": "Werkstoff", "referenz": "start", "vorlage": "verwandeln",
+         "bleibt": "the person's shape and pose", "zurueck": True, "bausteine": [
+            "as a polished bronze statue on a low plinth, green patina in the folds",
+            "as a white marble sculpture, chisel marks still visible",
+            "as a figure of clear glass, light refracting through the body",
+            "as a carved wooden figure, visible grain and tool marks",
+            "as folded paper, an origami figure of sharp creases",
+            "built from interlocking plastic bricks, visible studs and seams"]},
+
+        {"titel": "In Bewegung", "referenz": "start", "vorlage": "aktion",
+         "bleibt": PERSON_GESICHT, "bausteine": [
+            "leaping forward with both arms thrown back, coat flying",
+            "spinning on one heel, everything loose swinging outward",
+            "landing hard from a height, dust bursting from under the feet"]},
+    ]
+
+
 ABLAEUFE = {
     "bogen": {"label": "Bogen: konservativ bis Neon und zurück", "bauen": bogen},
     "reise": {"label": "Reise durch alles", "bauen": reise},
+    "klassisch": {"label": "Klassisch: Porträt im Studio", "bauen": klassisch},
+    "zeitreise": {"label": "Zeitreise: Epochen und Aufnahmeverfahren", "bauen": zeitreise},
+    "comicheft": {"label": "Comicheft: durch alle Zeichenstile", "bauen": comicheft},
+    "neonstadt": {"label": "Neonstadt: Cyberpunk-Eskalation", "bauen": neonstadt},
+    "elemente": {"label": "Elemente und Werkstoffe", "bauen": elemente},
 }

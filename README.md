@@ -141,11 +141,17 @@ Stilbaustein geht darin unter und das Modell gibt schlicht die Vorlage zurück.
 zementiert aber auch die Neigung dieses *einen* Rauschmusters — gemessen wurde
 aus „grellem Neon" ein violetter Hauch (Abweichung 42 statt 79).
 
-Zwei Abläufe sind mitgeliefert: **Bogen** (38 Bilder, konservativ über Comic
-und Neon und zurück) und **Reise** (48 Bilder: Beleuchtung, Kameraperspektiven,
-Person, Kameraschwenk, Bewegung, Hintergründe, Rollen, Szenen bis in den
-Cyberpunk — und dort bleibend für Neonkleidung, zum Schluss ein Gruppenbild aus
-letzter Ansicht und Startbild).
+Sieben Abläufe sind mitgeliefert:
+
+| Ablauf | Bilder | Worum es geht |
+|---|---|---|
+| **Bogen** | 38 | konservativ über Comic und Neon und zurück |
+| **Reise** | 48 | Licht, Perspektive, Person, Schwenk, Bewegung, Hintergrund, Rollen, Szenen bis Cyberpunk, Neonkleidung, Gruppenbild |
+| **Klassisch** | 21 | nur Mittel des Fotostudios: Lichtführung, Brennweite, Hintergrund, Schwarzweiß |
+| **Zeitreise** | 19 | zwölf Epochen von der Höhle bis in die nahe Zukunft, dazu sechs Aufnahmeverfahren von der Daguerreotypie bis zum Handyfoto |
+| **Comicheft** | 16 | zehn Zeichenstile von Ligne claire bis Pop Art, dann immer weiter ins Heft hinein bis zum Rasterpunkt |
+| **Neonstadt** | 11 | eine Eskalation, jeder Schritt auf dem vorigen: Neon, Regen, Hologramme, Implantate, Drohnenblick, Glitch — und zurück auf die Straße |
+| **Elemente** | 14 | aus Feuer, Wasser, Erde, Luft; dann als Bronze, Marmor, Glas, Holz, Origami, Klemmbaustein; zum Schluss in Bewegung |
 
 Der Ablauf **passt sich dem Startbild an**: bevor die Blöcke gebaut werden,
 sieht sich dasselbe Sprachmodell das Startbild an. Ist dort eine Frau zu sehen,
