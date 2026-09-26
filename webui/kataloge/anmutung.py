@@ -26,6 +26,7 @@ STYLES = {
     "scifi": ("Science-Fiction", "hard science fiction look, brushed metal and composite surfaces, glowing accent edges, cool blue-white palette, believable engineering"),
     "kitsch": ("Kitschig", "unashamedly kitsch, candy colours, glitter and sparkles, rainbow gradients, hearts and stars, glossy greeting-card sheen"),
     "plastik": ("Plastik-Look", "made of glossy injection-moulded plastic like a collectible toy figure, smooth rounded edges, visible mould seams, saturated toy colours"),
+    "schillernd": ("Schillernd", "iridescent holographic look, rainbow sheen sliding across every surface, oil-slick colour shift, prismatic highlights, mirror-bright foil and chrome, wet-looking reflective fabric"),
 }
 
 
@@ -148,6 +149,7 @@ PALETTEN = {
     "erdig":      ("Erdig", "an earthy palette, ochre umber moss and sand, warm muted natural tones"),
     "kalt":       ("Kühl", "a cold palette, steel blue slate and cyan, no warm tones at all"),
     "warm":       ("Warm", "a warm palette, amber terracotta and deep red, sunlit and glowing"),
+    "irisierend": ("Irisierend", "an iridescent palette, colours shifting through the spectrum with the angle, oil-slick greens violets and cyans over a bright base"),
 }
 
 

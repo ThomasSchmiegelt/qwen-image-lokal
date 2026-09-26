@@ -190,3 +190,11 @@
 /* Der umgekehrte Weg: aus einem Bild einen Prompt. Steht beim Freitext,
    weil es dieselbe Frage von der anderen Seite beantwortet. */
 .ableiten { margin: 10px 0 14px; padding-top: 10px; border-top: 1px solid #262b36; }
+
+/* Projektwahl im Kopf: das Projekt bestimmt, wohin die Bilder gehen und
+   welche die Galerie zeigt. */
+.projektleiste { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.projektleiste label { margin: 0; color: var(--muted); }
+.projektleiste select { width: auto; min-width: 9em; padding: 4px 6px; font-size: 12px; }
+.projektleiste a { color: var(--muted); }
+.projektleiste a:hover { color: var(--accent); }

@@ -68,6 +68,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
     $("chatNote").textContent = "Freitext, deutsch. " + info.chat.model
       + " übersetzt und stellt die Regler unten ein. Erzeugt wird erst auf deinen Klick.";
   }
+  zeigeProjekte(info.projekte, info.projekt);
   fill("effect", EFFECTS); fill("form", FORMS);
   AXIS_OFF = info.axis_off || "-";
   // Alle Achsenfelder fuellt subjectChanged() aus info.subjects[].axes --
@@ -719,6 +720,64 @@ async function promptAusBild(bild) {
 $("chat").addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
 });
+
+// ---------- Projekte ----------
+// Ein Projekt bestimmt, wohin neue Bilder gehen und welche die Galerie zeigt.
+// "Allgemein" ist das alte outputs/ -- die Bilder von frueher bleiben dort.
+function zeigeProjekte(liste, aktiv) {
+  if (!Array.isArray(liste)) return meldeLuecke("projekt");
+  $("projekt").innerHTML = liste.map(x =>
+    `<option value="${x.key}"${x.key === aktiv ? " selected" : ""}>`
+    + `${esc(x.label)} (${x.bilder})</option>`).join("");
+  const eigenes = aktiv !== "allgemein";
+  $("projektUm").style.display = eigenes ? "inline" : "none";
+  $("projektWeg").style.display = eigenes ? "inline" : "none";
+}
+
+async function projektTun(rumpf) {
+  const res = await fetch("/api/projekt", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(rumpf)
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    say(err.error || "Das hat nicht geklappt.", "err");
+    return null;
+  }
+  const info = await fetch("/api/info").then(r => r.json()).catch(() => null);
+  if (info) zeigeProjekte(info.projekte, info.projekt);
+  loadGallery();
+  return res.json();
+}
+
+$("projekt").onchange = async () => {
+  await projektTun({tu: "waehlen", key: $("projekt").value});
+  say(`Projekt gewechselt: ${$("projekt").selectedOptions[0].textContent}`, "ok");
+};
+
+$("projektNeu").onclick = async e => {
+  e.preventDefault();
+  const name = prompt("Wie soll das Projekt heißen?");
+  if (!name) return;
+  await projektTun({tu: "anlegen", name});
+  say(`Projekt „${name}“ angelegt und ausgewählt.`, "ok");
+};
+
+$("projektUm").onclick = async e => {
+  e.preventDefault();
+  const alt = $("projekt").selectedOptions[0].textContent.replace(/ \(\d+\)$/, "");
+  const name = prompt("Neuer Name:", alt);
+  if (!name) return;
+  await projektTun({tu: "umbenennen", key: $("projekt").value, name});
+};
+
+$("projektWeg").onclick = async e => {
+  e.preventDefault();
+  const wahl = $("projekt").selectedOptions[0];
+  if (!confirm(`„${wahl.textContent}“ mit allen Bildern endgültig löschen?`)) return;
+  const erg = await projektTun({tu: "loeschen", key: $("projekt").value});
+  if (erg) say("Projekt gelöscht.", "ok");
+};
 
 // ---------- Fortschritt ----------
 // Welcher Auftrag gerade laeuft -- am Wechsel erkennt die Seite, dass der

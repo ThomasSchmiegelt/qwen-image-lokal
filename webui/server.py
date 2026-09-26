@@ -27,9 +27,10 @@ from engine import (  # noqa: E402
 )
 # Die eigentliche Arbeit steht in auftraege.py -- hier nur Routen und Start.
 from auftraege import (  # noqa: E402
-    OUTPUTS, current, decode, einreihen, engine, entfernen, leeren, uebersicht,
+    current, decode, einreihen, engine, entfernen, leeren, uebersicht,
     verschieben,
 )
+import projekte  # noqa: E402
 import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
@@ -46,7 +47,6 @@ SAFE_NAME = re.compile(r"[\w.\-]+\.(png|jsonl|mp4)")
 # Fester Befehl, keine Shell: der Aufruf kann nur eine Datei aus outputs/ oeffnen.
 GIMP_CMD = os.environ.get("QWEN_GIMP", "gimp")
 
-os.makedirs(OUTPUTS, exist_ok=True)
 
 
 def _source_state() -> dict[str, str]:
@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
         """Pfad in outputs/ -- oder None, wenn der Name nicht sauber ist."""
         if not SAFE_NAME.fullmatch(name):
             return None
-        path = os.path.join(OUTPUTS, name)
+        path = os.path.join(projekte.bilder(projekte.aktiv()), name)
         return path if os.path.isfile(path) else None
 
     # -- Routen -----------------------------------------------------------
@@ -174,6 +174,7 @@ class Handler(BaseHTTPRequestHandler):
             status["nummer"] = current["nummer"]
             status["titel"] = current["titel"]
             status.update(uebersicht())
+            status["projekt"] = projekte.aktiv()
             # Solange noch etwas wartet, ist die Oberflaeche nicht fertig --
             # sonst hoerte sie nach dem ersten Auftrag auf nachzufragen.
             status["busy"] = status["busy"] or bool(status["wartend"])
@@ -193,6 +194,8 @@ class Handler(BaseHTTPRequestHandler):
             changed = sorted(k for k in set(now) | set(SOURCE_AT_START)
                              if now.get(k) != SOURCE_AT_START.get(k))
             info["source"] = {"stale": bool(changed), "changed": changed}
+            info["projekte"] = projekte.liste()
+            info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
                                 for k, v in demo.KULISSEN.items()]
@@ -206,7 +209,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/gallery":
             files = sorted(
-                (f for f in os.listdir(OUTPUTS) if f.endswith(".png")), reverse=True
+                (f for f in os.listdir(projekte.bilder(projekte.aktiv()))
+                 if f.endswith(".png")), reverse=True
             )
             return self._json(200, {"files": files[:120]})
 
@@ -268,6 +272,37 @@ class Handler(BaseHTTPRequestHandler):
             weg = verschieben(int(params.get("nummer") or 0),
                               -1 if params.get("richtung") == "hoch" else 1)
             return self._json(200 if weg else 404, {"ok": weg})
+
+        if path == "/api/projekt":
+            # Anlegen, wechseln, umbenennen, loeschen. Alles am eigenen
+            # Rechner: ein Projekt zu loeschen nimmt Bilder mit.
+            if not self._nur_hier():
+                return self._json(403, {"error": "Nur vom Rechner des Servers aus"})
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            was = params.get("tu")
+            schluessel = str(params.get("key") or "")
+            if was == "anlegen":
+                neu_p = projekte.anlegen(str(params.get("name") or ""))
+                return self._json(200, {"ok": True, "projekt": neu_p,
+                                        "aktiv": projekte.aktiv()})
+            if was == "waehlen":
+                gut = projekte.waehlen(schluessel)
+                return self._json(200 if gut else 404,
+                                  {"ok": gut, "aktiv": projekte.aktiv()})
+            if was == "umbenennen":
+                gut = projekte.umbenennen(schluessel, str(params.get("name") or ""))
+                return self._json(200 if gut else 404, {"ok": gut})
+            if was == "loeschen":
+                # Ein laufender Auftrag schreibt womoeglich gerade dorthin.
+                if engine.lock.locked():
+                    return self._json(409, {"error":
+                        "Erst abwarten: es laeuft ein Auftrag"})
+                gut = projekte.loeschen(schluessel)
+                return self._json(200 if gut else 404,
+                                  {"ok": gut, "aktiv": projekte.aktiv()})
+            return self._json(400, {"error": "unbekannte Aktion"})
 
         if path == "/api/bild-lesen":
             # Die kurze Fassung: wer ist zu sehen. Fuer den Ablauf-Reiter, wo
@@ -422,7 +457,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Qwen-Image WebUI laeuft auf http://{HOST}:{PORT}  (Strg+C zum Beenden)")
-    print(f"Bilder landen in {OUTPUTS}")
+    print(f"Bilder landen in {projekte.bilder(projekte.aktiv())}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

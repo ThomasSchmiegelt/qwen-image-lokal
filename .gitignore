@@ -4,6 +4,9 @@ qwen_bild/
 # Erzeugte Bilder bleiben lokal
 outputs/
 
+# Projekte samt ihrer Bilder bleiben lokal
+projekte/
+
 # Eigene Vorlagen und was daraus entsteht bleiben ebenfalls lokal
 basis/
 demo/bilder/

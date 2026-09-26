@@ -10,7 +10,7 @@ Auftraege hintereinander abschicken, ohne auf das Ende zu warten -- gleichzeitig
 rechnen kann die eine Grafikkarte ohnehin nicht.
 
 Was hier oeffentlich heisst, benutzt der Server: `engine`, `current`,
-`OUTPUTS`, `decode`, `einreihen`, `entfernen`, `uebersicht`.
+`decode`, `einreihen`, `entfernen`, `uebersicht`, `ziel`.
 """
 
 import base64
@@ -31,10 +31,19 @@ from engine import Engine  # noqa: E402
 import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
+import projekte  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTPUTS = os.path.join(ROOT, "outputs")
-os.makedirs(OUTPUTS, exist_ok=True)
+
+# Wohin die Bilder gehen, entscheidet das Projekt. Ein Auftrag merkt sich beim
+# Einreihen, zu welchem er gehoert -- wer waehrenddessen umschaltet, soll seine
+# Bilder nicht ploetzlich woanders wiederfinden.
+_projekt_des_laufs = projekte.ALLGEMEIN
+
+
+def ziel() -> str:
+    """Das Bildverzeichnis des gerade laufenden Auftrags."""
+    return projekte.bilder(_projekt_des_laufs)
 
 
 engine = Engine()
@@ -72,7 +81,8 @@ def einreihen(art: str, params: dict) -> dict:
     """Haengt einen Auftrag an und weckt den Arbeiter. Antwortet sofort."""
     auftrag = {"nummer": next(_zaehler), "art": art, "params": params,
                "titel": _titel(art, params), "zustand": "wartet",
-               "angelegt": time.time(), "bilder": 0, "fehler": None}
+               "angelegt": time.time(), "bilder": 0, "fehler": None,
+               "projekt": projekte.aktiv()}
     with _wecker:
         warteschlange.append(auftrag)
         _wecker.notify()
@@ -116,7 +126,8 @@ def _kurz(auftrag: dict) -> dict:
     """Was die Oberflaeche ueber einen Auftrag wissen muss -- ohne die
     Referenzbilder, die als Datenzeilen im Auftrag stecken."""
     return {k: auftrag[k] for k in
-            ("nummer", "art", "titel", "zustand", "angelegt", "bilder", "fehler")}
+            ("nummer", "art", "titel", "zustand", "angelegt", "bilder",
+             "fehler", "projekt")}
 
 
 def uebersicht() -> dict:
@@ -127,8 +138,10 @@ def uebersicht() -> dict:
 
 def _abarbeiten(auftrag: dict) -> None:
     """Einen Auftrag ausfuehren. Nur der Arbeiter ruft das auf."""
+    global _projekt_des_laufs
     engine.lock.acquire()
     try:
+        _projekt_des_laufs = auftrag.get("projekt") or projekte.ALLGEMEIN
         auftrag["zustand"] = "laeuft"
         engine.aborted = False
         current.update(files=[], error=None, translated={}, video=None,
@@ -185,7 +198,7 @@ def _save(meta: dict, image: Image.Image, stamp: str, kind: str,
                 "scenario", "material"):
         if meta.get(key) is not None:
             info.add_text(f"qwen_{key}", str(meta[key]))
-    image.save(os.path.join(OUTPUTS, name), pnginfo=info)
+    image.save(os.path.join(ziel(), name), pnginfo=info)
     return name
 
 
@@ -269,7 +282,7 @@ def run_job(params: dict) -> None:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         kind = params.get("mode") or ("edit" if refs else "t2i")
 
-        manifest = os.path.join(OUTPUTS, f"{stamp}_{kind}.jsonl") if kind == "varianten" else None
+        manifest = os.path.join(ziel(), f"{stamp}_{kind}.jsonl") if kind == "varianten" else None
 
         def on_image(meta, image):
             name = _save(meta, image, stamp, kind)
@@ -343,7 +356,7 @@ def run_demo(params: dict) -> None:
                 raise Abgebrochen()
 
         def laden(datei):
-            bild = Image.open(os.path.join(OUTPUTS, datei))
+            bild = Image.open(os.path.join(ziel(), datei))
             bild.load()
             return bild
 
@@ -371,7 +384,7 @@ def run_demo(params: dict) -> None:
         # bei einer Frau), und die Beschreibung der Person schaerft danach
         # jede Bewahrungsklausel.
         current["stage"] = "Startbild wird gelesen"
-        with open(os.path.join(OUTPUTS, basis_datei), "rb") as fh:
+        with open(os.path.join(ziel(), basis_datei), "rb") as fh:
             gelesen = chat.bild_lesen(fh.read())
         current["gelesen"] = gelesen
 
@@ -448,8 +461,8 @@ def run_demo(params: dict) -> None:
         if demo.available()["video"]:
             pruefe()
             current["stage"] = "Video wird gebaut"
-            video_ziel = os.path.join(OUTPUTS, f"{stamp}_demonstration.mp4")
-            demo.baue_video([os.path.join(OUTPUTS, n) for n in reihenfolge], video_ziel,
+            video_ziel = os.path.join(ziel(), f"{stamp}_demonstration.mp4")
+            demo.baue_video([os.path.join(ziel(), n) for n in reihenfolge], video_ziel,
                             gesamtdauer=float(params.get("duration") or 20.0))
             current["video"] = os.path.basename(video_ziel)
 

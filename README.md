@@ -78,12 +78,18 @@ Umgebungen und Blickwinkel angeboten werden. „Auf Stoßstangenhöhe von hinten
 passt zu einem Auto und zu nichts sonst, ein Gegenstand will „auf der Werkbank"
 und „freigestellt mit Schlagschatten".
 
-Sechs Achsen — Farbe, Umgebung, Licht, Kameraart, Blickwinkel und Werkstoff
-(10 Materialien von Aluminium bis Gusseisen) — lassen sich je einzeln auf
-**würfeln**, **unverändert lassen** oder einen festen Wert stellen. Der
-Werkstoff steht standardmäßig aus und wird bei Personen nie gewürfelt.
-So entsteht wahlweise breite Streuung oder eine Serie, in der sich nur ein
-einziges Merkmal ändert. Was umgefärbt wird, beschreibst du selbst
+Acht Achsen — Farbe, **Farbstimmung**, **Stil**, Umgebung, Licht, Kameraart,
+Blickwinkel und Werkstoff (10 Materialien von Aluminium bis Gusseisen) — lassen
+sich je einzeln auf **würfeln**, **unverändert lassen** oder einen festen Wert
+stellen. Der Werkstoff steht standardmäßig aus und wird bei Personen nie
+gewürfelt. So entsteht wahlweise breite Streuung oder eine Serie, in der sich
+nur ein einziges Merkmal ändert — oder umgekehrt: Stil fest auf *Comic*, alles
+andere gewürfelt, dann bleibt der Zeichenstil und der Rest wechselt.
+
+Die **Farbstimmung** ist etwas anderes als die Farbe: sie färbt das ganze Bild
+(knallig, pastell, neon, kitschbunt, metallic, irisierend, monochrom, erdig,
+kühl, warm) und braucht kein Ziel. Ohne sie bestimmen Umgebung und Licht die
+Palette allein, und die sind erdlastig — daher der frühere Braunstich. Was umgefärbt wird, beschreibst du selbst
 (`the vehicle body`, `the person's coat`), ebenso was unverändert bleiben muss.
 Neben den Bildern entsteht ein `*.jsonl`-Manifest mit einer Zeile je Variante.
 
@@ -91,7 +97,24 @@ Neben den Bildern entsteht ein `*.jsonl`-Manifest mit einer Zeile je Variante.
 oder Lichtstimmung — der Reihe nach oder gewürfelt. Optional derselbe Seed für
 alle Bilder, was Kleidung, Umgebung und Bildaufbau stabil hält.
 
-**Voreinstellungen** in `webui/kataloge/`, frei erweiterbar: 21 Stile,
+**Warteschlange.** Aufträge werden eingereiht statt abgewiesen: abschicken,
+weiterarbeiten, den nächsten anhängen. Ein einziger Arbeitsfaden nimmt die
+Liste der Reihe nach ab — gleichzeitig rechnen kann die eine Grafikkarte
+ohnehin nicht. Wartende lassen sich verschieben und einzeln verwerfen, der
+laufende wird abgebrochen.
+
+**Projekte.** Jedes Vorhaben bekommt sein eigenes Verzeichnis unter
+`projekte/<name>/`: eigene Bilder, eigene Galerie. Ein Auftrag merkt sich beim
+Einreihen, zu welchem Projekt er gehört — wer zwischendurch umschaltet, findet
+seine Bilder trotzdem am richtigen Ort. Das Projekt **Allgemein** zeigt weiter
+auf das alte `outputs/`, dort liegende Bilder müssen nicht umziehen.
+
+**Prompt aus einem Bild.** Der umgekehrte Weg: ein Bild wählen, das
+Sprachmodell beschreibt es als Prompt und stellt Stil, Licht und Objektiv
+gleich passend ein (gemessen 5–9 s). Im Ablauf-Reiter wird ein hochgeladenes
+Startbild sofort kurz beschrieben; der Text lässt sich vor dem Start ändern.
+
+**Voreinstellungen** in `webui/kataloge/`, frei erweiterbar: 22 Stile,
 10 Lichtstimmungen, 11 Kameraperspektiven, 10 Blickwinkel, 8 Vorlagen
 (Porträt, Logo, Buchumschlag, Verpackung, Icon, Web- und App-Muster) sowie
 17 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
@@ -300,12 +323,15 @@ scheiterte erst viel später im Server mit `KeyError: ''`.
 
 ```
 start.sh              Server starten, Browser öffnen
-webui/server.py       HTTP-Server, nur Standardbibliothek
+webui/server.py       HTTP-Server, nur Routen und Start
+webui/auftraege.py    Warteschlange und Abwicklung eines Auftrags
+webui/projekte.py     getrennte Ablagen, Projektverzeichnisse
 webui/engine.py       zweiphasige Pipeline
 webui/kataloge/       Voreinstellungen: anmutung.py (Stil, Licht, Kamera,
                       Farbe), motiv.py (Umgebung, Blickwinkel, Werkstoff),
                       vorlage.py (Prompt-Vorlagen, Effekte, Gruppen)
-webui/chat.py         Freitext über Ollama deuten und prüfen
+webui/sprache/        Ollama: deuten.py (Freitext), uebersetzen.py,
+                      sehen.py (Bilder lesen), ollama.py (der Aufruf)
 webui/ablauf.py       Abläufe als Blöcke, mitgelieferte Folgen
 webui/demo.py         Startbild-Vorgabe und Videobau
 webui/pruefung.py     Oberfläche gegen den Server prüfen
