@@ -22,6 +22,10 @@ STYLES = {
     "retro": ("Retro 80er", "1980s retro aesthetic, chrome and magenta, grainy analog film, VHS color fringing"),
     "maerchen": ("Märchenhaft", "storybook fairytale illustration, warm glow, whimsical detail, enchanted atmosphere"),
     "minimal": ("Minimalistisch", "minimalist composition, large negative space, few elements, calm restrained palette"),
+    "manga": ("Manga", "black and white manga artwork, crisp ink linework, screentone shading, dynamic speed lines, expressive panel composition"),
+    "scifi": ("Science-Fiction", "hard science fiction look, brushed metal and composite surfaces, glowing accent edges, cool blue-white palette, believable engineering"),
+    "kitsch": ("Kitschig", "unashamedly kitsch, candy colours, glitter and sparkles, rainbow gradients, hearts and stars, glossy greeting-card sheen"),
+    "plastik": ("Plastik-Look", "made of glossy injection-moulded plastic like a collectible toy figure, smooth rounded edges, visible mould seams, saturated toy colours"),
 }
 
 LIGHTS = {
@@ -93,11 +97,16 @@ def catalog() -> dict:
         "cameras": [{"key": k, "label": v[0]} for k, v in CAMERAS.items()],
         "views": [{"key": k, "label": v[0]} for k, v in VIEWS.items()],
         "paints": [{"key": k, "label": v[0], "phrase": v[1]} for k, v in PAINTS.items()],
+        "paletten": [{"key": k, "label": v[0]} for k, v in PALETTEN.items()],
         "materials": [{"key": k, "label": v[0]} for k, v in MATERIALS.items()],
         "subjects": [
             {"key": k, "label": v["label"], "target": v["target"],
              "scenes": [{"key": a, "label": b[0]} for a, b in v["scenes"].items()],
-             "angles": [{"key": a, "label": b[0]} for a, b in v["angles"].items()]}
+             "angles": [{"key": a, "label": b[0]} for a, b in v["angles"].items()],
+             # Genau die Achsen, aus denen der Server wirklich wuerfelt --
+             # damit die Seite nichts anderes anbietet, als hinterher gilt.
+             "axes": {name: [{"key": a, "label": b[0]} for a, b in tabelle.items()]
+                      for name, tabelle in variant_axes(k).items()}}
             for k, v in SUBJECT_KINDS.items()
         ],
         "devices": [{"key": k, "label": v[0]} for k, v in DEVICES.items()],
@@ -322,6 +331,34 @@ PAINTS = {
     "dunkelblau": ("Dunkelblau", "deep navy blue"),
     "bordeaux":   ("Bordeaux", "dark burgundy red"),
     "matt":       ("Mattlack", "a matte grey wrap with no gloss"),
+    # Die Liste war gedeckt bis zur Langeweile -- kein Braun zwar, aber auch
+    # nichts, was knallt. Diese fuenf sind ausdruecklich grell.
+    "pink":       ("Pink", "vivid hot pink"),
+    "tuerkis":    ("Türkis", "bright turquoise"),
+    "limette":    ("Limettengrün", "electric lime green"),
+    "lila":       ("Lila", "vivid purple"),
+    "knallorange": ("Knallorange", "glowing neon orange"),
+    "neon":       ("Neon", "a fluorescent neon finish that looks lit from within"),
+    "neongruen":  ("Neongrün", "fluorescent neon green"),
+    "neonpink":   ("Neonpink", "fluorescent neon pink"),
+}
+
+
+# Die Farbstimmung des ganzen Bildes -- etwas anderes als PAINTS, das immer nur
+# einen benannten Gegenstand umlackiert und ohne Ziel sogar ganz entfaellt.
+# Ohne diese Achse bestimmen Umgebung und Licht die Palette allein, und die
+# sind erdlastig: Schotter, Feldweg, Wald, Baustelle, dazu Filmkorn und flauer
+# Ueberwachungskontrast. Daher der Braunstich.
+PALETTEN = {
+    "knallig":    ("Knallig", "a loud saturated colour palette, pure strong hues, high chroma, nothing muted"),
+    "pastell":    ("Pastell", "a soft pastel palette, pale tints, milky light, gentle low-contrast colours"),
+    "neon":       ("Neon", "a neon palette, glowing magenta cyan and acid green against deep darks"),
+    "kitschbunt": ("Kitschbunt", "a gaudy kitsch palette, candy pink lemon yellow and sky blue all at once, rainbow sparkle"),
+    "metallic":   ("Metallic", "a metallic palette, polished chrome silver and gold, specular highlights, cool reflective sheen"),
+    "monochrom":  ("Monochrom", "a monochrome palette, a single hue in many values, almost no other colour"),
+    "erdig":      ("Erdig", "an earthy palette, ochre umber moss and sand, warm muted natural tones"),
+    "kalt":       ("Kühl", "a cold palette, steel blue slate and cyan, no warm tones at all"),
+    "warm":       ("Warm", "a warm palette, amber terracotta and deep red, sunlit and glowing"),
 }
 
 VEHICLE_SCENES = {
@@ -486,6 +523,7 @@ OBJECT_SCENES = {
     "og_draussen": ("Im Freien", "outdoors on a stone wall in daylight"),
     "og_labor":   ("Labor", "on a clean white laboratory bench"),
     "og_einsatz": ("Im Einsatz", "in its actual place of use, installed and connected"),
+    "og_scifi":   ("Raumstation", "mounted in a bracket aboard a space station, metal bulkhead behind it"),
 }
 
 OBJECT_ANGLES = {
@@ -511,6 +549,9 @@ PERSON_SCENES = {
     "ps_wald":    ("Wald", "on a forest path"),
     "ps_bahnhof": ("Bahnhof", "in a railway station concourse"),
     "ps_werkstatt": ("Werkstatt", "in a workshop"),
+    "ps_schlaf":  ("Schlafzimmer", "in a bedroom, soft morning light through the curtains, rumpled bedding"),
+    "ps_raumschiff": ("Raumschiffbrücke", "on the bridge of a spaceship, glowing consoles and a wide viewport onto stars"),
+    "ps_labor":   ("Labor", "in a laboratory behind glass walls, cold even light, instruments on the benches"),
 }
 
 PERSON_ANGLES = {
@@ -556,7 +597,8 @@ ANGLES = {**VEHICLE_ANGLES, **OBJECT_ANGLES, **PERSON_ANGLES}
 def variant_axes(subject: str) -> dict:
     """Die Tabellen, aus denen fuer diese Motivart gewuerfelt wird."""
     kind = SUBJECT_KINDS.get(subject) or SUBJECT_KINDS["fahrzeug"]
-    achsen = {"paint": PAINTS, "scene": kind["scenes"], "light": VARIANT_LIGHTS,
+    achsen = {"paint": PAINTS, "palette": PALETTEN, "style": STYLES,
+              "scene": kind["scenes"], "light": VARIANT_LIGHTS,
               "device": DEVICES, "angle": kind["angles"]}
     # Eine gewuerfelte "aus Gusseisen"-Person waere Unsinn. Von Hand festgelegt
     # geht der Werkstoff weiterhin, nur gewuerfelt wird er hier nicht.

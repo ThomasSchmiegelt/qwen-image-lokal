@@ -31,10 +31,12 @@
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-  .chatbar { display: flex; gap: 6px; }
+  .chatbar { display: flex; gap: 6px; align-items: stretch; }
   .chatbar input { flex: 1; }
+  .chatbar textarea { flex: 1; resize: vertical; min-height: 78px; }
   .chatbar button {
-    width: 40px; border: 0; border-radius: 7px; background: var(--accent);
+    width: 40px; align-self: stretch; border: 0; border-radius: 7px;
+    background: var(--accent);
     color: #fff; font-size: 17px; cursor: pointer;
   }
   .chatbar button:disabled { background: #39404f; cursor: default; }
@@ -162,6 +164,15 @@
   @keyframes pulse { 50% { opacity: .35; } }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+  .kachel { position: relative; margin: 0; }
+  .kachel b {
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
+    line-height: 17px; text-align: center; border-radius: 4px; cursor: pointer;
+    background: rgba(20,22,28,.78); color: #e7eaf0; font-weight: 400;
+    opacity: 0; transition: opacity .12s;
+  }
+  .kachel:hover b { opacity: 1; }
+  .kachel b:hover { background: #a33c3c; }
   .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); }
   .grid img.sel { border-color: var(--accent); }
 </style>
@@ -177,8 +188,9 @@
   <section class="panel">
     <div id="chatBox" style="display:none">
       <div class="chatbar">
-        <input id="chat" placeholder="Sag einfach, was du willst …">
-        <button id="chatGo" title="Verstehen und loslegen">&rarr;</button>
+        <textarea id="chat" rows="4"
+          placeholder="Sag einfach, was du willst …"></textarea>
+        <button id="chatGo" title="Verstehen und loslegen (Strg+Eingabe)">&rarr;</button>
       </div>
       <p class="hint" id="chatNote"></p>
     </div>
@@ -198,6 +210,9 @@
       <div class="thumbs" id="thumbs"></div>
       <p class="hint" id="uploadHint"></p>
       <p class="hint" id="refNote"></p>
+      <p class="hint" id="ableitenZeile" style="display:none">
+        <a href="#" id="ableiten">Prompt aus dem ersten Bild ableiten</a>
+        — beschreibt das Bild und stellt Stil, Licht und Objektiv passend ein.</p>
     </div>
 
     <label for="prompt">Prompt</label>
@@ -292,6 +307,17 @@
 
       <div class="axis" style="margin-top:12px">
         <div>
+          <label for="palette">Farbstimmung</label>
+          <select id="palette"></select>
+        </div>
+        <div>
+          <label for="vstyle">Stil</label>
+          <select id="vstyle"></select>
+        </div>
+      </div>
+
+      <div class="axis">
+        <div>
           <label for="scene">Umgebung</label>
           <select id="scene"></select>
         </div>
@@ -320,7 +346,11 @@
 
       <p class="hint"><b>würfeln</b> ändert die Achse bei jedem Bild.
         <b>unverändert lassen</b> rührt sie gar nicht an. Ein fester Wert gilt
-        für die ganze Serie. Deutsch ist überall in Ordnung.</p>
+        für die ganze Serie. Deutsch ist überall in Ordnung.<br>
+        Beispiel: Stil fest auf <b>Comic</b>, alles andere auf <b>würfeln</b> —
+        dann bleibt der Zeichenstil, und Umgebung, Licht und Blickwinkel
+        wechseln. Die <b>Farbstimmung</b> färbt anders als die Farbe das ganze
+        Bild und braucht kein Ziel.</p>
     </fieldset>
 
     <fieldset id="boxVorlage">
@@ -440,6 +470,9 @@
     <button id="stop" style="display:none">Abbrechen</button>
     <div class="bar"><i id="fill"></i></div>
     <div id="status">bereit</div>
+    <p class="hint" style="margin-top:14px">
+      <a href="#" id="beenden">Programm beenden</a> — hält den Server an und
+      gibt die Grafikkarte frei.</p>
   </section>
 
   <section class="panel">
@@ -452,7 +485,7 @@
     </div>
     <div class="mosaic" id="series"></div>
 
-    <div class="head"><h2>Alle Bilder</h2></div>
+    <div class="head"><h2>Alle Bilder</h2><span class="hint">× löscht</span></div>
     <div class="grid" id="gallery"></div>
   </section>
 </main>
@@ -527,15 +560,13 @@ fetch("/api/info").then(r => r.json()).then(info => {
   }
   fill("effect", EFFECTS); fill("form", FORMS);
   AXIS_OFF = info.axis_off || "-";
-  fillAxis("paint", info.paints); fillAxis("device", info.devices);
-  fillAxis("vlight", info.lights);
-  // "scene" und "angle" fuellt subjectChanged() aus den Listen der Motivart.
-  fillAxis("material", info.materials);
-  $("material").value = AXIS_OFF;   // Werkstoff nur auf Wunsch
+  // Alle Achsenfelder fuellt subjectChanged() aus info.subjects[].axes --
+  // genau der Liste, aus der der Server auch wuerfelt.
   SUBJECTS = info.subjects;
   $("subject").innerHTML = SUBJECTS.map(
     x => `<option value="${x.key}">${esc(x.label)}</option>`).join("");
   subjectChanged();
+  $("material").value = AXIS_OFF;   // Werkstoff nur auf Wunsch
   fill("scenario", info.scenarios);
   ACTIONS = info.group_actions;
   $("action").innerHTML = ACTIONS.map(
@@ -616,11 +647,31 @@ $("sweep").addEventListener("change", sweepChanged);
 $("lockSeed").addEventListener("change", sweepChanged);
 
 // Umgebung und Blickwinkel haengen von der Motivart ab.
+// Welches Auswahlfeld welche Achse zeigt. Die Namen rechts sind die des
+// Servers (variant_axes), links stehen die Felder der Seite.
+const ACHSENFELDER = {paint: "paint", palette: "palette", vstyle: "style",
+                      scene: "scene", vlight: "light", device: "device",
+                      angle: "angle", material: "material"};
+
 function subjectChanged() {
   const k = SUBJECTS.find(x => x.key === $("subject").value) || SUBJECTS[0];
   if (!k) return;
-  fillAxis("scene", k.scenes);
-  fillAxis("angle", k.angles);
+  const achsen = k.axes || {};
+  Object.keys(ACHSENFELDER).forEach(id => {
+    const liste = achsen[ACHSENFELDER[id]];
+    const vorher = $(id).value;
+    // Nicht jede Motivart kennt jede Achse -- ein gewuerfelter Werkstoff
+    // ergibt bei einer Person keinen Sinn, deshalb fehlt er dort.
+    if (!Array.isArray(liste)) {
+      $(id).innerHTML = `<option value="${AXIS_OFF}">hier nicht vorgesehen</option>`;
+      $(id).disabled = true;
+      return;
+    }
+    $(id).disabled = false;
+    fillAxis(id, liste);
+    // Die bisherige Wahl behalten, wenn es sie hier auch gibt.
+    if (vorher === AXIS_OFF || liste.some(i => i.key === vorher)) $(id).value = vorher;
+  });
   $("paintTarget").placeholder = "z. B. " + k.target;
   paintPreview();
 }
@@ -655,6 +706,7 @@ function setMode(next) {
   $("followBox").style.display = cfg.refs ? "flex" : "none";
   $("prompt").placeholder = cfg.ph;
   if (!$("go").classList.contains("busy")) $("go").textContent = cfg.label;
+  $("ableitenZeile").style.display = cfg.refs ? "block" : "none";
   $("uploadHint").textContent = mode === "gruppe" ? (aktion().hint || "")
                                 : (cfg.hint ? cfg.hint(maxRefs) : "");
   if (cfg.sweep !== undefined) $("sweep").value = cfg.sweep;
@@ -680,10 +732,12 @@ function setMode(next) {
   groupSizeSichtbar();
   paintPreview();
   $("variantenBox").style.display = istVarianten ? "block" : "none";
-  // Das Licht steuert im Varianten-Modus die Achse, nicht dieser Regler.
-  $("light").disabled = istVarianten;
-  $("light").title = istVarianten
-    ? "Im Varianten-Modus zählt die Licht-Achse weiter unten" : "";
+  // Licht und Stil steuern im Varianten-Modus die Achsen, nicht diese Regler.
+  [["light", "Licht"], ["style", "Stil"]].forEach(([id, wort]) => {
+    $(id).disabled = istVarianten;
+    $(id).title = istVarianten
+      ? `Im Varianten-Modus zählt die ${wort}-Achse weiter unten` : "";
+  });
   $("tplHint").style.display = tpl && next !== "varianten" ? "block" : "none";
   if (tpl) $("tplHint").textContent = "Der Server setzt automatisch davor: „"
     + tpl.replace("{extra}", "…").replace("{n}", refs.length || "N") + "“";
@@ -963,7 +1017,10 @@ function buttonState(state) {
 async function start() {
   const prompt = $("prompt").value.trim();
   const need = mode === "gruppe" ? aktion().min : MODES[mode].refs;
-  if (!prompt && !templates[mode]) return say("Bitte einen Prompt eingeben.", "err");
+  // Ein Effekt bringt seine eigene Anweisung mit -- /upscale, /removebg und
+  // die uebrigen brauchen kein Wort Eingabe. Der Server sieht das genauso.
+  if (!prompt && !templates[mode] && !$("effect").value)
+    return say("Bitte einen Prompt eingeben.", "err");
   if (refs.length < need) return say(`Bitte ${need} Referenzbild(er) hochladen.`, "err");
   if (mode === "varianten" && $("paint").value !== AXIS_OFF && !$("paintTarget").value.trim()) {
     paintPreview();
@@ -985,10 +1042,14 @@ async function start() {
     view: $("view").value, effect: $("effect").value, form: $("form").value,
     keep: $("keep").value, action: $("action").value, scenario: $("scenario").value,
     group_size: parseInt($("groupSize").value, 10) || 2,
-    paint: $("paint").value, scene: $("scene").value,
+    paint: $("paint").value, palette: $("palette").value,
+    scene: $("scene").value,
     angle: $("angle").value, device: $("device").value,
     material: $("material").value, subject: $("subject").value,
-    style: $("style").value, camera: $("camera").value,
+    camera: $("camera").value,
+    // In den Varianten haben Stil und Licht eigene Achsenfelder, damit sich
+    // beide auf "wuerfeln" stellen lassen.
+    style: mode === "varianten" ? $("vstyle").value : $("style").value,
     light: mode === "varianten" ? $("vlight").value : $("light").value,
     paint_target: $("paintTarget").value,
     true_cfg_scale: parseFloat($("cfg").value),
@@ -1066,7 +1127,38 @@ async function sendChat() {
   setTimeout(() => $("go").classList.remove("ready"), 6000);
 }
 $("chatGo").onclick = sendChat;
-$("chat").addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
+$("beenden").onclick = e => { e.preventDefault(); programmBeenden(); };
+$("ableiten").onclick = e => { e.preventDefault(); promptAusBild(); };
+
+// Rueckwaerts: das hochgeladene Bild ansehen und den Prompt dazu schreiben.
+// Lesen darf nur das Sprachmodell, deshalb geht es nicht waehrend eines
+// Auftrags -- beide wollen dieselbe Grafikkarte.
+async function promptAusBild() {
+  if (!refs.length) return say("Erst ein Referenzbild hochladen.", "err");
+  say("Das Bild wird gelesen …");
+  const res = await fetch("/api/bild-prompt", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({image: refs[0]})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Das Bild liess sich nicht lesen.", "err");
+  }
+  const g = await res.json();
+  $("prompt").value = g.prompt;
+  if (g.stil) $("style").value = g.stil;
+  if (g.licht) $("light").value = g.licht;
+  if (g.kamera) $("camera").value = g.kamera;
+  const gesetzt = [["Stil", g.stil], ["Licht", g.licht], ["Objektiv", g.kamera]]
+    .filter(x => x[1]).map(x => x[0]).join(", ");
+  say("Prompt aus dem Bild abgeleitet"
+      + (gesetzt ? ` — ${gesetzt} mitgestellt.` : ".") + " Bitte gegenlesen.", "ok");
+}
+// Mehrzeilig: Eingabe macht einen Umbruch, abgeschickt wird mit Strg+Eingabe
+// oder dem Pfeil daneben.
+$("chat").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
+});
 
 // ---------- Fortschritt ----------
 function poll() {
@@ -1199,9 +1291,42 @@ async function openInGimp(file) {
 }
 
 async function loadGallery() {
-  const {files} = await fetch("/api/gallery").then(r => r.json());
-  $("gallery").innerHTML = files.map(f =>
-    `<img src="/outputs/${f}" title="${f}" alt="${f}" onclick="show('${f}')">`).join("");
+  const antwort = await fetch("/api/gallery").then(r => r.json()).catch(() => null);
+  if (!antwort) return;
+  $("gallery").innerHTML = antwort.files.map(f =>
+    `<figure class="kachel"><img src="/outputs/${f}" title="${f}" alt="${f}"
+       onclick="show('${f}')"><b onclick="loeschen('${f}')" title="Löschen">×</b></figure>`
+  ).join("");
+}
+
+// Endgueltig, ohne Papierkorb -- deshalb die Rueckfrage.
+async function loeschen(datei) {
+  if (!confirm(`„${datei}“ wirklich löschen?`)) return;
+  const res = await fetch("/api/delete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({file: datei})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Löschen ist fehlgeschlagen.", "err");
+  }
+  if ($("stage").dataset.file === datei) {
+    $("stage").dataset.file = "";
+    $("stage").innerHTML = "<p>Bild gelöscht.</p>";
+    $("meta").innerHTML = "";
+  }
+  say(`${datei} gelöscht.`, "ok");
+  loadGallery();
+}
+
+// Haelt den Server an. Danach ist die Seite tot -- das muss sie auch sagen.
+async function programmBeenden() {
+  if (!confirm("Das Programm beenden? Ein laufender Auftrag wird abgebrochen.")) return;
+  await fetch("/api/shutdown", {method: "POST"}).catch(() => null);
+  document.body.innerHTML = "<main><section class=\"panel\"><h1>Beendet</h1>"
+    + "<p>Der Server ist angehalten, die Grafikkarte ist frei. "
+    + "Zum Weitermachen im Terminal wieder <code>./start.sh</code> starten.</p>"
+    + "</section></main>";
 }
 
 fetch("/api/status").then(r => r.json()).then(s => {

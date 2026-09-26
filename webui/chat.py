@@ -398,3 +398,71 @@ def bild_lesen(bild_bytes: bytes, model: str | None = None) -> dict:
         "beschreibung": str(roh.get("beschreibung") or "").strip()[:200],
         "umgebung": str(roh.get("umgebung") or "").strip()[:200],
     }
+
+
+# --- Rueckwaerts: aus einem Bild einen Prompt ----------------------------
+# Die Regler werden gleich mitgeraten. Die erlaubten Schluessel stehen im
+# Systemtext, damit nichts erfunden wird -- geprueft wird trotzdem, denn ein
+# 4B-Modell haelt sich nicht immer daran.
+def _rueckwaerts_system() -> str:
+    def liste(tabelle):
+        return ", ".join(f"{k} ({v[0]})" for k, v in tabelle.items())
+    return f"""Du siehst ein Bild und schreibst den Prompt, mit dem man es
+nachbauen koennte.
+
+Antworte ausschliesslich mit JSON und genau diesen Schluesseln:
+
+"prompt"  Die Bildbeschreibung auf ENGLISCH, ein bis drei Saetze. Nenne das
+          Hauptmotiv, was es tut, die Umgebung, die Kleidung oder Oberflaeche,
+          die Bildkomposition und die Stimmung. Keine Kamerawerte, keine
+          Markennamen, keine Namen von Personen.
+"stil"    genau einer dieser Schluessel oder "": {liste(STYLES)}
+"licht"   genau einer dieser Schluessel oder "": {liste(LIGHTS)}
+"kamera"  genau einer dieser Schluessel oder "": {liste(CAMERAS)}
+
+Passt nichts, lass das Feld leer. Rate nicht."""
+
+
+def bild_zu_prompt(bild_bytes: bytes, model: str | None = None) -> dict:
+    """Liest ein Bild und schreibt den Prompt dazu, samt Reglervorschlag.
+
+    Gedacht fuer ein mitgebrachtes Foto: es sagt, wie man so etwas beschreibt,
+    und stellt Stil, Licht und Objektiv gleich passend ein. Faellt Ollama aus,
+    kommt ein leeres Ergebnis -- die Seite meldet das, mehr passiert nicht.
+    """
+    leer = {"prompt": "", "stil": "", "licht": "", "kamera": ""}
+    body = {
+        "model": model or MODEL,
+        "format": "json",
+        "stream": False,
+        "think": False,
+        "keep_alive": 0,
+        "options": {"temperature": 0.1, "num_predict": 400},
+        "messages": [
+            {"role": "system", "content": _rueckwaerts_system()},
+            {"role": "user", "content": "Schreibe den Prompt zu diesem Bild.",
+             "images": [base64.b64encode(bild_bytes).decode("ascii")]},
+        ],
+    }
+    request = urllib.request.Request(
+        OLLAMA.rstrip("/") + "/api/chat", json.dumps(body).encode("utf-8"),
+        {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            roh = json.loads(THINK.sub(
+                "", json.load(response)["message"]["content"]).strip())
+    except Exception:
+        return leer
+    if not isinstance(roh, dict):
+        return leer
+
+    def gueltig(wert, tabelle):
+        wert = str(wert or "").strip()
+        return wert if wert in tabelle else ""
+
+    return {
+        "prompt": str(roh.get("prompt") or "").strip()[:900],
+        "stil": gueltig(roh.get("stil"), STYLES),
+        "licht": gueltig(roh.get("licht"), LIGHTS),
+        "kamera": gueltig(roh.get("kamera"), CAMERAS),
+    }

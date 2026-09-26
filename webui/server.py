@@ -86,7 +86,8 @@ def _save(meta: dict, image: Image.Image, stamp: str, kind: str,
     name = f"{stamp}_{kind}_{(nummer if nummer is not None else meta['index']):02d}_seed{meta['seed']}.png"
     info = PngImagePlugin.PngInfo()
     for key in ("prompt", "seed", "view", "style", "light", "camera", "effect",
-                "form", "paint", "scene", "angle", "device", "scenario", "material"):
+                "form", "paint", "palette", "scene", "angle", "device",
+                "scenario", "material"):
         if meta.get(key) is not None:
             info.add_text(f"qwen_{key}", str(meta[key]))
     image.save(os.path.join(OUTPUTS, name), pnginfo=info)
@@ -144,6 +145,7 @@ def _series_kwargs(params: dict, refs: list, kind: str, on_image) -> dict:
         form=params.get("form") or None,
         keep=params.get("keep") or "The main subject",
         paint=params.get("paint") or None,
+        palette=params.get("palette") or None,
         scene=params.get("scene") or None,
         angle=params.get("angle") or None,
         device=params.get("device") or None,
@@ -392,6 +394,23 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, code, obj):
         self._send(code, json.dumps(obj))
 
+    def _nur_hier(self) -> bool:
+        """Kommt die Anfrage vom Rechner des Servers selbst?
+
+        Bei QWEN_HOST=0.0.0.0 haengt die Oberflaeche im Netz. Was dort etwas
+        anrichtet -- GIMP starten, Bilder loeschen, den Server abschalten --
+        bleibt deshalb dem eigenen Rechner vorbehalten.
+        """
+        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+    def _body(self):
+        """Der JSON-Rumpf der Anfrage, oder None wenn er nicht lesbar ist."""
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            return json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError:
+            return None
+
     def _output_path(self, name):
         """Pfad in outputs/ -- oder None, wenn der Name nicht sauber ist."""
         if not SAFE_NAME.fullmatch(name):
@@ -492,6 +511,56 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/cancel":
             engine.cancel()
             return self._json(200, {"ok": True})
+
+        if path == "/api/bild-prompt":
+            # Rueckwaerts: aus einem mitgebrachten Bild den Prompt schreiben.
+            # Wie beim Chat nicht waehrend eines Auftrags -- Ollama und das
+            # Bildmodell wuerden sich um die Grafikkarte streiten.
+            if engine.lock.locked():
+                return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            if not params.get("image"):
+                return self._json(400, {"error": "Kein Bild"})
+            try:
+                roh = _decode(params["image"])
+            except Exception as exc:
+                return self._json(400, {"error": f"Bild nicht lesbar: {exc}"})
+            puffer = io.BytesIO()
+            roh.convert("RGB").save(puffer, format="PNG")
+            ergebnis = chat.bild_zu_prompt(puffer.getvalue())
+            if not ergebnis["prompt"]:
+                return self._json(502, {"error":
+                    "Das Sprachmodell hat keinen Prompt geliefert."})
+            return self._json(200, ergebnis)
+
+        if path == "/api/delete":
+            # Loescht eine Datei auf dem Rechner des Servers -- wie beim
+            # GIMP-Aufruf nur von dort aus erlaubt.
+            if not self._nur_hier():
+                return self._json(403, {"error": "Nur vom Rechner des Servers aus"})
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            ziel = self._output_path(os.path.basename(params.get("file") or ""))
+            if not ziel:
+                return self._json(404, {"error": "Bild nicht gefunden"})
+            try:
+                os.remove(ziel)
+            except OSError as exc:
+                return self._json(500, {"error": f"liess sich nicht loeschen: {exc}"})
+            return self._json(200, {"ok": True, "file": os.path.basename(ziel)})
+
+        if path == "/api/shutdown":
+            if not self._nur_hier():
+                return self._json(403, {"error": "Nur vom Rechner des Servers aus"})
+            # Erst antworten, dann abschalten: sonst sieht die Seite nur einen
+            # abgebrochenen Aufruf und meldet einen Fehler.
+            self._json(200, {"ok": True})
+            engine.cancel()
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return None
 
         if path == "/api/open-in-gimp":
             # Startet ein Programm auf dem Rechner des Servers. Deshalb nur von
@@ -621,6 +690,10 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nbeendet")
+    else:
+        # serve_forever() kehrt nur zurueck, wenn /api/shutdown es angehalten hat.
+        print("ueber die Oberflaeche beendet")
+    server.server_close()
 
 
 if __name__ == "__main__":
