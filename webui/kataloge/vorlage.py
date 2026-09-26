@@ -39,6 +39,23 @@ VARIANT_TEMPLATE = (
     "do not change its colour. Everything else in the picture may differ. {extra}"
 )
 
+# Wenn sich die Haltung aendern soll, passt die obige Vorlage nicht: sie
+# verlangt "do not move it". Beides zusammen -- bewahren und bewegen --
+# beantwortet das Modell, indem es die alten Gliedmassen behaelt UND neue
+# malt. Beobachtet an einem Bild mit drei Schuhen und einem mit
+# verschmolzenen Hosenbeinen. Deshalb hier eine Fassung ohne den
+# Widerspruch: die Person bleibt, der Koerper wird neu gezeichnet.
+VARIANT_TEMPLATE_POSE = (
+    "A photograph of the same person as in the reference image. "
+    "{keep} stays exactly as in the reference: the same face, the same hair, "
+    "the same clothing, the same colours and materials. "
+    "The body takes a new pose -- draw the whole figure fresh for that pose "
+    "rather than keeping the old one. "
+    "Correct anatomy: exactly two arms, two hands with five fingers each, two "
+    "legs and two feet, nothing doubled, nothing merged, nothing overlapping "
+    "itself. Everything else in the picture may differ. {extra}"
+)
+
 # Die Variantenvorlage ist selbst eine Modusvorlage -- hier eingehaengt, damit
 # TEMPLATES[mode] sie findet wie die anderen.
 TEMPLATES["varianten"] = VARIANT_TEMPLATE

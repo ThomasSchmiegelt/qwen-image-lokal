@@ -34,7 +34,7 @@ from kataloge import (
     ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, GROUP_ACTIONS, LIGHTS,
     BEKLEIDUNGEN, HALTUNGEN, MATERIALS, PAINTS, PALETTEN, SCENARIOS, SCENES,
     STYLES, TEMPLATES,
-    TRANSPARENT_TEMPLATE,
+    TRANSPARENT_TEMPLATE, VARIANT_TEMPLATE_POSE,
     VIEWS, fragment, variant_axes,
 )
 
@@ -127,14 +127,7 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
         # blosse Haltungsangabe. Gemessen an vier Bildern blieb die Person
         # dabei praktisch unveraendert stehen. Deshalb hier ausdruecklich,
         # dass gerade die Haltung sich aendern soll.
-        # Der Anatomiehinweis haengt an der Haltung, nicht am ganzen Prompt:
-        # falsche Gliedmassen entstehen dort, wo sich der Koerper neu ordnet.
-        # Beobachtet an einem Bild mit drei Fuessen.
-        (f"the pose changes to this: {HALTUNGEN[haltung][1]} -- only the face, "
-         "the identity and the clothing stay as in the reference. "
-         "Correct anatomy: exactly two arms, two hands with five fingers each, "
-         "two legs and two feet, joints bending the way they can"
-         if haltung in HALTUNGEN else None),
+        fragment(HALTUNGEN, haltung),
         fragment(BEKLEIDUNGEN, kleidung),
         fragment(SCENES, scene),
         fragment(ANGLES, angle),
@@ -368,7 +361,12 @@ class Engine:
         elif mode in TEMPLATES:
             if not images:
                 raise ValueError("Fuer diesen Modus werden Referenzbilder gebraucht.")
-            text = TEMPLATES[mode].format(
+            # Soll sich die Haltung aendern, darf die Vorlage nicht zugleich
+            # "nicht bewegen" verlangen -- sonst entstehen doppelte Beine.
+            vorlage = TEMPLATES[mode]
+            if mode == "varianten" and subject == "person" and haltung != AXIS_OFF:
+                vorlage = VARIANT_TEMPLATE_POSE
+            text = vorlage.format(
                 n=len(images), extra=text, keep=keep.strip() or "The main subject")
         if transparent:
             text = TRANSPARENT_TEMPLATE.format(extra=text)

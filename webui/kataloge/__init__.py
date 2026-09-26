@@ -19,7 +19,8 @@ from .motiv import (
 )
 from .vorlage import (
     EFFECTS, FORMS, GROUP_ACTIONS, OVERRIDE_KEYS, SCENARIOS, TEMPLATES,
-    TRANSPARENT_TEMPLATE, VARIANT_TEMPLATE, overrides, parse_command,
+    TRANSPARENT_TEMPLATE, VARIANT_TEMPLATE, VARIANT_TEMPLATE_POSE,
+    overrides, parse_command,
 )
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "OVERRIDE_KEYS", "PAINTS", "PAINT_TARGET", "PALETTEN", "PERSON_ANGLES",
     "PERSON_SCENES", "SCENARIOS", "SCENES", "STYLES", "SUBJECT_KINDS",
     "TEMPLATES", "TRANSPARENT_TEMPLATE", "VARIANT_LIGHTS", "VARIANT_TEMPLATE",
+    "VARIANT_TEMPLATE_POSE",
     "VEHICLE_ANGLES", "VEHICLE_SCENES", "VIEWS",
     "catalog", "fragment", "overrides", "parse_command", "variant_axes",
 ]
