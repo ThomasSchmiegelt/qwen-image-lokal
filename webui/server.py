@@ -38,7 +38,8 @@ import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
 from kataloge import (  # noqa: E402
-    AXIS_OFF, EFFECTS, GROUP_ACTIONS, MIMIK, PAINT_TARGET, catalog, overrides,
+    AXIS_OFF, EFFECTS, EINSTELLUNGEN, GROUP_ACTIONS, MIMIK, PAINT_TARGET,
+    catalog, overrides,
     parse_command,
 )
 
@@ -232,6 +233,9 @@ class Handler(BaseHTTPRequestHandler):
             info["gross"] = chat.GROSS
             info["welten"] = [{"key": k, "label": v[0]}
                               for k, v in chat.WELTEN.items()]
+            info["einstellungen"] = [{"key": k, "label": v["label"],
+                                      "paar": "gegentext" in v}
+                                     for k, v in EINSTELLUNGEN.items()]
             info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
@@ -396,10 +400,13 @@ class Handler(BaseHTTPRequestHandler):
             roh = params.get("zeilen") or []
             zeilen = []
             for z in roh:
-                text, teile = geschichte.verweise(str(z.get("text") or ""), alle)
+                # Erst die Kameraeinstellung heraus, dann die Bausteine: das
+                # Sprachmodell soll die Anordnung nicht auch noch beschreiben.
+                roh_text, einst = geschichte.einstellung_von(str(z.get("text") or ""))
+                text, teile = geschichte.verweise(roh_text, alle)
                 if text:
                     zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
-                                   "teile": teile})
+                                   "einstellung": einst, "teile": teile})
             if not zeilen:
                 return self._json(400, {"error": "Keine Szene im Inhaltsverzeichnis"})
             auftrag = einreihen("prompts", {
@@ -413,6 +420,7 @@ class Handler(BaseHTTPRequestHandler):
                 "prosa": bool(params.get("prosa"))})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"],
                                     "zeilen": [{"text": z["text"], "ort": z["ort"],
+                                                "einstellung": z["einstellung"],
                                                 "teile": [t["name"] for t in z["teile"]]}
                                                for z in zeilen]})
 
@@ -427,6 +435,7 @@ class Handler(BaseHTTPRequestHandler):
             for z in (params.get("zeilen") or []):
                 teile = [alle[k] for k in (z.get("ids") or []) if k in alle]
                 zeilen.append({"text": z.get("text") or "", "ort": z.get("ort") or "",
+                               "einstellung": z.get("einstellung") or "",
                                "teile": teile})
             stil = str(params.get("stil") or "")
             szenen = geschichte.gliederung_zu_szenen(

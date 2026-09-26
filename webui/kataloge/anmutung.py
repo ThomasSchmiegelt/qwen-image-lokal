@@ -168,6 +168,44 @@ NICHT_FOTO = ("This is a drawn illustration, not a photograph: no camera "
               "grain, no lens blur, no photographic lighting.")
 
 
+# Kameraeinstellungen fuer Szenen. Etwas anderes als CAMERAS: dort steht das
+# Objektiv, hier steht die ganze Anordnung von Kamera, Figuren und was sie
+# sehen. In einer Geschichte wird sie mit \Name gesetzt.
+#
+# "gegentext" macht daraus ein Paar: zwei Bilder, die denselben Augenblick
+# von beiden Seiten zeigen. Die Szene ergibt dann zwei Bilder statt einem.
+EINSTELLUNGEN = {
+    "augen": {
+        "label": "Blick in die Augen",
+        "text": "an extreme close-up from the first person's point of view, "
+                "looking straight into the other person's eyes, their face "
+                "filling the frame, and the viewer's own silhouette mirrored "
+                "in the wet surface of their irises",
+    },
+    "spiegel": {
+        "label": "Blick in den Spiegel",
+        "text": "the camera stands behind the figures, who face a large "
+                "mirror: their backs fill the foreground, their reflected "
+                "faces look back out of the mirror, both in the same frame",
+    },
+    "zelle": {
+        "label": "Rein und raus (zwei Bilder)",
+        "text": "a point-of-view shot from inside a cell, looking out between "
+                "the bars at a person standing outside, the bars close to the "
+                "camera and out of focus",
+        "gegentext": "an over-the-shoulder shot from behind the person "
+                     "standing outside the cell, looking past their shoulder "
+                     "and between the bars at the figure inside",
+    },
+    "scheibe": {
+        "label": "Durch die Glasscheibe",
+        "text": "a point-of-view shot through a pane of glass: what lies "
+                "beyond is sharp, and a face is reflected on the glass "
+                "surface, the two overlapping in the same frame",
+    },
+}
+
+
 # Gesichtsausdruck. Fuer Geschichten: die Mimik soll aus der Handlung kommen,
 # und ausformuliert trifft sie das Modell zuverlaessiger als ein einzelnes
 # Wort wie "traurig". Bewusst knapp gehalten -- der Rest des Prompts hat auch

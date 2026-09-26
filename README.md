@@ -168,7 +168,13 @@ Gemessen an derselben Idee: bei 0 % sucht eine Frau nachts ein verlegtes Buch,
 bei 100 % wandeln sich die Regale, während sie sucht.
 
 **Gliedern:** je Zeile eine Szene, mit `/Name` holst du einen Baustein herein
-(`/Anna rennt durch die /Markthalle`). Rechts steht, wie viele Bilder aus
+(`/Anna rennt durch die /Markthalle`), mit `\Name` die Kameraeinstellung.
+Vier gibt es: `\augen` (Blick aus dem Gesichtsfeld in die Augen des
+Gegenübers, mit Spiegelung in der Iris), `\spiegel` (Kamera hinter den
+Figuren, Rücken und Spiegelbild in einem Bild), `\scheibe` (durch eine
+Glasscheibe hindurch, mit gespiegeltem Gesicht darauf) und `\zelle` — das
+ergibt **zwei** Bilder, einmal aus der Zelle heraus und einmal über die
+Schulter des Davorstehenden hinein. Rechts steht, wie viele Bilder aus
 dieser Szene entstehen — mehrere zeigen denselben Augenblick aus wechselndem
 Blickwinkel. Gewürfelt wird dabei nur der Blick, nicht Stil, Ort, Kleidung
 oder Kameraart: eine gewürfelte Überwachungskamera machte aus einem Manga

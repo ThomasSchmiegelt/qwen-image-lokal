@@ -77,6 +77,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
   $("bsArt").innerHTML = BSARTEN.map(
     a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
   MIMIKLISTE = info.mimik || [];
+  EINSTELLUNGEN = info.einstellungen || [];
   STILLISTE = info.styles || [];
   fill("gsStil", info.styles);
   fill("gsWelt", info.welten);
@@ -788,7 +789,8 @@ $("chat").addEventListener("keydown", e => {
 // ---------- Bausteine ----------
 // Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
 // steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
-let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [];
+let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [],
+    EINSTELLUNGEN = [];
 const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
 
 function luecken(text) {
@@ -1096,8 +1098,14 @@ function zeigeSelbstszenen() {
       <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
     </div>`).join("")
     + (BAUSTEINE.length
-        ? `<p class="hint">Einfügen: ` + BAUSTEINE.map(x =>
-            `<a href="#" onclick="gsEinfuegen('${esc(x.name)}');return false">/${esc(x.name)}</a>`
+        ? `<p class="hint">Bausteine: ` + BAUSTEINE.map(x =>
+            `<a href="#" onclick="gsEinfuegen('/', '${esc(x.name)}');return false">/${esc(x.name)}</a>`
+          ).join(" · ") + `</p>`
+        : "")
+    + (EINSTELLUNGEN.length
+        ? `<p class="hint">Kamera: ` + EINSTELLUNGEN.map(x =>
+            `<a href="#" onclick="gsEinfuegen('\\\\', '${x.key}');return false"
+               title="${esc(x.label)}">\\${x.key}</a>${x.paar ? " (2 Bilder)" : ""}`
           ).join(" · ") + `</p>`
         : "");
   $("gsSelbst").querySelectorAll(".gszeile").forEach(el => {
@@ -1120,11 +1128,13 @@ function gsSumme() {
     + `${n} Bild(er)`;
 }
 
-// Einen Baustein in die zuletzt angeklickte Zeile schreiben.
-function gsEinfuegen(name) {
+// Einen Baustein oder eine Kameraeinstellung in die zuletzt angeklickte
+// Zeile schreiben. `zeichen` ist / oder der Rueckwaertsschraegstrich.
+function gsEinfuegen(zeichen, name) {
   const i = Math.min(gsLetzteNr, gsZeilen.length - 1);
-  gsZeilen[i].text = (gsZeilen[i].text + " /" + name).trim();
+  gsZeilen[i].text = (gsZeilen[i].text + " " + zeichen + name).trim();
   zeigeSelbstszenen();
+  gsMerken();
 }
 
 function gsZeileWeg(i) {

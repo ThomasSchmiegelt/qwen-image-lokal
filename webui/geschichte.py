@@ -26,7 +26,8 @@ import time
 import bausteine
 import projekte
 from kataloge import (
-    CAMERAS, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO, STYLES, VIEWS,
+    CAMERAS, EINSTELLUNGEN, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO,
+    STYLES, VIEWS,
 )
 
 # Wie die Person bewahrt wird, waehrend Ort, Handlung und Stil wechseln.
@@ -113,15 +114,18 @@ def zu_bloecken(szenen: list[dict], teile: list[dict]) -> list[dict]:
         text = szene_zu_text(szene, nach_kennung)
         if not text:
             continue
+        # Die Kameraeinstellung steht hinter der Szene: erst was zu sehen
+        # ist, dann von wo aus. Ein Paar ergibt zwei Bilder.
+        fassungen = mit_einstellung(text, szene.get("einstellung") or "")
         stil = szene.get("stil") or ""
         name = STYLES[stil][0] if stil in STYLES else "Szene"
         if bloecke and bloecke[-1]["stil"] == stil:
-            bloecke[-1]["bausteine"].append(text)
+            bloecke[-1]["bausteine"] += fassungen
         else:
             bloecke.append({"titel": name, "referenz": "start",
                             "vorlage": "geschichte", "bleibt": BLEIBT,
                             "zurueck": False, "stil": stil,
-                            "bausteine": [text]})
+                            "bausteine": list(fassungen)})
     # `stil` ist nur die Hilfsgroesse fuers Buendeln und hat im Block nichts
     # zu suchen -- der Editor kennt das Feld nicht.
     for block in bloecke:
@@ -199,6 +203,7 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
         def erster(art):
             return next((k for k, b in benutzt.items() if b.get("art") == art), "")
         szenen.append({
+            "einstellung": zeile.get("einstellung") or "",
             "titel": (zeile.get("text") or "")[:60] or f"Bild {i}",
             "person": erster("person"),
             "ort": zeile.get("ort") or erster("ort"),
@@ -320,3 +325,41 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
                 gesehen.add(klein)
                 offen.append(name)
     return offen
+
+
+
+# --- Kameraeinstellung je Szene -----------------------------------------
+# Mit einem Rueckwaertsschraegstrich und Namen setzt eine Zeile die Anordnung
+# von Kamera und Figuren, so wie der Schraegstrich einen Baustein holt. Zwei Zeichen, zwei Bedeutungen: wer und wie.
+EINSTELLUNG = re.compile(r"\\([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,29})")
+
+
+def einstellung_von(zeile: str) -> tuple[str, str]:
+    r"""Trennt \Name von der Zeile. Zurueck kommt (Text ohne, Schluessel).
+
+    Ein unbekannter Name bleibt stehen -- wie bei den Bausteinen soll nichts
+    stillschweigend verschwinden.
+    """
+    gefunden = ""
+
+    def ersatz(treffer):
+        nonlocal gefunden
+        name = treffer.group(1).lower()
+        if name in EINSTELLUNGEN and not gefunden:
+            gefunden = name
+            return ""
+        return treffer.group(0)
+
+    text = EINSTELLUNG.sub(ersatz, zeile or "")
+    return re.sub(r"\s{2,}", " ", text).strip(), gefunden
+
+
+def mit_einstellung(text: str, schluessel: str) -> list[str]:
+    """Die Szene mit der Einstellung. Ein Paar ergibt zwei Fassungen."""
+    e = EINSTELLUNGEN.get(schluessel)
+    if not e:
+        return [text]
+    erste = f"{text}, {e['text']}"
+    if "gegentext" in e:
+        return [erste, f"{text}, {e['gegentext']}"]
+    return [erste]
