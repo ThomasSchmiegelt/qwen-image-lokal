@@ -132,12 +132,27 @@ def _klein(text: str) -> str:
     return text
 
 
+def _freie_kennung(art: str, daten: list[dict]) -> str:
+    """Eine Kennung, die es noch nicht gibt.
+
+    Die Millisekunde allein genuegt nicht: zwei Speichervorgaenge im selben
+    Augenblick bekaemen dieselbe, und der zweite ueberschriebe den ersten.
+    """
+    vergeben = {b.get("id") for b in daten}
+    stamm = f"{art}-{int(time.time() * 1000)}"
+    kennung, n = stamm, 2
+    while kennung in vergeben:
+        kennung, n = f"{stamm}-{n}", n + 1
+    return kennung
+
+
 def speichern(projekt: str, baustein: dict) -> dict:
     """Legt einen Baustein an oder ersetzt einen vorhandenen."""
     art = baustein.get("art") if baustein.get("art") in ARTEN else "person"
     name = (baustein.get("name") or "").strip() or "ohne Namen"
     prompt = (baustein.get("prompt") or "").strip()
-    kennung = (baustein.get("id") or "").strip() or f"{art}-{int(time.time() * 1000)}"
+    daten = liste(projekt)
+    kennung = (baustein.get("id") or "").strip() or _freie_kennung(art, daten)
 
     # Nur Vorgaben zu Luecken, die es auch gibt -- sonst sammeln sich Reste
     # von Prompts an, die laengst umgeschrieben wurden.
@@ -148,13 +163,13 @@ def speichern(projekt: str, baustein: dict) -> dict:
     neu = {"id": kennung, "art": art, "name": name, "prompt": prompt,
            "variablen": vorgaben, "bild": baustein.get("bild") or ""}
 
-    daten = [b for b in liste(projekt) if b.get("id") != kennung]
     # Ein vorhandenes Bild nicht verlieren, wenn der Aufrufer keines mitschickt.
-    for alt in liste(projekt):
-        if alt.get("id") == kennung and not neu["bild"]:
-            neu["bild"] = alt.get("bild") or ""
-    daten.append(neu)
-    _schreiben(projekt, daten)
+    for vorher in daten:
+        if vorher.get("id") == kennung and not neu["bild"]:
+            neu["bild"] = vorher.get("bild") or ""
+    rest = [b for b in daten if b.get("id") != kennung]
+    rest.append(neu)
+    _schreiben(projekt, rest)
     return neu
 
 

@@ -884,6 +884,9 @@ $("bsBild").onclick = async e => {
   const g = await bausteinRuf({tu: "zusammensetzen", ids: [b.id], werte: b.variablen});
   if (!g) return;
   await einreihenEinfach({prompt: g.prompt, baustein: b.id, aspect: "3:4"});
+  // Aufraeumen nicht vergessen: bleibt die Kennung stehen, ueberschreibt der
+  // naechste Baustein diesen hier. Genau das ist passiert.
+  bausteinLeeren();
   say(`„${b.name}“ gespeichert, Bild dazu eingereiht.`, "ok");
 };
 
@@ -893,6 +896,18 @@ function bausteinLeeren() {
   ["bsName", "bsText", "bsPrompt"].forEach(id => $(id).value = "");
   $("bsPrompt").dataset.id = "";
   $("bsVariablen").innerHTML = "";
+  bausteinKopf();
+}
+
+// Ob gerade ein neuer Baustein entsteht oder ein vorhandener geaendert wird,
+// muss man sehen koennen -- sonst ueberschreibt man aus Versehen.
+function bausteinKopf() {
+  const id = $("bsPrompt").dataset.id;
+  const b = id && BAUSTEINE.find(x => x.id === id);
+  $("bsKopf").innerHTML = b
+    ? `Ändert „${esc(b.name)}“ <a href="#" onclick="bausteinLeeren();return false"
+         style="font-size:11.5px">stattdessen neu anlegen</a>`
+    : "Neu anlegen";
 }
 
 function bausteinLaden(id) {
@@ -903,6 +918,7 @@ function bausteinLaden(id) {
   $("bsPrompt").value = b.prompt;
   $("bsPrompt").dataset.id = b.id;
   luckenFelder("bsVariablen", b.prompt, b.variablen, false);
+  bausteinKopf();
   say(`„${b.name}“ geladen. Ändern und speichern.`);
 }
 
