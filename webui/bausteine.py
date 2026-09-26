@@ -20,6 +20,7 @@ Vorhaben, nicht zum Programm -- wer ein Projekt loescht, wird sie auch los.
 import json
 import os
 import re
+import shutil
 import time
 
 import projekte
@@ -220,3 +221,48 @@ def zusammensetzen(teile: list[dict], werte: dict | None = None) -> str:
     stuecke = [einsetzen(b.get("prompt") or "", werte) for b in geordnet]
     stuecke = [s.rstrip(".") for s in stuecke if s]
     return ", ".join([stuecke[0]] + [_klein(s) for s in stuecke[1:]]) if stuecke else ""
+
+
+# --- Katalog ueber alle Projekte -----------------------------------------
+def katalog() -> list[dict]:
+    """Alle Bausteine aller Projekte, jeder mit seiner Herkunft.
+
+    Die Bibliothek wird mit der Zeit groesser als ein Projekt: wer eine Person
+    einmal beschrieben hat, will sie im naechsten Vorhaben wiedersehen, ohne
+    sie neu zu bauen.
+    """
+    raus = []
+    for projekt in projekte.liste():
+        for b in liste(projekt["key"]):
+            raus.append({**b, "projekt": projekt["key"],
+                         "projektname": projekt["label"]})
+    return raus
+
+
+def kopieren(von: str, nach: str, kennung: str) -> dict | None:
+    """Einen Baustein in ein anderes Projekt uebernehmen.
+
+    Das Bild wandert mit: es liegt im Bildordner des Ursprungsprojekts, und
+    ein Verweis dorthin waere nach dem Loeschen jenes Projekts tot. Lieber
+    eine Kopie, die zum neuen Projekt gehoert.
+    """
+    if von == nach:
+        return None
+    quelle = next((b for b in liste(von) if b.get("id") == kennung), None)
+    if not quelle:
+        return None
+
+    bild = quelle.get("bild") or ""
+    if bild:
+        herkunft = os.path.join(projekte.bilder(von), os.path.basename(bild))
+        ziel = os.path.join(projekte.bilder(nach), os.path.basename(bild))
+        if os.path.isfile(herkunft) and not os.path.isfile(ziel):
+            shutil.copy2(herkunft, ziel)
+        elif not os.path.isfile(herkunft):
+            bild = ""                     # Bild ist weg, Baustein bleibt
+
+    # Ohne Kennung: das Ziel vergibt eine eigene, sonst kollidierte sie mit
+    # einem gleich benannten Baustein, der dort schon liegt.
+    return speichern(nach, {"art": quelle.get("art"), "name": quelle.get("name"),
+                            "prompt": quelle.get("prompt"),
+                            "variablen": quelle.get("variablen"), "bild": bild})

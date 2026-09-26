@@ -158,6 +158,23 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(SEITE, "index.html"), "rb") as fh:
                 return self._send(200, fh.read(), "text/html; charset=utf-8")
 
+        if path.startswith("/bilder/"):
+            # Ein Bild aus einem *benannten* Projekt. /outputs/ loest nur im
+            # aktiven auf; der Katalog zeigt aber alle.
+            teile = path[len("/bilder/"):].split("/", 1)
+            if len(teile) != 2:
+                return self._json(404, {"error": "not found"})
+            schluessel, name = teile
+            if not projekte.SCHLUESSEL.fullmatch(schluessel) \
+                    or not SAFE_NAME.fullmatch(name):
+                return self._json(404, {"error": "not found"})
+            datei = os.path.join(projekte.bilder(schluessel), name)
+            if not os.path.isfile(datei):
+                return self._json(404, {"error": "not found"})
+            art = mimetypes.guess_type(datei)[0] or "application/octet-stream"
+            with open(datei, "rb") as fh:
+                return self._send(200, fh.read(), art)
+
         if path.startswith("/seite/"):
             # Aufbau, Aussehen und Verhalten der Oberflaeche liegen getrennt.
             # Nur schlichte Namen, keine Verzeichniswechsel.
@@ -360,6 +377,20 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "katalog":
+                return self._json(200, {"bausteine": bausteine.katalog(),
+                                        "projekte": projekte.liste()})
+            if was == "kopieren":
+                if not self._nur_hier():
+                    return self._json(403, {"error": "Nur vom Rechner des Servers aus"})
+                erg = bausteine.kopieren(str(params.get("von") or ""),
+                                         str(params.get("nach") or ""),
+                                         str(params.get("id") or ""))
+                if not erg:
+                    return self._json(404, {"error":
+                        "Baustein nicht gefunden oder schon im Zielprojekt"})
+                return self._json(200, erg)
+
             if was == "vorschlaege":
                 # Zehn verschiedene Hosen fuer die Luecke {hose}. Ohne das
                 # Umfeld schlaegt das Modell etwas vor, das nicht zur Person

@@ -298,3 +298,11 @@
 }
 #chatLog .zug.ich { background: #222a3a; }
 #chatLog .zug b { color: var(--muted); font-weight: 400; margin-right: 6px; }
+
+/* Katalog: wie die Bausteinliste, aber mit Herkunft und Ziel zum Kopieren. */
+.katgruppe { margin-top: 12px; }
+.katgruppe > h3 {
+  font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .07em; margin: 0 0 5px;
+}
+.katzeile select { width: auto; font-size: 11px; padding: 3px 5px; }

@@ -50,6 +50,7 @@
       <button id="tab-bausteine">Bausteine</button>
       <button id="tab-szenen">Szenen</button>
       <button id="tab-geschichte">Geschichte</button>
+      <button id="tab-katalog">Katalog</button>
     </div>
 
     <fieldset id="bausteinBox" style="display:none">
@@ -177,6 +178,25 @@
         <a href="#" id="gsUebernehmen">In den Ablauf übernehmen</a>
         — dort gegenlesen und starten · oder
         <a href="#" id="gsSofort">ohne Prüfung starten</a></p>
+    </fieldset>
+
+    <fieldset id="katalogBox" style="display:none">
+      <legend>Katalog</legend>
+      <p class="hint">Alle Bausteine aus allen Projekten. Von hier lässt sich
+        eine Person, ein Ort oder ein Gegenstand in ein anderes Projekt
+        übernehmen — das Bild wandert mit.</p>
+      <div class="axis">
+        <div>
+          <label for="katArt">Art</label>
+          <select id="katArt"><option value="">alle</option></select>
+        </div>
+        <div>
+          <label for="katSuche">Suchen</label>
+          <input id="katSuche" placeholder="Name oder Prompt">
+        </div>
+      </div>
+      <p class="hint" id="katZahl"></p>
+      <div id="katListe"></div>
     </fieldset>
 
     <div id="uploadBox" style="display:none">

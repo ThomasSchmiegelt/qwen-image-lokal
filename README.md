@@ -169,6 +169,11 @@ Prüfung loslaufen lassen. Hat die Hauptperson ein Bild, wird es zum Startbild,
 damit die Folge auf einem Gesicht aufsetzt statt in jedem Bild ein neues zu
 erfinden.
 
+**Katalog.** Ein Reiter zeigt alle Bausteine aus allen Projekten auf einer
+Seite, nach Art und Text durchsuchbar. Von dort lässt sich eine Person, ein
+Ort oder ein Gegenstand in ein anderes Projekt übernehmen — das Bild wandert
+als Kopie mit, damit es das Löschen des Ursprungsprojekts überlebt.
+
 **Prompt aus einem Bild.** Der umgekehrte Weg: ein Bild wählen, das
 Sprachmodell beschreibt es als Prompt und stellt Stil, Licht und Objektiv
 gleich passend ein (gemessen 5–9 s). Im Ablauf-Reiter wird ein hochgeladenes

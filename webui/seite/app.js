@@ -21,6 +21,7 @@ const MODES = {
   bausteine: {label: "Baustein-Bild erzeugen", refs: 0, ph: "", hint: () => ""},
   szenen: {label: "Szene erzeugen", refs: 0, ph: "", hint: () => ""},
   geschichte: {label: "Geschichte erzeugen", refs: 0, ph: "", hint: () => ""},
+  katalog: {label: "Katalog", refs: 0, ph: "", hint: () => ""},
   varianten: {label: "Varianten erzeugen", refs: 1, sweep: "varianten", count: 12,
               follow: true, lock: false,
               ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
@@ -241,11 +242,14 @@ function setMode(next) {
   const istBausteine = next === "bausteine";
   const istSzenen = next === "szenen";
   const istGeschichte = next === "geschichte";
+  const istKatalog = next === "katalog";
+  $("katalogBox").style.display = istKatalog ? "block" : "none";
+  if (istKatalog) katalogHolen();
   $("szenenBox").style.display = istSzenen ? "block" : "none";
   $("geschichteBox").style.display = istGeschichte ? "block" : "none";
   // Beide Reiter haben eine eigene Bedienung und brauchen die ueblichen
   // Kaesten nicht -- Prompt, Darstellung, Bildgroesse.
-  const eigen = istDemo || istBausteine || istSzenen || istGeschichte;
+  const eigen = istDemo || istBausteine || istSzenen || istGeschichte || istKatalog;
   $("demoBox").style.display = istDemo ? "block" : "none";
   $("bausteinBox").style.display = istBausteine ? "block" : "none";
   // Im Ablauf-Reiter ist das Prompt-Feld ausgeblendet -- dort waere das
@@ -1203,6 +1207,72 @@ $("gsSofort").onclick = async e => {
   blockZeichnen();
   await starteDemo();
 };
+
+// ---------- Katalog ----------
+// Alle Bausteine aus allen Projekten. Die Bibliothek waechst ueber ein
+// Projekt hinaus: wer eine Person einmal beschrieben hat, will sie im
+// naechsten Vorhaben wiedersehen, ohne sie neu zu bauen.
+let KATALOG = [], KATPROJEKTE = [];
+
+async function katalogHolen() {
+  const g = await bausteinRuf({tu: "katalog"});
+  if (!g) return;
+  KATALOG = g.bausteine;
+  KATPROJEKTE = g.projekte;
+  if ($("katArt").options.length <= 1) {
+    $("katArt").innerHTML = '<option value="">alle</option>'
+      + BSARTEN.map(a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
+  }
+  katalogZeigen();
+}
+
+function katalogZeigen() {
+  const art = $("katArt").value;
+  const suche = $("katSuche").value.trim().toLowerCase();
+  const passt = b => (!art || b.art === art)
+    && (!suche || (b.name + " " + b.prompt).toLowerCase().includes(suche));
+  const gefunden = KATALOG.filter(passt);
+  $("katZahl").textContent = gefunden.length === 1
+    ? "1 Baustein" : `${gefunden.length} Bausteine`;
+
+  const label = k => (BSARTEN.find(a => a.key === k) || {}).label || k;
+  const nach = KATPROJEKTE.map(p => p.key);
+  $("katListe").innerHTML = KATPROJEKTE.map(p => {
+    const eigene = gefunden.filter(b => b.projekt === p.key);
+    if (!eigene.length) return "";
+    return `<div class="katgruppe"><h3>${esc(p.label)}</h3>` + eigene.map(b => {
+      const ziele = nach.filter(k => k !== b.projekt);
+      return `<div class="baustein katzeile">
+        ${b.bild ? `<img src="/bilder/${b.projekt}/${b.bild}" alt="${esc(b.name)}">`
+                 : `<span class="ohnebild">?</span>`}
+        <div class="bstext"><b>${esc(b.name)}</b>
+          <span class="art">${esc(label(b.art))}</span><br>
+          <code>${esc(b.prompt)}</code></div>
+        ${ziele.length ? `<select onchange="katalogKopieren('${b.projekt}','${b.id}',this)">
+            <option value="">kopieren nach …</option>
+            ${ziele.map(k => `<option value="${k}">${esc(
+                (KATPROJEKTE.find(x => x.key === k) || {}).label || k)}</option>`).join("")}
+          </select>` : ""}
+      </div>`;
+    }).join("") + "</div>";
+  }).join("") || `<p class="hint">Noch keine Bausteine — im Reiter
+      <b>Bausteine</b> legst du welche an.</p>`;
+}
+
+async function katalogKopieren(von, id, feld) {
+  const nach = feld.value;
+  feld.value = "";
+  if (!nach) return;
+  const b = await bausteinRuf({tu: "kopieren", von, nach, id});
+  if (!b) return;
+  await katalogHolen();
+  await bausteineHolen();
+  const ziel = (KATPROJEKTE.find(x => x.key === nach) || {}).label || nach;
+  say(`„${b.name}“ nach „${ziel}“ kopiert.`, "ok");
+}
+
+$("katArt").onchange = katalogZeigen;
+$("katSuche").addEventListener("input", katalogZeigen);
 
 // ---------- Projekte ----------
 // Ein Projekt bestimmt, wohin neue Bilder gehen und welche die Galerie zeigt.
