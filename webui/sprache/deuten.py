@@ -314,3 +314,43 @@ def baustein_prompt(text: str, art: str = "person",
 
     return {"prompt": prompt,
             "variablen": {k: vorgabe(gegeben.get(k)) for k in dict.fromkeys(offen)}}
+
+
+LUECKEN_SYSTEM = """Du füllst eine Lücke in einem Bildprompt mit Vorschlägen.
+
+Antworte ausschließlich mit JSON: {"werte": ["…", "…"]}.
+
+Jeder Wert ist ein kurzes englisches Satzstück, das genau an die Stelle der
+Lücke passt — so, dass der Satz danach richtig klingt. Keine Nummern, keine
+Erklärungen, keine Wiederholungen. Die Vorschläge sollen sich deutlich
+voneinander unterscheiden, nicht nur in der Farbe."""
+
+
+def luecken_vorschlaege(name: str, umfeld: str, anzahl: int = 10,
+                        model: str | None = None) -> list[str]:
+    """Vorschlaege fuer eine Luecke -- "hose" ergibt zehn verschiedene Hosen.
+
+    `umfeld` ist der Prompt, in dem die Luecke steht. Ohne ihn schlaegt das
+    Modell Hosen vor, die nicht zur Person passen.
+    """
+    anzahl = max(1, min(int(anzahl or 10), 30))
+    roh = antwort({
+        "model": model or MODEL,
+        "format": "json",
+        "options": {"temperature": 0.8, "num_predict": 600},
+        "messages": [
+            {"role": "system", "content": LUECKEN_SYSTEM},
+            {"role": "user", "content":
+                f"Lücke: {{{name}}}\nSatz: {umfeld}\n"
+                f"Gib genau {anzahl} Vorschläge."},
+        ],
+    })
+    if not isinstance(roh, dict) or not isinstance(roh.get("werte"), list):
+        return []
+    gesehen, raus = set(), []
+    for w in roh["werte"]:
+        text = str(w or "").strip().strip(",.").strip()[:120]
+        if text and text.lower() not in gesehen:
+            gesehen.add(text.lower())
+            raus.append(text)
+    return raus[:anzahl]

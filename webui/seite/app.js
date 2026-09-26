@@ -808,7 +808,9 @@ function luckenFelder(wohin, text, vorgaben, mehrzeilig) {
     <label for="${wohin}-${n}">${esc(n)}</label>
     ${mehrzeilig
       ? `<textarea id="${wohin}-${n}" class="lueckenfeld" data-l="${n}"
-           style="min-height:40px">${esc((vorgaben || {})[n] || "")}</textarea>`
+           style="min-height:40px">${esc((vorgaben || {})[n] || "")}</textarea>
+         <p class="hint"><a href="#" onclick="luckenVorschlaege('${n}');return false">
+           10 Vorschläge</a> — eine Zeile je Bild.</p>`
       : `<input id="${wohin}-${n}" class="lueckenfeld" data-l="${n}"
            value="${esc((vorgaben || {})[n] || "")}">`}`).join("");
   return namen;
@@ -957,6 +959,23 @@ function serienWerte() {
     reihe.push(eins);
   }
   return reihe;
+}
+
+// Zehn verschiedene Hosen fuer die Luecke {hose}: das Sprachmodell kennt
+// den Satz, in dem sie steht, und schlaegt Passendes vor.
+async function luckenVorschlaege(name) {
+  const teile = gewaehlte();
+  const umfeld = teile.map(b => b.prompt).join(" ");
+  say(`Vorschläge für „${name}“ …`);
+  const g = await bausteinRuf({tu: "vorschlaege", luecke: name,
+                               umfeld, anzahl: 10});
+  if (!g) return;
+  const feld = $("bsFelder-" + name);
+  if (feld) {
+    feld.value = g.werte.join("\n");
+    feld.dispatchEvent(new Event("input"));
+  }
+  say(`${g.werte.length} Vorschläge eingesetzt — Zeilen ändern oder löschen.`, "ok");
 }
 
 async function vorschau() {

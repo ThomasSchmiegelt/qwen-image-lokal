@@ -23,7 +23,7 @@ import bausteine
 from kataloge import MIMIK, STYLES
 
 # Wie die Person bewahrt wird, waehrend Ort, Handlung und Stil wechseln.
-BLEIBT = "the person, their face and their build"
+BLEIBT = "the person's face, hair and build"
 
 
 def _stil(schluessel: str) -> str:
@@ -112,7 +112,7 @@ def zu_bloecken(szenen: list[dict], teile: list[dict]) -> list[dict]:
             bloecke[-1]["bausteine"].append(text)
         else:
             bloecke.append({"titel": name, "referenz": "start",
-                            "vorlage": "verwandeln", "bleibt": BLEIBT,
+                            "vorlage": "geschichte", "bleibt": BLEIBT,
                             "zurueck": False, "stil": stil,
                             "bausteine": [text]})
     # `stil` ist nur die Hilfsgroesse fuers Buendeln und hat im Block nichts

@@ -90,6 +90,7 @@ BEKANNT = {
     "String", "Number", "Boolean", "Array", "Object", "JSON", "Math", "Promise",
     "Error", "Set", "Map", "Date", "RegExp", "alert", "confirm", "console",
     "FileReader", "Blob", "URL", "FormData", "Image", "atob", "btoa",
+    "Event",
 }
 
 # Zeichenketten und Kommentare enthalten deutschen Fließtext -- "das ist (so)"

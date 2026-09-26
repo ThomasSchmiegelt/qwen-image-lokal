@@ -337,6 +337,15 @@ def _ausschluesse(text: str) -> list[str]:
     return [t.strip().lower() for t in re.split(r"[,;\n]", text or "") if t.strip()]
 
 
+def _durchs_tor(prompt: str, params: dict) -> str:
+    """Einen einzelnen Prompt durch den Torwaechter schicken und mitschreiben,
+    was dabei herausfiel."""
+    sauber, weg = torwaechter(prompt, params.get("negative_prompt") or "")
+    if weg:
+        current["tor"] = list(current["tor"]) + weg
+    return sauber
+
+
 def torwaechter(prompt: str, ausschluss: str) -> tuple[str, list[str]]:
     """Streicht ausgeschlossene Begriffe aus dem fertigen Prompt.
 
@@ -354,12 +363,28 @@ def torwaechter(prompt: str, ausschluss: str) -> tuple[str, list[str]]:
         return prompt, []
     behalten, entfernt = [], []
     for glied in prompt.split(","):
-        klein = glied.lower()
-        treffer = next((b for b in begriffe if b in klein), None)
-        if treffer:
-            entfernt.append(f"{glied.strip()} (wegen „{treffer}“)")
-        else:
+        treffer = next((b for b in begriffe if b in glied.lower()), None)
+        if not treffer:
             behalten.append(glied)
+            continue
+        # Steht der Begriff nicht gleich vorn, ist er ein Beiwerk: dann faellt
+        # nur der Nebensatz, nicht das ganze Glied. "eine Markthalle mit
+        # Leuchtreklame" ohne Leuchtreklame soll eine Markthalle bleiben --
+        # beim ersten Versuch war sie mit verschwunden.
+        teile = re.split(r"(\s+(?:with|and|featuring|including|under)\s+)", glied)
+        wenn_vorn = treffer in teile[0].lower()
+        if wenn_vorn or len(teile) == 1:
+            entfernt.append(f"{glied.strip()} (wegen „{treffer}“)")
+            continue
+        rest, weg = [teile[0]], []
+        for i in range(1, len(teile), 2):
+            trenner, stueck = teile[i], teile[i + 1] if i + 1 < len(teile) else ""
+            if treffer in stueck.lower():
+                weg.append(stueck.strip())
+            else:
+                rest += [trenner, stueck]
+        behalten.append("".join(rest))
+        entfernt.append(f"{' / '.join(weg)} (wegen „{treffer}“)")
     sauber = ",".join(behalten).strip().strip(",").strip()
     return (sauber or prompt), entfernt
 
@@ -591,7 +616,9 @@ def run_demo(params: dict) -> None:
                     **_series_kwargs(
                         {"mode": "edit", "prompt": "", "seed": seed,
                          "follow_reference": True, **fest}, [vorlage], "edit", sammler),
-                    prompts=[s["prompt"] for s in schritte],
+                    # Der Torwaechter gilt auch hier: ein Ablauf soll
+                    # ausgeschlossene Dinge genauso wenig zeigen.
+                    prompts=[_durchs_tor(s["prompt"], params) for s in schritte],
                     seeds=[seed if s["fest"] else seed + zaehler + i
                            for i, s in enumerate(schritte)])
 

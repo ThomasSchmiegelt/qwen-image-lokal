@@ -55,8 +55,23 @@ ALLES = "the person, their clothing and the surroundings"
 PERSON_GESICHT = "the person's face, their clothing and the surroundings"
 
 
+# Fuer Geschichten. "verwandeln" bewahrt Haltung und Ort -- damit sahen sechs
+# Szenen aus wie sechsmal dasselbe Bild. Eine Geschichte braucht das
+# Gegenteil: die Person bleibt, alles andere darf sich bewegen.
+_GESCHICHTE = (
+    "The same person as in the reference image -- {bleibt} stay the same. "
+    "This picture shows a different moment: {baustein}. "
+    "Draw the whole scene fresh for that moment: pose, place, light and "
+    "framing may all differ from the reference. "
+    + ANATOMIE
+)
+
+
 def prompt_fuer(block: dict, baustein: str) -> str:
-    if block.get("vorlage") == "aktion":
+    if block.get("vorlage") == "geschichte":
+        text = _GESCHICHTE.format(baustein=baustein,
+                                  bleibt=block.get("bleibt") or PERSON)
+    elif block.get("vorlage") == "aktion":
         text = _AKTION.format(aktion=baustein,
                               bleibt=block.get("bleibt") or PERSON_GESICHT)
     elif block.get("vorlage") == "verwandeln":
@@ -66,6 +81,8 @@ def prompt_fuer(block: dict, baustein: str) -> str:
         text = f"{kopf}, {baustein}"
     if block.get("ersetzt"):
         text = f"{text} {_ERSETZT}"
+    if block.get("vorlage") == "geschichte":
+        return text                    # traegt den Anatomiesatz schon
     return f"{text} {ANATOMIE}"
 
 

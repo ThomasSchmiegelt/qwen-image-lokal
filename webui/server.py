@@ -360,6 +360,21 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "vorschlaege":
+                # Zehn verschiedene Hosen fuer die Luecke {hose}. Ohne das
+                # Umfeld schlaegt das Modell etwas vor, das nicht zur Person
+                # passt.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                werte = chat.luecken_vorschlaege(
+                    str(params.get("luecke") or ""),
+                    str(params.get("umfeld") or ""),
+                    int(params.get("anzahl") or 10))
+                if not werte:
+                    return self._json(502, {"error":
+                        "Das Sprachmodell hat nichts vorgeschlagen."})
+                return self._json(200, {"werte": werte})
+
             if was == "zusammensetzen":
                 alle = {b["id"]: b for b in bausteine.liste(projekt)}
                 teile = [alle[k] for k in (params.get("ids") or []) if k in alle]

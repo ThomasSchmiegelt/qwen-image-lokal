@@ -127,7 +127,12 @@ und ohne Beschriftung.
 eingetragenen Begriffe werden aus dem fertigen Prompt gestrichen, bevor
 gerechnet wird — „Küche" und „Büro" kommen ohnehin als Wort aus einer
 Umgebungsachse oder einem Baustein. Das kostet nichts. Was gestrichen wurde,
-steht danach unter dem Feld. Nur für Dinge, die *nicht* im Prompt stehen
+steht danach unter dem Feld.
+
+Gestrichen wird so viel wie nötig und so wenig wie möglich: steht der Begriff
+vorn im Satzglied, ist er dessen Gegenstand und alles fällt (»in a bright
+kitchen« verschwindet ganz). Steht er hinten, ist er Beiwerk und nur der
+Nebensatz fällt — »eine Markthalle mit Leuchtreklame« bleibt eine Markthalle. Nur für Dinge, die *nicht* im Prompt stehen
 (unscharf, sechs Finger), hilft das Häkchen „auch dem Modell ausreden" — dann
 läuft jeder Schritt zweimal und das Bild dauert doppelt so lang.
 
@@ -154,7 +159,8 @@ Wald" → „mach es hochkant" → „und jetzt als Comic" → „davon bitte se
 Stück". Jeder Nachsatz ändert genau eine Sache und lässt den Rest stehen; der
 Verlauf steht unter dem Feld, „neu anfangen" vergisst ihn.
 
-**Geschichte.** Handlung auf Deutsch beschreiben, Bausteine anhaken — das
+**Geschichte.** Wahlweise am Stück oder **Szene für Szene** über einen
+Hinzufügen-Knopf. Handlung auf Deutsch beschreiben, Bausteine anhaken — das
 Sprachmodell zerlegt sie in Bilder und nimmt **Mimik und Stil aus der
 Handlung**: wer seinen Korb verliert, schaut erschrocken, wer ihn wiederbekommt,
 erleichtert. Heraus kommt kein Sonderformat, sondern die vorhandene

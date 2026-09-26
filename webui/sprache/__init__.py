@@ -9,7 +9,8 @@ Der Server spricht nur mit diesem Paket, nicht mit den einzelnen Dateien.
 """
 
 from .deuten import (
-    MODES, ask, baustein_prompt, interpret, sanitise, system_prompt,
+    MODES, ask, baustein_prompt, interpret, luecken_vorschlaege, sanitise,
+    system_prompt,
 )
 from .erzaehlen import geschichte
 from .ollama import MODEL, OLLAMA, available
@@ -20,6 +21,7 @@ __all__ = [
     "MODEL", "MODES", "OLLAMA", "ask", "available", "baustein_prompt",
     "bild_frage", "bild_lesen",
     "bild_zu_prompt", "geschichte", "interpret", "ist_weiblich",
+    "luecken_vorschlaege",
     "looks_german", "sanitise",
     "system_prompt", "translate",
 ]
