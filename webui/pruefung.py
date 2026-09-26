@@ -72,10 +72,15 @@ BEKANNT = {
 # Zeichenketten und Kommentare enthalten deutschen Fließtext -- "das ist (so)"
 # sähe sonst aus wie ein Aufruf von ist().
 def _nur_code(skript: str) -> str:
-    ohne = re.sub(r"/\*.*?\*/", " ", skript, flags=re.S)
+    # Ersetzt wird durch ebenso viele Zeilenumbrueche, wie verschwinden --
+    # sonst zeigen alle Meldungen auf die falsche Zeile.
+    def leer(treffer):
+        return '""' + "\n" * treffer.group(0).count("\n")
+
+    ohne = re.sub(r"/\*.*?\*/", leer, skript, flags=re.S)
     ohne = re.sub(r"(?<![:\w])//[^\n]*", " ", ohne)
     for muster in (r"`(?:[^`\\]|\\.)*`", r"'(?:[^'\\\n]|\\.)*'", r'"(?:[^"\\\n]|\\.)*"'):
-        ohne = re.sub(muster, '""', ohne)
+        ohne = re.sub(muster, leer, ohne)
     return ohne
 
 
@@ -103,6 +108,50 @@ def pruefe_aufrufe(skript: str) -> list[str]:
             if name not in bekannt]
 
 
+def pruefe_reihenfolge(skript: str) -> list[str]:
+    """Wird ein `const`/`let` benutzt, bevor es dasteht?
+
+    Anlass war ein echter Fehler: in `setMode` stand die Benutzung von
+    `istDemo` vier Zeilen ueber der Deklaration. JavaScript wirft dort einen
+    ReferenceError, die Aufrufpruefung sieht das aber nicht -- der Name
+    existiert ja, nur eben noch nicht.
+
+    Geprueft wird je Funktion, die auf Spaltenposition null beginnt, und nur
+    fuer Deklarationen unmittelbar im Rumpf. Das genuegt fuer diese Seite und
+    erspart einen halben Zerteiler. Eine Benutzung in einem Rueckruf, der erst
+    spaeter laeuft, waere zwar harmlos, wird aber trotzdem gemeldet -- lieber
+    einmal zu viel hinsehen.
+    """
+    zeilen = _nur_code(skript).split("\n")
+    beginn = [i for i, z in enumerate(zeilen)
+              if re.match(r"(?:async )?function [\w$]+\(", z)]
+    fehler = []
+    for nr, anfang in enumerate(beginn):
+        ende = beginn[nr + 1] if nr + 1 < len(beginn) else len(zeilen)
+        for i in range(anfang + 1, ende):
+            if zeilen[i] == "}":          # schliessende Klammer in Spalte null
+                ende = i + 1
+                break
+        rumpf = zeilen[anfang:ende]
+        name = re.search(r"function ([\w$]+)", rumpf[0]).group(1)
+        for i, zeile in enumerate(rumpf):
+            # Nur Deklarationen unmittelbar im Funktionsrumpf. Tiefer liegt
+            # eine eigene Ebene -- dort heisst derselbe Name etwas anderes,
+            # und die Pruefung wuerde nur Fehlalarme werfen.
+            treffer = re.match(r"  (?:const|let) ([\w$]+)\s*=", zeile)
+            if not treffer:
+                continue
+            gesucht = re.compile(r"(?<![.\w$])" + re.escape(treffer.group(1)) + r"(?![\w$])")
+            for j in range(1, i):
+                if gesucht.search(rumpf[j]):
+                    fehler.append(
+                        f"{name}(): {treffer.group(1)} wird in Zeile "
+                        f"{anfang + j + 1} benutzt, steht aber erst in "
+                        f"{anfang + i + 1}")
+                    break
+    return fehler
+
+
 def pruefe_felder(skript: str, info: dict) -> list[str]:
     gelesen = sorted(set(re.findall(r"\binfo\.(\w+)", skript)))
     fehlend = [k for k in gelesen if k not in info]
@@ -115,7 +164,8 @@ def main() -> int:
     argumente = zerleger.parse_args()
 
     text, skript = seite()
-    fehler = pruefe_elemente(text, skript) + pruefe_aufrufe(skript)
+    fehler = (pruefe_elemente(text, skript) + pruefe_aufrufe(skript)
+              + pruefe_reihenfolge(skript))
 
     try:
         with urllib.request.urlopen(

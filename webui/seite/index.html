@@ -22,6 +22,14 @@
         <button id="chatGo" title="Verstehen und loslegen (Strg+Eingabe)">&rarr;</button>
       </div>
       <p class="hint" id="chatNote"></p>
+
+      <div class="ableiten">
+        <label for="ableitenBild">…oder umgekehrt: Bild wählen, Prompt daraus</label>
+        <input type="file" id="ableitenBild" accept="image/*">
+        <p class="hint" id="ableitenNote">Beschreibt das Bild und stellt Stil,
+          Licht und Objektiv passend ein. Der Text landet oben im Prompt und
+          lässt sich dort ändern.</p>
+      </div>
     </div>
 
     <div class="tabs">
@@ -64,6 +72,9 @@
       <p class="hint" id="demoRefNote"></p>
 
       <label for="demoPrompt" id="demoPromptLabel">…oder beschreiben, wer erzeugt werden soll</label>
+      <p class="hint" id="demoAbleitenZeile" style="display:none">
+        <a href="#" id="demoAbleiten">aus dem Startbild beschreiben</a>
+        — der Text erscheint unten und lässt sich ändern.</p>
       <textarea id="demoPrompt" style="min-height:48px"
         placeholder="leer lassen für die Vorgabe: eine Person vor einem geparkten Auto"></textarea>
 
@@ -299,6 +310,7 @@
     <button id="stop" style="display:none">Abbrechen</button>
     <div class="bar"><i id="fill"></i></div>
     <div id="status">bereit</div>
+    <div id="warteschlange"></div>
     <p class="hint" style="margin-top:14px">
       <a href="#" id="beenden">Programm beenden</a> — hält den Server an und
       gibt die Grafikkarte frei.</p>

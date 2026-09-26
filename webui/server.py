@@ -27,7 +27,8 @@ from engine import (  # noqa: E402
 )
 # Die eigentliche Arbeit steht in auftraege.py -- hier nur Routen und Start.
 from auftraege import (  # noqa: E402
-    OUTPUTS, current, decode, engine, run_demo, run_job,
+    OUTPUTS, current, decode, einreihen, engine, entfernen, leeren, uebersicht,
+    verschieben,
 )
 import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
@@ -103,6 +104,28 @@ class Handler(BaseHTTPRequestHandler):
         """
         return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
 
+    def _bild_aus_anfrage(self):
+        """Das Bild aus dem Anfragerumpf, als PNG-Bytes fuers Sprachmodell.
+
+        Gibt bei einem Fehler stattdessen (Code, Meldung) zurueck -- der
+        Aufrufer erkennt das am Tupel. Das Sprachmodell darf nicht waehrend
+        eines Auftrags laufen, beide wollen dieselbe Grafikkarte.
+        """
+        if engine.lock.locked():
+            return 409, {"error": "Es laeuft gerade ein Auftrag"}
+        params = self._body()
+        if params is None:
+            return 400, {"error": "ungueltiges JSON"}
+        if not params.get("image"):
+            return 400, {"error": "Kein Bild"}
+        try:
+            roh = decode(params["image"])
+        except Exception as exc:
+            return 400, {"error": f"Bild nicht lesbar: {exc}"}
+        puffer = io.BytesIO()
+        roh.convert("RGB").save(puffer, format="PNG")
+        return puffer.getvalue()
+
     def _body(self):
         """Der JSON-Rumpf der Anfrage, oder None wenn er nicht lesbar ist."""
         length = int(self.headers.get("Content-Length", 0))
@@ -148,6 +171,12 @@ class Handler(BaseHTTPRequestHandler):
             status["stage"] = current["stage"]
             status["video"] = current["video"]
             status["gelesen"] = dict(current["gelesen"])
+            status["nummer"] = current["nummer"]
+            status["titel"] = current["titel"]
+            status.update(uebersicht())
+            # Solange noch etwas wartet, ist die Oberflaeche nicht fertig --
+            # sonst hoerte sie nach dem ersten Auftrag auf nachzufragen.
+            status["busy"] = status["busy"] or bool(status["wartend"])
             return self._json(200, status)
 
         if path == "/api/info":
@@ -222,27 +251,41 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/api/cancel":
+            # Ohne Angabe: den laufenden Auftrag stoppen. Mit "nummer": einen
+            # wartenden aus der Liste nehmen. Mit "alles": die Liste leeren,
+            # der laufende bleibt.
+            params = self._body() or {}
+            if params.get("alles"):
+                return self._json(200, {"ok": True, "entfernt": leeren()})
+            if params.get("nummer"):
+                weg = entfernen(int(params["nummer"]))
+                return self._json(200 if weg else 404, {"ok": weg})
             engine.cancel()
             return self._json(200, {"ok": True})
+
+        if path == "/api/verschieben":
+            params = self._body() or {}
+            weg = verschieben(int(params.get("nummer") or 0),
+                              -1 if params.get("richtung") == "hoch" else 1)
+            return self._json(200 if weg else 404, {"ok": weg})
+
+        if path == "/api/bild-lesen":
+            # Die kurze Fassung: wer ist zu sehen. Fuer den Ablauf-Reiter, wo
+            # die Beschreibung in die Bewahrungsklauseln wandert und nicht als
+            # ganzer Bildprompt gebraucht wird.
+            bild = self._bild_aus_anfrage()
+            if isinstance(bild, tuple):
+                return self._json(*bild)
+            return self._json(200, chat.bild_lesen(bild))
 
         if path == "/api/bild-prompt":
             # Rueckwaerts: aus einem mitgebrachten Bild den Prompt schreiben.
             # Wie beim Chat nicht waehrend eines Auftrags -- Ollama und das
             # Bildmodell wuerden sich um die Grafikkarte streiten.
-            if engine.lock.locked():
-                return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
-            params = self._body()
-            if params is None:
-                return self._json(400, {"error": "ungueltiges JSON"})
-            if not params.get("image"):
-                return self._json(400, {"error": "Kein Bild"})
-            try:
-                roh = decode(params["image"])
-            except Exception as exc:
-                return self._json(400, {"error": f"Bild nicht lesbar: {exc}"})
-            puffer = io.BytesIO()
-            roh.convert("RGB").save(puffer, format="PNG")
-            ergebnis = chat.bild_zu_prompt(puffer.getvalue())
+            bild = self._bild_aus_anfrage()
+            if isinstance(bild, tuple):
+                return self._json(*bild)
+            ergebnis = chat.bild_zu_prompt(bild)
             if not ergebnis["prompt"]:
                 return self._json(502, {"error":
                     "Das Sprachmodell hat keinen Prompt geliefert."})
@@ -308,17 +351,8 @@ class Handler(BaseHTTPRequestHandler):
                 params = json.loads(self.rfile.read(length) or b"{}")
             except json.JSONDecodeError as exc:
                 return self._json(400, {"error": f"ungueltiges JSON: {exc}"})
-            if not engine.lock.acquire(blocking=False):
-                return self._json(409, {"error": "Es laeuft bereits ein Auftrag"})
-            engine.aborted = False
-            current["files"] = []
-            current["error"] = None
-            current["translated"] = {}
-            current["stage"] = "wird vorbereitet"
-            current["video"] = None
-            current["gelesen"] = {}
-            threading.Thread(target=run_demo, args=(params,), daemon=True).start()
-            return self._json(202, {"ok": True})
+            auftrag = einreihen("demo", params)
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
         if path == "/api/chat":
             length = int(self.headers.get("Content-Length", 0))
@@ -381,18 +415,8 @@ class Handler(BaseHTTPRequestHandler):
             if params.get("action") == "entfernen" and not has_text:
                 return self._json(400, {"error": "Bitte beschreiben, wer entfernt werden soll"})
 
-        if not engine.lock.acquire(blocking=False):
-            return self._json(409, {"error": "Es laeuft bereits ein Auftrag"})
-
-        engine.aborted = False
-        current["files"] = []
-        current["error"] = None
-        current["translated"] = {}
-        current["stage"] = ""
-        current["video"] = None
-        current["gelesen"] = {}
-        threading.Thread(target=run_job, args=(params,), daemon=True).start()
-        return self._json(202, {"ok": True})
+        auftrag = einreihen("generate", params)
+        return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
 
 def main():

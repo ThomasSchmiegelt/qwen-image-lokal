@@ -170,3 +170,23 @@
   .kachel b:hover { background: #a33c3c; }
   .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); }
   .grid img.sel { border-color: var(--accent); }
+
+/* Warteschlange: der laufende Auftrag oben, die wartenden darunter. */
+#warteschlange { margin-top: 10px; }
+#warteschlange .zeile {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  border-radius: 6px; background: #1b1f27; margin-bottom: 4px; font-size: 12px;
+}
+#warteschlange .zeile.laeuft { background: #2a2418; }
+#warteschlange .zeile.fertig { background: transparent; color: var(--muted); }
+#warteschlange .nr { color: var(--muted); min-width: 2.2em; }
+#warteschlange .was { flex: 1; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+#warteschlange .knopf {
+  cursor: pointer; color: var(--muted); padding: 0 3px; user-select: none;
+}
+#warteschlange .knopf:hover { color: #e7eaf0; }
+
+/* Der umgekehrte Weg: aus einem Bild einen Prompt. Steht beim Freitext,
+   weil es dieselbe Frage von der anderen Seite beantwortet. */
+.ableiten { margin: 10px 0 14px; padding-top: 10px; border-top: 1px solid #262b36; }

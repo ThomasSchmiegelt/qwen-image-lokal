@@ -4,13 +4,23 @@ Der Server nimmt die Anfrage entgegen und beantwortet sie sofort; die Arbeit
 laeuft danach in einem eigenen Faden weiter. Hier steht diese Arbeit --
 uebersetzen, Groessen bestimmen, die Maschine anwerfen, Bilder ablegen.
 
+Auftraege werden eingereiht statt abgewiesen: `einreihen()` haengt an, ein
+einziger Arbeitsfaden nimmt sie der Reihe nach ab. So darf man mehrere
+Auftraege hintereinander abschicken, ohne auf das Ende zu warten -- gleichzeitig
+rechnen kann die eine Grafikkarte ohnehin nicht.
+
 Was hier oeffentlich heisst, benutzt der Server: `engine`, `current`,
-`OUTPUTS`, `decode`, `run_job`, `run_demo`.
+`OUTPUTS`, `decode`, `einreihen`, `entfernen`, `uebersicht`.
 """
 
+import base64
+import io
+import itertools
 import json
 import os
 import sys
+import threading
+import time
 import traceback
 from datetime import datetime
 
@@ -30,7 +40,127 @@ os.makedirs(OUTPUTS, exist_ok=True)
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
 current = {"files": [], "error": None, "translated": {}, "stage": "",
-           "video": None, "gelesen": {}}
+           "video": None, "gelesen": {}, "nummer": 0, "titel": ""}
+
+# Die Warteschlange. Wartende Auftraege halten ihre Referenzbilder als
+# Datenzeilen im Speicher -- bei einer Handvoll sind das ein paar Megabyte,
+# was in Ordnung ist. Wer hunderte einreiht, sollte sie auf die Platte legen;
+# dafuer bekommen hochgeladene Bilder mit den Projekten einen festen Ort.
+warteschlange: list[dict] = []
+verlauf: list[dict] = []          # die letzten erledigten Auftraege
+_wecker = threading.Condition()   # schuetzt beide Listen und weckt den Arbeiter
+_zaehler = itertools.count(1)
+VERLAUF_LAENGE = 20
+
+
+def _titel(art: str, params: dict) -> str:
+    """Eine Zeile, an der man den Auftrag in der Liste wiedererkennt."""
+    if art == "demo":
+        if params.get("bloecke"):
+            return f"Ablauf, {len(params['bloecke'])} Bloecke"
+        return f"Ablauf: {params.get('ablauf') or 'reise'}"
+    text = (params.get("prompt") or "").strip()
+    if text:
+        return text[:60] + ("…" if len(text) > 60 else "")
+    for feld in ("effect", "form"):
+        if params.get(feld):
+            return str(params[feld])
+    return params.get("mode") or "Auftrag"
+
+
+def einreihen(art: str, params: dict) -> dict:
+    """Haengt einen Auftrag an und weckt den Arbeiter. Antwortet sofort."""
+    auftrag = {"nummer": next(_zaehler), "art": art, "params": params,
+               "titel": _titel(art, params), "zustand": "wartet",
+               "angelegt": time.time(), "bilder": 0, "fehler": None}
+    with _wecker:
+        warteschlange.append(auftrag)
+        _wecker.notify()
+    return auftrag
+
+
+def entfernen(nummer: int) -> bool:
+    """Nimmt einen wartenden Auftrag wieder heraus. Der laufende bleibt --
+    den stoppt `engine.cancel()`, weil er schon Rechenzeit verbraucht hat."""
+    with _wecker:
+        for i, a in enumerate(warteschlange):
+            if a["nummer"] == nummer:
+                del warteschlange[i]
+                return True
+    return False
+
+
+def verschieben(nummer: int, richtung: int) -> bool:
+    """Einen wartenden Auftrag eine Stelle nach vorn oder hinten."""
+    with _wecker:
+        for i, a in enumerate(warteschlange):
+            if a["nummer"] != nummer:
+                continue
+            ziel = i + richtung
+            if not 0 <= ziel < len(warteschlange):
+                return False
+            warteschlange[i], warteschlange[ziel] = warteschlange[ziel], warteschlange[i]
+            return True
+    return False
+
+
+def leeren() -> int:
+    """Alle wartenden Auftraege verwerfen. Der laufende bleibt unberuehrt."""
+    with _wecker:
+        anzahl = len(warteschlange)
+        warteschlange.clear()
+        return anzahl
+
+
+def _kurz(auftrag: dict) -> dict:
+    """Was die Oberflaeche ueber einen Auftrag wissen muss -- ohne die
+    Referenzbilder, die als Datenzeilen im Auftrag stecken."""
+    return {k: auftrag[k] for k in
+            ("nummer", "art", "titel", "zustand", "angelegt", "bilder", "fehler")}
+
+
+def uebersicht() -> dict:
+    with _wecker:
+        return {"wartend": [_kurz(a) for a in warteschlange],
+                "verlauf": [_kurz(a) for a in reversed(verlauf)]}
+
+
+def _abarbeiten(auftrag: dict) -> None:
+    """Einen Auftrag ausfuehren. Nur der Arbeiter ruft das auf."""
+    engine.lock.acquire()
+    try:
+        auftrag["zustand"] = "laeuft"
+        engine.aborted = False
+        current.update(files=[], error=None, translated={}, video=None,
+                       gelesen={}, stage="wird vorbereitet",
+                       nummer=auftrag["nummer"], titel=auftrag["titel"])
+        (run_demo if auftrag["art"] == "demo" else run_job)(auftrag["params"])
+    finally:
+        auftrag["bilder"] = len(current["files"])
+        auftrag["fehler"] = current["error"]
+        auftrag["zustand"] = ("fehler" if current["error"]
+                              else "abgebrochen" if engine.aborted else "fertig")
+        # Die Vorgaben samt Referenzbildern werden nicht aufgehoben.
+        auftrag.pop("params", None)
+        with _wecker:
+            verlauf.append(auftrag)
+            del verlauf[:-VERLAUF_LAENGE]
+        engine.lock.release()
+
+
+def _arbeiter() -> None:
+    while True:
+        with _wecker:
+            while not warteschlange:
+                _wecker.wait()
+            auftrag = warteschlange.pop(0)
+        try:
+            _abarbeiten(auftrag)
+        except Exception:                      # darf den Faden nie beenden
+            traceback.print_exc()
+
+
+threading.Thread(target=_arbeiter, daemon=True, name="auftraege").start()
 
 
 def decode(data_url: str) -> Image.Image:
@@ -159,8 +289,7 @@ def run_job(params: dict) -> None:
         print(err, file=sys.stderr)
         current["error"] = err.strip().splitlines()[-1]
         engine.note("error", current["error"])
-    finally:
-        engine.lock.release()
+    # Die Sperre haelt und loest der Arbeiter -- siehe _abarbeiten().
 
 
 class Abgebrochen(Exception):
@@ -334,5 +463,4 @@ def run_demo(params: dict) -> None:
         print(err, file=sys.stderr)
         current["error"] = err.strip().splitlines()[-1]
         engine.note("error", current["error"])
-    finally:
-        engine.lock.release()
+    # Die Sperre haelt und loest der Arbeiter -- siehe _abarbeiten().

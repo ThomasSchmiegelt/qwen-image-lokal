@@ -228,6 +228,10 @@ function setMode(next) {
   const tpl = templates[next];
   const istDemo = next === "demo";
   $("demoBox").style.display = istDemo ? "block" : "none";
+  // Im Ablauf-Reiter ist das Prompt-Feld ausgeblendet -- dort waere das
+  // Ableiten wirkungslos. Der Reiter hat dafuer seine eigene Zeile.
+  document.querySelectorAll(".ableiten").forEach(
+    el => { el.style.display = istDemo ? "none" : "block"; });
   ["boxVorlage", "boxDarstellung", "boxBild", "boxFein", "uploadBox"].forEach(
     id => { if (istDemo) $(id).style.display = "none"; });
   $("prompt").parentElement.querySelectorAll("#prompt, #transNote, #tplHint")
@@ -448,6 +452,10 @@ $("demoFile").onchange = e => {
       "…kurz beschreiben, wer auf dem Bild ist (leer lassen: der Server liest es selbst)";
     $("demoPrompt").placeholder =
       "z. B. eine Frau Mitte dreißig mit kurzen blonden Haaren, dunkler Jacke";
+    $("demoAbleitenZeile").style.display = "block";
+    // Gleich beschreiben lassen, statt es erst beim Start zu tun: so steht
+    // der Text vor dem Lauf da und laesst sich noch aendern.
+    if (!$("demoPrompt").value.trim()) demoBeschreiben();
   };
   leser.readAsDataURL(f);
 };
@@ -470,9 +478,10 @@ function demoDauer() {
 ["demoSteps", "demoBase", "demoDuration"].forEach(id => $(id).addEventListener("input", demoDauer));
 
 async function starteDemo() {
+  const laeuftSchon = $("go").classList.contains("busy");
   buttonState("busy");
-  $("stage").dataset.file = "";
-  say("Vorführung wird vorbereitet …");
+  if (!laeuftSchon) $("stage").dataset.file = "";
+  say(laeuftSchon ? "Ablauf wird eingereiht …" : "Vorführung wird vorbereitet …");
   const res = await fetch("/api/demo", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
@@ -491,7 +500,7 @@ async function starteDemo() {
   // schiefgeht, darf die Fortschrittsabfrage nicht mitreissen -- sonst
   // bliebe der Knopf fuer immer auf "laeuft".
   try {
-    startSlots(1 + bloecke.reduce((s, b) => {
+    if (!laeuftSchon) startSlots(1 + bloecke.reduce((s, b) => {
       const zeilen = (b.bausteine || []).length;
       if (b.art === "gruppe") return s + Math.min(zeilen, 1);
       return s + (b.anzahl > 0 && zeilen ? b.anzahl : zeilen);
@@ -512,7 +521,10 @@ function buttonState(state) {
   go.classList.remove("busy", "done", "ready");
   clearTimeout(buttonState.timer);
   if (state === "busy") {
-    go.disabled = true; go.classList.add("busy"); go.textContent = "läuft …";
+    // Nicht gesperrt: waehrend etwas rechnet, haengt ein Klick den naechsten
+    // Auftrag hinten an. Sonst brauchte man die Warteschlange gar nicht.
+    go.disabled = false; go.classList.add("busy");
+    go.textContent = "läuft — noch einen einreihen";
     $("stop").style.display = "block";
   } else {
     go.disabled = false; go.textContent = MODES[mode].label;
@@ -566,11 +578,13 @@ async function start() {
     transparent: $("transparent").checked
   };
 
+  const laeuftSchon = $("go").classList.contains("busy");
   buttonState("busy");
-  $("stage").dataset.file = "";
   $("transNote").style.display = "none";
-  say("Auftrag wird gestartet …");
-  paintSeries([], body.count, 1);
+  say(laeuftSchon ? "Wird eingereiht …" : "Auftrag wird gestartet …");
+  // Nur wenn nichts laeuft, das Mosaik leeren -- sonst verschwaende man die
+  // Anzeige des Auftrags, der gerade rechnet.
+  if (!laeuftSchon) { $("stage").dataset.file = ""; paintSeries([], body.count, 1); }
 
   // Bricht die Verbindung weg, muss der Knopf zurueckspringen -- sonst
   // steht er fuer immer auf "laeuft", ohne dass etwas rechnet.
@@ -589,7 +603,11 @@ async function start() {
   poll();
 }
 $("go").onclick = () => (mode === "demo" ? starteDemo() : start());
-$("stop").onclick = () => { fetch("/api/cancel", {method: "POST"}); say("Abbruch angefordert …"); };
+$("stop").onclick = () => {
+  // Nur den laufenden Auftrag. Wartende nimmt man einzeln aus der Liste.
+  fetch("/api/cancel", {method: "POST"});
+  say("Abbruch des laufenden Auftrags angefordert …");
+};
 
 // ---------- Freitexteingabe ----------
 // Der Server liefert einen fertigen Satz Einstellungen. Die werden sichtbar in
@@ -639,22 +657,54 @@ async function sendChat() {
 $("chatGo").onclick = sendChat;
 $("beenden").onclick = e => { e.preventDefault(); programmBeenden(); };
 $("ableiten").onclick = e => { e.preventDefault(); promptAusBild(); };
+$("ableitenBild").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const leser = new FileReader();
+  leser.onload = () => promptAusBild(leser.result);
+  leser.readAsDataURL(f);
+};
+$("demoAbleiten").onclick = e => { e.preventDefault(); demoBeschreiben(); };
+
+// Im Ablauf beschreibt der Text, wen das Modell bewahren soll -- dafuer
+// genuegt der kurze Halbsatz, nicht der ganze Bildprompt.
+async function demoBeschreiben() {
+  if (!demoRef) return say("Erst ein Startbild wählen.", "err");
+  say("Das Startbild wird gelesen …");
+  const g = await bildLesen("/api/bild-lesen", demoRef);
+  if (!g || !g.beschreibung) return;
+  $("demoPrompt").value = g.beschreibung;
+  $("demoRefNote").textContent = "Im Startbild erkannt: " + g.beschreibung
+    + (g.geschlecht !== "unklar" ? ` (${g.geschlecht})` : "");
+  say("Beschreibung aus dem Startbild übernommen. Unten änderbar.", "ok");
+}
 
 // Rueckwaerts: das hochgeladene Bild ansehen und den Prompt dazu schreiben.
 // Lesen darf nur das Sprachmodell, deshalb geht es nicht waehrend eines
 // Auftrags -- beide wollen dieselbe Grafikkarte.
-async function promptAusBild() {
-  if (!refs.length) return say("Erst ein Referenzbild hochladen.", "err");
-  say("Das Bild wird gelesen …");
-  const res = await fetch("/api/bild-prompt", {
+// Das Bild einmal ansehen lassen. `pfad` unterscheidet die kurze Fassung
+// (wer ist zu sehen) von der langen (der ganze Bildprompt).
+async function bildLesen(pfad, bild) {
+  const res = await fetch(pfad, {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({image: refs[0]})
+    body: JSON.stringify({image: bild})
   }).catch(() => null);
   if (!res || !res.ok) {
     const err = res ? await res.json().catch(() => ({})) : {};
-    return say(err.error || "Das Bild liess sich nicht lesen.", "err");
+    say(err.error || "Das Bild ließ sich nicht lesen.", "err");
+    return null;
   }
-  const g = await res.json();
+  return res.json();
+}
+
+// Der umgekehrte Weg: aus einem Bild den Prompt. Ohne Angabe wird das erste
+// Referenzbild genommen, damit man es nicht zweimal hochladen muss.
+async function promptAusBild(bild) {
+  bild = bild || refs[0];
+  if (!bild) return say("Erst ein Bild wählen.", "err");
+  say("Das Bild wird gelesen …");
+  const g = await bildLesen("/api/bild-prompt", bild);
+  if (!g) return;
   $("prompt").value = g.prompt;
   if (g.stil) $("style").value = g.stil;
   if (g.licht) $("light").value = g.licht;
@@ -671,6 +721,10 @@ $("chat").addEventListener("keydown", e => {
 });
 
 // ---------- Fortschritt ----------
+// Welcher Auftrag gerade laeuft -- am Wechsel erkennt die Seite, dass der
+// vorige fertig ist.
+let laufendeNummer = 0;
+
 function poll() {
   clearInterval(polling);
   polling = setInterval(async () => {
@@ -687,6 +741,13 @@ function poll() {
       $("fill").style.width =
         (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
       paintSeries(s.results || [], s.count, s.image);
+      zeigeWarteschlange(s);
+      // Wechselt der laufende Auftrag, ist der vorige fertig -- seine Bilder
+      // sollen dann sofort in der Galerie stehen, nicht erst ganz am Ende.
+      if (s.nummer && s.nummer !== laufendeNummer) {
+        if (laufendeNummer) loadGallery();
+        laufendeNummer = s.nummer;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -703,6 +764,53 @@ function poll() {
     loadGallery();
   }, 900);
 }
+// Der laufende Auftrag und die wartenden darunter. Wartende lassen sich
+// verschieben und herausnehmen; der laufende nur abbrechen, er hat schon
+// Rechenzeit verbraucht.
+function zeigeWarteschlange(s) {
+  const zeilen = [];
+  if (s.busy && s.titel) {
+    zeilen.push(`<div class="zeile laeuft"><span class="nr">#${s.nummer}</span>`
+      + `<span class="was">${esc(s.titel)}</span><span>läuft</span></div>`);
+  }
+  (s.wartend || []).forEach((a, i, alle) => {
+    zeilen.push(`<div class="zeile"><span class="nr">#${a.nummer}</span>`
+      + `<span class="was">${esc(a.titel)}</span>`
+      + (i > 0 ? `<span class="knopf" onclick="auftragSchieben(${a.nummer},'hoch')" title="nach vorn">↑</span>` : "")
+      + (i < alle.length - 1 ? `<span class="knopf" onclick="auftragSchieben(${a.nummer},'runter')" title="nach hinten">↓</span>` : "")
+      + `<span class="knopf" onclick="auftragWeg(${a.nummer})" title="entfernen">×</span></div>`);
+  });
+  (s.verlauf || []).slice(0, 3).forEach(a => {
+    const wie = a.zustand === "fertig" ? `${a.bilder} Bild(er)` : a.zustand;
+    zeilen.push(`<div class="zeile fertig"><span class="nr">#${a.nummer}</span>`
+      + `<span class="was">${esc(a.titel)}</span><span>${wie}</span></div>`);
+  });
+  if ((s.wartend || []).length > 1) {
+    zeilen.push(`<p class="hint"><a href="#" onclick="listeLeeren();return false">`
+      + `Warteliste leeren</a> — der laufende Auftrag bleibt.</p>`);
+  }
+  $("warteschlange").innerHTML = zeilen.join("");
+}
+
+async function auftragWeg(nummer) {
+  await fetch("/api/cancel", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nummer})}).catch(() => null);
+}
+
+async function auftragSchieben(nummer, richtung) {
+  await fetch("/api/verschieben", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nummer, richtung})}).catch(() => null);
+}
+
+async function listeLeeren() {
+  if (!confirm("Alle wartenden Aufträge verwerfen?")) return;
+  await fetch("/api/cancel", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({alles: true})}).catch(() => null);
+}
+
 const fmt = sec => sec < 90 ? `${Math.round(sec)}s` : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")} min`;
 
 // Was der Server im Startbild erkannt hat. Die Beschreibung landet in den
