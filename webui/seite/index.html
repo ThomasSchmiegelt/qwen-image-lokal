@@ -128,7 +128,25 @@
     <fieldset id="geschichteBox" style="display:none">
       <legend>Geschichte</legend>
 
-      <p class="hint"><b>1. Umreißen.</b> Eine Idee genügt. Das Sprachmodell
+      <div class="axis">
+        <div>
+          <label for="gsWahl">Geschichte</label>
+          <select id="gsWahl"></select>
+        </div>
+        <div>
+          <label for="gsBand">Band</label>
+          <select id="gsBand"></select>
+        </div>
+      </div>
+      <p class="hint">
+        <a href="#" id="gsNeu">+ neue Geschichte</a> ·
+        <a href="#" id="gsBandNeu">+ Band</a> ·
+        <a href="#" id="gsWeg">löschen</a><br>
+        Die Vorgaben — Stil, Welt, Wirklichkeitsgrad — gehören der Geschichte
+        und gelten für alle Bände. Ein neuer Band kennt die Kurzfassungen der
+        vorigen und knüpft daran an.</p>
+
+      <p class="hint" style="margin-top:14px"><b>1. Umreißen.</b> Eine Idee genügt. Das Sprachmodell
         schreibt die Kurzfassung, schlägt den Stil für die ganze Folge vor und
         sagt, ob es in der Wirklichkeit oder einer erfundenen Welt spielt —
         das muss es wissen, sonst biegt es Drachen weg.</p>

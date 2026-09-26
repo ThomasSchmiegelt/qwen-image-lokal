@@ -313,7 +313,8 @@ diesen Schlüsseln:
           Bild zu sehen ist."""
 
 
-def expose(idee: str, fiktion=None, model: str | None = None) -> dict:
+def expose(idee: str, fiktion=None, vorher: str = "",
+           model: str | None = None) -> dict:
     """Aus einer Idee die Kurzbeschreibung samt Stil und Weltzuordnung.
 
     `fiktion` ist der Regler des Benutzers, 0 bis 10, und schlaegt das
@@ -329,6 +330,12 @@ def expose(idee: str, fiktion=None, model: str | None = None) -> dict:
         stile=", ".join(STYLES))
     if satz:
         system += f"\n\nDer Benutzer hat den Wirklichkeitsgrad vorgegeben: {satz}"
+    # Ein Folgeband faengt nicht bei null an. Ohne die Vorgeschichte erfindet
+    # das Modell die Figuren neu und widerspricht dem, was schon geschehen ist.
+    if vorher.strip():
+        system += ("\n\nDas ist die Fortsetzung. Bisher geschah:\n"
+                   + vorher.strip()
+                   + "\n\nKnuepfe daran an, wiederhole es nicht.")
     try:
         roh = antwort({
             "model": name, "format": "json", "keep_alive": "10m",

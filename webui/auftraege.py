@@ -502,6 +502,7 @@ def run_expose(params: dict) -> None:
         current["stage"] = "Grosses Sprachmodell wird geladen"
         erg = chat.expose(params.get("idee") or "",
                           fiktion=params.get("fiktion"),
+                          vorher=params.get("vorher") or "",
                           model=params.get("modell") or None)
         current["expose"] = erg
         current["stage"] = ""

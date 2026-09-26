@@ -184,10 +184,17 @@ Weil es die Grafikkarte belegt, läuft das als Auftrag in der Warteschlange.
 **Erzeugen:** in den Ablauf übernehmen und gegenlesen, oder gleich Bilder und
 Video.
 
-Der Stand wird dabei **je Projekt zwischengespeichert** — Idee, Kurzfassung,
-Stil, Regler, Inhaltsverzeichnis und die geschriebenen Prompts. Eine
-Geschichte entsteht nicht in einem Zug; den Reiter zu verlassen kostet
-nichts.
+**Mehrere Geschichten, jede in Bänden.** Eine Geschichte bekommt einen Namen
+und die Vorgaben, die für alles gelten: Stil, Welt, Wirklichkeitsgrad,
+Sprachmodell. Soll sie weitergehen, hängt *+ Band* einen zweiten Teil an — er
+erbt die Vorgaben und kennt die Kurzfassungen der vorigen Bände, knüpft also
+an, statt die Figuren neu zu erfinden.
+
+Gespeichert wird als lesbares JSON, eine Datei je Geschichte unter
+`projekte/<projekt>/geschichten/<name>.json`: Vorgaben oben, darunter die
+Bände mit Idee, Kurzfassung, Inhaltsverzeichnis und Prompts. Damit lässt sich
+eine Geschichte auch außerhalb des Programms weiterverarbeiten. Geschrieben
+wird verzögert, damit nicht jeder Tastendruck eine Datei anfasst.
 
 Ein `/Name`, zu dem es noch keinen Baustein gibt, ist eine Arbeitsanweisung
 und erscheint im **Katalog unter „Noch anzulegen"**, mit dem Projekt, das ihn

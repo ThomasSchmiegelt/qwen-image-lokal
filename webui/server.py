@@ -32,6 +32,7 @@ from auftraege import (  # noqa: E402
 )
 import projekte  # noqa: E402
 import bausteine  # noqa: E402
+import baender  # noqa: E402
 import geschichte  # noqa: E402
 import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
@@ -332,17 +333,35 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "video": os.path.basename(ziel),
                                     "bilder": len(pfade), "dauer": dauer})
 
-        if path == "/api/geschichte-stand":
-            # Zwischenspeicher je Projekt: umreissen, gliedern und Prompts
-            # schreiben passiert nicht in einem Zug.
+        if path == "/api/geschichten":
+            # Mehrere Geschichten je Projekt, jede in Baenden. Die Vorgaben
+            # gehoeren der Geschichte, die Gliederung dem Band.
             params = self._body()
             if params is None:
                 return self._json(400, {"error": "ungueltiges JSON"})
             projekt = projekte.aktiv()
-            if params.get("tu") == "lesen":
-                return self._json(200, geschichte.stand_lesen(projekt))
-            return self._json(200, geschichte.stand_schreiben(
-                projekt, params.get("stand") or {}))
+            was = params.get("tu")
+            schluessel = str(params.get("schluessel") or "")
+
+            if was == "liste":
+                return self._json(200, {"geschichten": baender.liste(projekt)})
+            if was == "anlegen":
+                g = baender.anlegen(projekt, str(params.get("name") or ""),
+                                    params.get("globale") or {})
+                return self._json(200, g)
+            if was == "lesen":
+                g = baender.lesen(projekt, schluessel)
+                return self._json(200 if g else 404, g or {"error": "nicht gefunden"})
+            if was == "speichern":
+                g = baender.speichern(projekt, schluessel, params.get("stand") or {})
+                return self._json(200 if g else 404, g or {"error": "nicht gefunden"})
+            if was == "band":
+                g = baender.band_anlegen(projekt, schluessel)
+                return self._json(200 if g else 404, g or {"error": "nicht gefunden"})
+            if was == "loeschen":
+                gut = baender.loeschen(projekt, schluessel)
+                return self._json(200 if gut else 404, {"ok": gut})
+            return self._json(400, {"error": "unbekannte Aktion"})
 
         if path == "/api/expose":
             # Zuerst: worum geht es, welcher Stil, welche Welt. Der Stil gilt
@@ -354,9 +373,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "Keine Idee"})
             # "fiktion" darf fehlen -- dann entscheidet das Modell selbst.
             fiktion = params.get("fiktion")
+            vorher = ""
+            if params.get("schluessel"):
+                g = baender.lesen(projekte.aktiv(), str(params["schluessel"]))
+                if g:
+                    vorher = baender.vorgeschichte(g, int(params.get("band") or 1))
             auftrag = einreihen("expose", {
-                "idee": str(params["idee"]),
-                "fiktion": None if fiktion is None else bool(fiktion),
+                "idee": str(params["idee"]), "fiktion": fiktion,
+                "vorher": vorher,
                 "modell": str(params.get("modell") or "") or None})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
@@ -475,11 +499,15 @@ class Handler(BaseHTTPRequestHandler):
                 # Arbeitsanweisung, keine Luecke zum Uebersehen.
                 fehlend = []
                 for pj in projekte.liste():
-                    stand = geschichte.stand_lesen(pj["key"])
-                    offen = geschichte.offene_verweise(
-                        stand.get("zeilen") or [], bausteine.liste(pj["key"]))
-                    fehlend += [{"name": n, "projekt": pj["key"],
-                                 "projektname": pj["label"]} for n in offen]
+                    vorhanden = bausteine.liste(pj["key"])
+                    zeilen = []
+                    for eintrag in baender.liste(pj["key"]):
+                        g = baender.lesen(pj["key"], eintrag["schluessel"])
+                        for b in g.get("baende") or []:
+                            zeilen += b.get("zeilen") or []
+                    for n in geschichte.offene_verweise(zeilen, vorhanden):
+                        fehlend.append({"name": n, "projekt": pj["key"],
+                                        "projektname": pj["label"]})
                 return self._json(200, {"bausteine": bausteine.katalog(),
                                         "projekte": projekte.liste(),
                                         "fehlend": fehlend})

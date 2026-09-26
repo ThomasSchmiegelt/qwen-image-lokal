@@ -1159,48 +1159,122 @@ function zeigeGrad() {
 
 $("gsFiktion").addEventListener("input", zeigeGrad);
 
-// Zwischenspeicher: was im Reiter steht, liegt beim Projekt. Gespeichert
-// wird verzoegert, damit nicht jeder Tastendruck eine Datei schreibt.
-let gsSpeicherUhr = null;
+// Mehrere Geschichten je Projekt, jede in Baenden. Die Vorgaben -- Stil,
+// Welt, Wirklichkeitsgrad, Modell -- gehoeren der Geschichte und gelten fuer
+// alle Baende; Idee, Gliederung und Prompts gehoeren dem Band.
+let gsSpeicherUhr = null, GSAKTUELL = null, gsBandNr = 1;
+
+async function gsRuf(rumpf) {
+  const res = await fetch("/api/geschichten", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(rumpf)
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    say(err.error || "Das hat nicht geklappt.", "err");
+    return null;
+  }
+  return res.json();
+}
 
 function gsStand() {
-  return {idee: $("gsIdee").value, kurz: $("gsKurz").value,
+  return {band: gsBandNr,
           stil: $("gsStil").value, welt: $("gsWelt").value,
           fiktion: +$("gsFiktion").value, modell: $("gsModell").value,
+          idee: $("gsIdee").value, kurz: $("gsKurz").value,
           zeilen: gsZeilen,
           prompts: (GESCHICHTE && GESCHICHTE.prompts) || []};
 }
 
 function gsMerken() {
+  if (!GSAKTUELL) return;
   clearTimeout(gsSpeicherUhr);
   gsSpeicherUhr = setTimeout(() => {
-    fetch("/api/geschichte-stand", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({stand: gsStand()})
-    }).catch(() => null);
+    gsRuf({tu: "speichern", schluessel: GSAKTUELL, stand: gsStand()});
   }, 1200);
 }
 
-async function gsHolen() {
-  const stand = await fetch("/api/geschichte-stand", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({tu: "lesen"})
-  }).then(r => r.json()).catch(() => null);
-  if (!stand || !Object.keys(stand).length) return;
-  if (stand.idee) $("gsIdee").value = stand.idee;
-  if (stand.kurz) $("gsKurz").value = stand.kurz;
-  if (stand.stil) $("gsStil").value = stand.stil;
-  if (stand.welt) $("gsWelt").value = stand.welt;
-  if (stand.modell) $("gsModell").value = stand.modell;
-  if (stand.fiktion !== undefined) $("gsFiktion").value = stand.fiktion;
-  if (Array.isArray(stand.zeilen) && stand.zeilen.length) gsZeilen = stand.zeilen;
+async function gsListe(waehle) {
+  const g = await gsRuf({tu: "liste"});
+  if (!g) return;
+  $("gsWahl").innerHTML = g.geschichten.length
+    ? g.geschichten.map(x =>
+        `<option value="${x.schluessel}">${esc(x.name)} (${x.baende} Bd.)</option>`).join("")
+    : `<option value="">— noch keine —</option>`;
+  const ziel = waehle || (g.geschichten[0] || {}).schluessel || "";
+  if (ziel) { $("gsWahl").value = ziel; await gsOeffnen(ziel); }
+  else { GSAKTUELL = null; $("gsBand").innerHTML = ""; }
+}
+
+async function gsOeffnen(schluessel, nr) {
+  const g = await gsRuf({tu: "lesen", schluessel});
+  if (!g) return;
+  GSAKTUELL = schluessel;
+  const baende = g.baende || [];
+  $("gsBand").innerHTML = baende.map(b =>
+    `<option value="${b.nr}">Band ${b.nr}</option>`).join("");
+  gsBandNr = nr || baende[baende.length - 1].nr;
+  $("gsBand").value = gsBandNr;
+  // Vorgaben der Geschichte
+  if (g.stil) $("gsStil").value = g.stil;
+  if (g.welt) $("gsWelt").value = g.welt;
+  if (g.modell) $("gsModell").value = g.modell;
+  if (g.fiktion !== null && g.fiktion !== undefined) $("gsFiktion").value = g.fiktion;
   zeigeGrad();
+  // Inhalt des Bandes
+  const band = baende.find(x => x.nr === gsBandNr) || {};
+  $("gsIdee").value = band.idee || "";
+  $("gsKurz").value = band.kurz || "";
+  gsZeilen = (band.zeilen && band.zeilen.length)
+    ? band.zeilen : [{text: "", bilder: 1}];
   zeigeSelbstszenen();
-  if (Array.isArray(stand.prompts) && stand.prompts.length) {
-    GESCHICHTE = null;                 // erzwingt das Neuzeichnen
-    zeigeGliederung(stand.prompts);
-  }
-  if (stand.geaendert) say(`Geschichte vom ${stand.geaendert} geladen.`);
+  GESCHICHTE = null;
+  $("gsSzenen").innerHTML = "";
+  $("gsKnoepfe").style.display = "none";
+  if (band.prompts && band.prompts.length) zeigeGliederung(band.prompts);
+  say(`„${g.name}“, Band ${gsBandNr} geladen.`);
+}
+
+$("gsWahl").onchange = () => gsOeffnen($("gsWahl").value);
+$("gsBand").onchange = () => gsOeffnen(GSAKTUELL, +$("gsBand").value);
+
+$("gsNeu").onclick = async e => {
+  e.preventDefault();
+  const name = prompt("Wie soll die Geschichte heißen?");
+  if (!name) return;
+  const g = await gsRuf({tu: "anlegen", name, globale: {
+    stil: $("gsStil").value, welt: $("gsWelt").value,
+    fiktion: +$("gsFiktion").value, modell: $("gsModell").value}});
+  if (!g) return;
+  await gsListe(g.schluessel);
+  say(`„${g.name}“ angelegt — Band 1 ist leer.`, "ok");
+};
+
+$("gsBandNeu").onclick = async e => {
+  e.preventDefault();
+  if (!GSAKTUELL) return say("Erst eine Geschichte anlegen.", "err");
+  const g = await gsRuf({tu: "band", schluessel: GSAKTUELL});
+  if (!g) return;
+  const neu = g.baende[g.baende.length - 1].nr;
+  await gsListe(GSAKTUELL);
+  await gsOeffnen(GSAKTUELL, neu);
+  say(`Band ${neu} angelegt. Die Vorgaben gelten weiter, die Vorgeschichte `
+      + "kennt das Sprachmodell beim Umreißen.", "ok");
+};
+
+$("gsWeg").onclick = async e => {
+  e.preventDefault();
+  if (!GSAKTUELL) return;
+  const name = $("gsWahl").selectedOptions[0].textContent;
+  if (!confirm(`„${name}“ mit allen Bänden löschen?`)) return;
+  if (!await gsRuf({tu: "loeschen", schluessel: GSAKTUELL})) return;
+  GSAKTUELL = null;
+  await gsListe();
+  say("Geschichte gelöscht.", "ok");
+};
+
+async function gsHolen() {
+  if (!GSAKTUELL) await gsListe();
 }
 
 ["gsIdee", "gsKurz", "gsStil", "gsWelt", "gsFiktion", "gsModell"].forEach(
@@ -1220,7 +1294,8 @@ $("gsUmreissen").onclick = async e => {
   const res = await fetch("/api/expose", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({idee, fiktion: +$("gsFiktion").value,
-                          modell: $("gsModell").value})
+                          modell: $("gsModell").value,
+                          schluessel: GSAKTUELL, band: gsBandNr})
   }).catch(() => null);
   if (!res || !res.ok) {
     const err = res ? await res.json().catch(() => ({})) : {};
@@ -1286,6 +1361,7 @@ async function zeigeGliederung(prompts) {
   }).then(r => r.json()).catch(() => null);
   if (!g) return;
   GESCHICHTE = {...g, prompts};
+  gsMerken();
   const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
   $("gsSzenen").innerHTML = prompts.map((p, i) => `
     <div class="szene"><span class="nr">${i + 1}</span>
