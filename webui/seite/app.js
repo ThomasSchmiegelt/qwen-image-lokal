@@ -251,6 +251,7 @@ function setMode(next) {
   const istBausteine = next === "bausteine";
   const istSzenen = next === "szenen";
   const istGeschichte = next === "geschichte";
+  if (istGeschichte) gsHolen();
   const istKatalog = next === "katalog";
   $("katalogBox").style.display = istKatalog ? "block" : "none";
   if (istKatalog) katalogHolen();
@@ -1110,6 +1111,7 @@ function zeigeSelbstszenen() {
     };
   });
   gsSumme();
+  gsMerken();
 }
 
 function gsSumme() {
@@ -1156,6 +1158,53 @@ function zeigeGrad() {
 }
 
 $("gsFiktion").addEventListener("input", zeigeGrad);
+
+// Zwischenspeicher: was im Reiter steht, liegt beim Projekt. Gespeichert
+// wird verzoegert, damit nicht jeder Tastendruck eine Datei schreibt.
+let gsSpeicherUhr = null;
+
+function gsStand() {
+  return {idee: $("gsIdee").value, kurz: $("gsKurz").value,
+          stil: $("gsStil").value, welt: $("gsWelt").value,
+          fiktion: +$("gsFiktion").value, modell: $("gsModell").value,
+          zeilen: gsZeilen,
+          prompts: (GESCHICHTE && GESCHICHTE.prompts) || []};
+}
+
+function gsMerken() {
+  clearTimeout(gsSpeicherUhr);
+  gsSpeicherUhr = setTimeout(() => {
+    fetch("/api/geschichte-stand", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({stand: gsStand()})
+    }).catch(() => null);
+  }, 1200);
+}
+
+async function gsHolen() {
+  const stand = await fetch("/api/geschichte-stand", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({tu: "lesen"})
+  }).then(r => r.json()).catch(() => null);
+  if (!stand || !Object.keys(stand).length) return;
+  if (stand.idee) $("gsIdee").value = stand.idee;
+  if (stand.kurz) $("gsKurz").value = stand.kurz;
+  if (stand.stil) $("gsStil").value = stand.stil;
+  if (stand.welt) $("gsWelt").value = stand.welt;
+  if (stand.modell) $("gsModell").value = stand.modell;
+  if (stand.fiktion !== undefined) $("gsFiktion").value = stand.fiktion;
+  if (Array.isArray(stand.zeilen) && stand.zeilen.length) gsZeilen = stand.zeilen;
+  zeigeGrad();
+  zeigeSelbstszenen();
+  if (Array.isArray(stand.prompts) && stand.prompts.length) {
+    GESCHICHTE = null;                 // erzwingt das Neuzeichnen
+    zeigeGliederung(stand.prompts);
+  }
+  if (stand.geaendert) say(`Geschichte vom ${stand.geaendert} geladen.`);
+}
+
+["gsIdee", "gsKurz", "gsStil", "gsWelt", "gsFiktion", "gsModell"].forEach(
+  id => $(id).addEventListener("input", gsMerken));
 
 $("gsPlus").onclick = e => {
   e.preventDefault();
@@ -1290,13 +1339,14 @@ $("gsSofort").onclick = async e => {
 // Alle Bausteine aus allen Projekten. Die Bibliothek waechst ueber ein
 // Projekt hinaus: wer eine Person einmal beschrieben hat, will sie im
 // naechsten Vorhaben wiedersehen, ohne sie neu zu bauen.
-let KATALOG = [], KATPROJEKTE = [];
+let KATALOG = [], KATPROJEKTE = [], KATFEHLT = [];
 
 async function katalogHolen() {
   const g = await bausteinRuf({tu: "katalog"});
   if (!g) return;
   KATALOG = g.bausteine;
   KATPROJEKTE = g.projekte;
+  KATFEHLT = g.fehlend || [];
   if ($("katArt").options.length <= 1) {
     $("katArt").innerHTML = '<option value="">alle</option>'
       + BSARTEN.map(a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
@@ -1335,6 +1385,29 @@ function katalogZeigen() {
     }).join("") + "</div>";
   }).join("") || `<p class="hint">Noch keine Bausteine — im Reiter
       <b>Bausteine</b> legst du welche an.</p>`;
+
+  // Was eine Geschichte mit /Name verlangt, aber noch nicht gibt.
+  const offen = KATFEHLT.filter(f => !suche
+    || f.name.toLowerCase().includes(suche));
+  $("katListe").innerHTML += offen.length
+    ? `<div class="katgruppe"><h3>Noch anzulegen</h3>` + offen.map(f =>
+        `<div class="baustein katzeile"><span class="ohnebild">!</span>
+          <div class="bstext"><b>${esc(f.name)}</b>
+            <span class="art">in „${esc(f.projektname)}“ verlangt</span><br>
+            <code>mit /${esc(f.name)} in der Geschichte erwähnt, aber nicht angelegt</code></div>
+          <span class="knopf" onclick="bausteinAnlegen('${esc(f.name)}')"
+            title="jetzt anlegen">+</span>
+        </div>`).join("") + "</div>"
+    : "";
+}
+
+// Aus dem Katalog heraus einen fehlenden Baustein anlegen.
+function bausteinAnlegen(name) {
+  setMode("bausteine");
+  bausteinLeeren();
+  $("bsName").value = name;
+  $("bsText").focus();
+  say(`„${name}“ beschreiben und Prompt erzeugen lassen.`);
 }
 
 async function katalogKopieren(von, id, feld) {

@@ -332,6 +332,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "video": os.path.basename(ziel),
                                     "bilder": len(pfade), "dauer": dauer})
 
+        if path == "/api/geschichte-stand":
+            # Zwischenspeicher je Projekt: umreissen, gliedern und Prompts
+            # schreiben passiert nicht in einem Zug.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            projekt = projekte.aktiv()
+            if params.get("tu") == "lesen":
+                return self._json(200, geschichte.stand_lesen(projekt))
+            return self._json(200, geschichte.stand_schreiben(
+                projekt, params.get("stand") or {}))
+
         if path == "/api/expose":
             # Zuerst: worum geht es, welcher Stil, welche Welt. Der Stil gilt
             # danach fuer alle Szenen.
@@ -458,8 +470,19 @@ class Handler(BaseHTTPRequestHandler):
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
             if was == "katalog":
+                # Was in einer Geschichte mit /Name erwaehnt wird, aber noch
+                # nicht angelegt ist, gehoert sichtbar dazu: es ist eine
+                # Arbeitsanweisung, keine Luecke zum Uebersehen.
+                fehlend = []
+                for pj in projekte.liste():
+                    stand = geschichte.stand_lesen(pj["key"])
+                    offen = geschichte.offene_verweise(
+                        stand.get("zeilen") or [], bausteine.liste(pj["key"]))
+                    fehlend += [{"name": n, "projekt": pj["key"],
+                                 "projektname": pj["label"]} for n in offen]
                 return self._json(200, {"bausteine": bausteine.katalog(),
-                                        "projekte": projekte.liste()})
+                                        "projekte": projekte.liste(),
+                                        "fehlend": fehlend})
             if was == "kopieren":
                 if not self._nur_hier():
                     return self._json(403, {"error": "Nur vom Rechner des Servers aus"})

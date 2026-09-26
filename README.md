@@ -184,6 +184,16 @@ Weil es die Grafikkarte belegt, läuft das als Auftrag in der Warteschlange.
 **Erzeugen:** in den Ablauf übernehmen und gegenlesen, oder gleich Bilder und
 Video.
 
+Der Stand wird dabei **je Projekt zwischengespeichert** — Idee, Kurzfassung,
+Stil, Regler, Inhaltsverzeichnis und die geschriebenen Prompts. Eine
+Geschichte entsteht nicht in einem Zug; den Reiter zu verlassen kostet
+nichts.
+
+Ein `/Name`, zu dem es noch keinen Baustein gibt, ist eine Arbeitsanweisung
+und erscheint im **Katalog unter „Noch anzulegen"**, mit dem Projekt, das ihn
+verlangt, und einem Knopf, der ihn gleich anlegt. Sobald er existiert,
+verschwindet der Eintrag.
+
 Der alte Weg — Handlung auf Deutsch beschreiben, Bausteine anhaken — das
 Sprachmodell zerlegt sie in Bilder und nimmt **Mimik und Stil aus der
 Handlung**: wer seinen Korb verliert, schaut erschrocken, wer ihn wiederbekommt,

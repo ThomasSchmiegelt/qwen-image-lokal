@@ -17,10 +17,14 @@ war das schon bei den Abwandlungen der Grund, den Bezug beim Ausgangsbild zu
 lassen.
 """
 
+import json
+import os
 import random
 import re
+import time
 
 import bausteine
+import projekte
 from kataloge import (
     CAMERAS, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO, STYLES, VIEWS,
 )
@@ -263,3 +267,56 @@ def mit_streuung(bloecke: list[dict], je_szene: list[int], stil: str = "",
             nr += 1
         block["bausteine"] = neue
     return bloecke
+
+
+
+# --- Zwischenspeicher ----------------------------------------------------
+# Eine Geschichte entsteht nicht in einem Zug: umreissen, gliedern, Prompts
+# schreiben lassen, nachbessern. Dazwischen soll man den Reiter verlassen
+# duerfen, ohne alles zu verlieren. Je Projekt ein Stand -- mehrere
+# Geschichten nebeneinander waeren eine eigene Verwaltung, und danach hat
+# niemand gefragt.
+def _stand_datei(projekt: str) -> str:
+    return os.path.join(projekte.ordner(projekt), "geschichte.json")
+
+
+FELDER = ("idee", "kurz", "titel", "stil", "welt", "fiktion", "modell",
+          "zeilen", "prompts", "prosa")
+
+
+def stand_lesen(projekt: str) -> dict:
+    try:
+        with open(_stand_datei(projekt), encoding="utf-8") as fh:
+            daten = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return daten if isinstance(daten, dict) else {}
+
+
+def stand_schreiben(projekt: str, daten: dict) -> dict:
+    """Nur die bekannten Felder -- was die Seite sonst noch mitschickt,
+    gehoert nicht in die Ablage."""
+    stand = {k: daten.get(k) for k in FELDER if k in daten}
+    stand["geaendert"] = time.strftime("%Y-%m-%d %H:%M")
+    with open(_stand_datei(projekt), "w", encoding="utf-8") as fh:
+        json.dump(stand, fh, ensure_ascii=False, indent=2)
+    return stand
+
+
+def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
+    """Namen mit Schraegstrich, zu denen es noch keinen Baustein gibt.
+
+    Wer `/Nachbarin` schreibt, hat damit gesagt, dass es eine Nachbarin
+    geben soll. Das ist eine Arbeitsanweisung und gehoert sichtbar in den
+    Katalog, statt stillschweigend als Wort im Prompt zu landen.
+    """
+    bekannt = {(b.get("name") or "").lower() for b in teile}
+    offen, gesehen = [], set()
+    for z in zeilen or []:
+        text = z if isinstance(z, str) else (z.get("text") or "")
+        for name in VERWEIS.findall(text):
+            klein = name.lower()
+            if klein not in bekannt and klein not in gesehen:
+                gesehen.add(klein)
+                offen.append(name)
+    return offen
