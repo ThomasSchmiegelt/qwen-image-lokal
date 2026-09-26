@@ -154,6 +154,70 @@ PALETTEN = {
 }
 
 
+# Gesichtsausdruck. Fuer Geschichten: die Mimik soll aus der Handlung kommen,
+# und ausformuliert trifft sie das Modell zuverlaessiger als ein einzelnes
+# Wort wie "traurig". Bewusst knapp gehalten -- der Rest des Prompts hat auch
+# noch Platzbedarf.
+MIMIK = {
+    "lachen":       ("Lachen", "laughing openly, eyes crinkled, head slightly back"),
+    "laecheln":     ("Lächeln", "a warm quiet smile, relaxed eyes"),
+    "weinen":       ("Weinen", "crying, wet cheeks, reddened eyes, mouth tight"),
+    "erschrocken":  ("Erschrocken", "startled, eyes wide, eyebrows high, mouth open"),
+    "wuetend":      ("Wütend", "angry, jaw set, brows drawn together, hard stare"),
+    "nachdenklich": ("Nachdenklich", "thoughtful, gaze turned away, faint furrow between the brows"),
+    "ueberrascht":  ("Überrascht", "surprised, eyebrows raised, a small open smile"),
+    "muede":        ("Müde", "tired, heavy eyelids, slack mouth, shoulders low"),
+    "entschlossen": ("Entschlossen", "determined, chin up, steady direct gaze"),
+    "verlegen":     ("Verlegen", "embarrassed, looking down, a shy half-smile"),
+    "ernst":        ("Ernst", "serious, neutral mouth, calm level gaze"),
+    "erleichtert":  ("Erleichtert", "relieved, shoulders dropping, a breath let out"),
+    "besorgt":      ("Besorgt", "worried, brows drawn up, lips pressed together"),
+    "verzweifelt":  ("Verzweifelt", "desperate, face drawn, searching gaze, hands unsteady"),
+    "stolz":        ("Stolz", "proud, chin lifted, a small satisfied smile"),
+}
+
+
+# Koerperhaltung. Eine eigene Achse, weil sie das Bild staerker praegt als
+# Kleidung oder Licht -- dieselbe Person wirkt stehend, hockend und im Sprung
+# wie drei verschiedene Aufnahmen.
+HALTUNGEN = {
+    "stehen":      ("Aufrecht stehend", "standing upright, weight evenly on both feet, arms relaxed"),
+    "kontrapost":  ("Standbein", "standing with the weight on one leg, hip shifted, the other knee loose"),
+    "gehen":       ("Im Gehen", "caught mid-stride, walking towards the camera"),
+    "sitzen":      ("Sitzend", "sitting, back straight, hands resting on the knees"),
+    "hocken":      ("Hockend", "crouching low on the balls of the feet, elbows on the knees"),
+    "lehnen":      ("Angelehnt", "leaning against a wall, one shoulder taking the weight"),
+    "verschraenkt": ("Arme verschränkt", "standing with the arms folded across the chest"),
+    "hueften":     ("Hände in den Hüften", "hands on the hips, elbows out"),
+    "zurueck":     ("Zurückgelehnt", "leaning back, relaxed, chin slightly raised"),
+    "vorgebeugt":  ("Vorgebeugt", "leaning forward, shoulders rounded, intent"),
+    "gedreht":     ("Über die Schulter", "torso turned away, head looking back over the shoulder"),
+    "sprung":      ("Im Sprung", "caught mid-jump, both feet off the ground, clothing in motion"),
+    "knien":       ("Kniend", "kneeling on one knee"),
+    "liegen":      ("Liegend", "lying propped on one elbow"),
+}
+
+# Bekleidung als eigene Achse. Fuer "dieselbe Person in zehn Hosen" ist die
+# Luecke im Baustein ({hose} mit zehn Zeilen) genauer -- diese Achse streut
+# ueber ganze Aufmachungen, wenn man breit variieren will.
+BEKLEIDUNGEN = {
+    "jeans":    ("Jeans und Shirt", "wearing blue jeans and a plain t-shirt"),
+    "anzug":    ("Anzug", "wearing a well-cut dark suit"),
+    "kleid":    ("Sommerkleid", "wearing a light summer dress"),
+    "mantel":   ("Wollmantel", "wearing a long wool coat over dark trousers"),
+    "sport":    ("Sportkleidung", "wearing running gear in technical fabric"),
+    "arbeit":   ("Arbeitskleidung", "wearing sturdy canvas work trousers and a worn jacket"),
+    "regen":    ("Regenzeug", "wearing a rain jacket and waterproof trousers"),
+    "abend":    ("Abendgarderobe", "wearing formal evening wear"),
+    "strick":   ("Strick und Cord", "wearing a chunky knitted sweater and corduroy trousers"),
+    "leder":    ("Lederjacke", "wearing a leather jacket and black trousers"),
+    "leinen":   ("Leinen", "wearing loose linen clothing in natural tones"),
+    "uniform":  ("Uniform", "wearing a plain unmarked uniform"),
+    "schlaf":   ("Hausanzug", "wearing soft loungewear"),
+    "winter":   ("Winterkleidung", "wearing a padded winter coat, scarf and gloves"),
+}
+
+
 # Kerzenlicht auf einem Auto im Hof ergibt keine brauchbare Variante, deshalb
 # hier ohne. Wer es doch will, stellt die Lichtachse von Hand ein.
 VARIANT_LIGHTS = {k: v for k, v in LIGHTS.items() if k != "kerze"}

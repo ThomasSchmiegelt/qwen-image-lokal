@@ -22,7 +22,9 @@
   }
   header h1 { font-size: 16px; margin: 0; font-weight: 600; }
   header span { color: var(--muted); font-size: 12px; }
-  main { display: grid; grid-template-columns: 370px 1fr; gap: 16px; padding: 16px; align-items: start; }
+  /* Die linke Spalte traegt inzwischen acht Reiter samt Bausteinliste und
+     Lueckenfeldern -- 370px waren dafuer zu eng. */
+  main { display: grid; grid-template-columns: 430px 1fr; gap: 16px; padding: 16px; align-items: start; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
@@ -38,7 +40,7 @@
   #chatNote { margin-bottom: 12px; }
   #chatNote.err { color: var(--err); }
 
-  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 12px; }
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 12px; }
   .tabs button {
     padding: 8px 4px; border: 1px solid var(--line); background: transparent;
     color: var(--muted); border-radius: 7px; cursor: pointer; font: inherit; font-size: 12.5px;
@@ -204,6 +206,7 @@
   display: flex; align-items: center; gap: 10px; padding: 6px 8px;
   border-radius: 6px; background: #1b1f27; margin-bottom: 5px;
 }
+.baustein { align-items: flex-start; }
 .baustein img, .baustein .ohnebild {
   width: 44px; height: 44px; object-fit: cover; border-radius: 5px;
   flex: 0 0 auto; cursor: pointer; background: #262b36;
@@ -214,8 +217,11 @@
 }
 .bstext { flex: 1; min-width: 0; font-size: 12px; }
 .bstext code {
-  color: var(--muted); font-size: 11px; display: block;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Zwei Zeilen statt einer abgeschnittenen: ein Prompt mit Luecken sagt
+     erst etwas, wenn man die Luecken sieht. */
+  color: var(--muted); font-size: 11px; display: -webkit-box; overflow: hidden;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 .bstext .art {
   color: var(--muted); font-size: 11px; margin-left: 6px;
@@ -238,3 +244,40 @@
   border: 1px solid var(--line); border-radius: 7px; cursor: pointer;
 }
 #beenden:hover { color: #e7eaf0; border-color: #a33c3c; }
+
+/* Szenen einer Geschichte: Nummer, Titel mit Mimik und Stil, darunter was
+   zu sehen ist. */
+.szene {
+  display: flex; gap: 10px; padding: 6px 8px; border-radius: 6px;
+  background: #1b1f27; margin-bottom: 4px; font-size: 12px;
+}
+.szene .nr { color: var(--muted); min-width: 1.6em; text-align: right; }
+.sztext { flex: 1; min-width: 0; }
+.sztext code { color: var(--muted); font-size: 11px; }
+.sztext .art {
+  color: var(--accent); font-size: 11px; margin-left: 8px;
+}
+
+/* Lange englische Prompts sollen die Spalte nicht aufdehnen. */
+#bausteinListe, #gsSzenen, #warteschlange { overflow-wrap: anywhere; }
+
+/* Bilder fuer ein Video auswaehlen. Die Reihenfolge ist die der Auswahl --
+   so laesst sich die Abfolge bestimmen, ohne etwas zu verschieben. */
+#filmLeiste {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 8px; border-radius: 7px;
+  background: #1b1f27; font-size: 12px;
+}
+#filmLeiste input { width: 5em; padding: 4px 6px; font-size: 12px; }
+#filmLeiste label { margin: 0; color: var(--muted); }
+.kachel .nr {
+  position: absolute; left: 2px; top: 2px; min-width: 17px; height: 17px;
+  line-height: 17px; text-align: center; border-radius: 4px; font-size: 11px;
+  background: var(--accent); color: #fff;
+}
+.grid.waehlen img { cursor: copy; }
+
+/* Szenen von Hand: eine Zeile je Bild, mit Nummer und Kreuz. */
+.selbstszene { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em; }
+.selbstszene input { flex: 1; }

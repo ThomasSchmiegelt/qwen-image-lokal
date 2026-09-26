@@ -6,7 +6,9 @@ zusammenfuehrt. `variant_axes` sagt zum Schluss, woraus eine Variantenserie
 wuerfeln darf.
 """
 
-from .anmutung import DEVICES, PAINTS, PALETTEN, STYLES, VARIANT_LIGHTS
+from .anmutung import (
+    BEKLEIDUNGEN, DEVICES, HALTUNGEN, PAINTS, PALETTEN, STYLES, VARIANT_LIGHTS,
+)
 
 VEHICLE_SCENES = {
     "hof":      ("Hofeinfahrt", "standing on a paved driveway in front of a house"),
@@ -140,6 +142,11 @@ def variant_axes(subject: str) -> dict:
     achsen = {"paint": PAINTS, "palette": PALETTEN, "style": STYLES,
               "scene": kind["scenes"], "light": VARIANT_LIGHTS,
               "device": DEVICES, "angle": kind["angles"]}
+    # Haltung und Bekleidung ergeben nur bei Lebendigem Sinn -- ein Kotfluegel
+    # traegt keine Jeans.
+    if subject == "person":
+        achsen["haltung"] = HALTUNGEN
+        achsen["kleidung"] = BEKLEIDUNGEN
     # Eine gewuerfelte "aus Gusseisen"-Person waere Unsinn. Von Hand festgelegt
     # geht der Werkstoff weiterhin, nur gewuerfelt wird er hier nicht.
     if subject != "person":

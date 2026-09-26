@@ -32,11 +32,13 @@ from auftraege import (  # noqa: E402
 )
 import projekte  # noqa: E402
 import bausteine  # noqa: E402
+import geschichte  # noqa: E402
 import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
 from kataloge import (  # noqa: E402
-    AXIS_OFF, EFFECTS, GROUP_ACTIONS, PAINT_TARGET, catalog, overrides, parse_command,
+    AXIS_OFF, EFFECTS, GROUP_ACTIONS, MIMIK, PAINT_TARGET, catalog, overrides,
+    parse_command,
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -172,6 +174,7 @@ class Handler(BaseHTTPRequestHandler):
             status["stage"] = current["stage"]
             status["video"] = current["video"]
             status["gelesen"] = dict(current["gelesen"])
+            status["tor"] = list(current["tor"])
             status["nummer"] = current["nummer"]
             status["titel"] = current["titel"]
             status.update(uebersicht())
@@ -200,6 +203,7 @@ class Handler(BaseHTTPRequestHandler):
             info["bausteine"] = bausteine.liste(projekte.aktiv())
             info["bausteinarten"] = [{"key": k, "label": v}
                                      for k, v in bausteine.ARTEN.items()]
+            info["mimik"] = [{"key": k, "label": v[0]} for k, v in MIMIK.items()]
             info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
@@ -277,6 +281,55 @@ class Handler(BaseHTTPRequestHandler):
             weg = verschieben(int(params.get("nummer") or 0),
                               -1 if params.get("richtung") == "hoch" else 1)
             return self._json(200 if weg else 404, {"ok": weg})
+
+        if path == "/api/video":
+            # Aus ausgewaehlten Bildern ein Video mit weichen Uebergaengen.
+            # Die Standzeit ergibt sich aus der Wunschlaenge -- mehr muss man
+            # nicht angeben.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            namen = [os.path.basename(str(n)) for n in (params.get("files") or [])]
+            pfade = [p for p in (self._output_path(n) for n in namen) if p]
+            if len(pfade) < 2:
+                return self._json(400, {"error": "Mindestens zwei Bilder auswaehlen"})
+            if not demo.available()["video"]:
+                return self._json(501, {"error": "ffmpeg fehlt"})
+            dauer = max(2.0, min(float(params.get("duration") or 20), 600.0))
+            ziel = os.path.join(projekte.bilder(projekte.aktiv()),
+                                datetime.now().strftime("%Y%m%d-%H%M%S") + "_film.mp4")
+            try:
+                demo.baue_video(pfade, ziel, gesamtdauer=dauer)
+            except Exception as exc:
+                return self._json(500, {"error": f"ffmpeg scheiterte: {exc}"})
+            return self._json(200, {"ok": True, "video": os.path.basename(ziel),
+                                    "bilder": len(pfade), "dauer": dauer})
+
+        if path == "/api/geschichte":
+            # Handlung -> Szenen -> Bloecke, wie der Ablauf-Reiter sie kennt.
+            # Erzeugt wird hier noch nichts; das entscheidet die Oberflaeche.
+            if engine.lock.locked():
+                return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            text = (params.get("text") or "").strip()
+            if not text:
+                return self._json(400, {"error": "Keine Handlung"})
+            projekt = projekte.aktiv()
+            alle = {b["id"]: b for b in bausteine.liste(projekt)}
+            gewaehlt = [alle[k] for k in (params.get("ids") or []) if k in alle]
+            if not gewaehlt:
+                return self._json(400, {"error":
+                    "Erst Bausteine anhaken, die vorkommen sollen"})
+            erg = chat.geschichte(text, gewaehlt, int(params.get("anzahl") or 8))
+            if not erg["szenen"]:
+                return self._json(502, {"error": erg["hinweis"]})
+            return self._json(200, {
+                "szenen": erg["szenen"],
+                "hinweis": erg["hinweis"],
+                "bloecke": geschichte.zu_bloecken(erg["szenen"], gewaehlt),
+                "startbild": geschichte.startbild(erg["szenen"], gewaehlt)})
 
         if path == "/api/baustein":
             params = self._body()

@@ -43,11 +43,12 @@
       <button id="tab-t2i" class="on">Text&rarr;Bild</button>
       <button id="tab-edit">Bearbeiten</button>
       <button id="tab-gruppe">Gruppe</button>
-      <button id="tab-person">Perspektiven</button>
+      <button id="tab-person">Rundum</button>
       <button id="tab-varianten">Varianten</button>
       <button id="tab-demo">Ablauf</button>
       <button id="tab-bausteine">Bausteine</button>
-      <button id="tab-szenen">Zusammenstellen</button>
+      <button id="tab-szenen">Szenen</button>
+      <button id="tab-geschichte">Geschichte</button>
     </div>
 
     <fieldset id="bausteinBox" style="display:none">
@@ -73,7 +74,10 @@
       </div>
       <label for="bsText">Beschreibung auf Deutsch</label>
       <textarea id="bsText" style="min-height:52px"
-        placeholder="eine Frau Mitte dreißig, schlank, kurze dunkle Haare"></textarea>
+        placeholder="eine Frau Mitte dreißig, schlank, kurze dunkle Haare, wirkt streng und wachsam"></textarea>
+      <p class="hint">Charakterzüge dürfen dabeistehen — <i>schüchtern</i>,
+        <i>herzlich</i>, <i>misstrauisch</i>. Sie werden in Sichtbares
+        übersetzt: Haltung, Blick, Zug um den Mund.</p>
       <p class="hint"><a href="#" id="bsErzeugen">Prompt daraus erzeugen</a>
         — das Sprachmodell schreibt ihn auf Englisch und schlägt die Lücken vor.</p>
 
@@ -117,6 +121,61 @@
       <p class="hint">
         <a href="#" id="bsSerie">Erzeugen</a> ·
         <a href="#" id="bsUebernehmen">nur in den Prompt übernehmen</a></p>
+    </fieldset>
+
+    <fieldset id="geschichteBox" style="display:none">
+      <legend>Geschichte</legend>
+      <p class="hint">Handlung beschreiben, Bausteine anhaken — das
+        Sprachmodell zerlegt sie in Bilder und nimmt Mimik und Stil aus der
+        Handlung. Heraus kommt ein Ablauf, den du im Reiter <b>Ablauf</b>
+        gegenlesen und ändern kannst.</p>
+
+      <label>Wer und was kommt vor?</label>
+      <div id="gsWahl"></div>
+
+      <div class="head" style="margin-top:14px">
+        <h2>Handlung</h2>
+        <span><a href="#" id="gsArtFrei">am Stück</a> ·
+          <a href="#" id="gsArtSzenen">Szene für Szene</a></span>
+      </div>
+
+      <div id="gsFrei">
+        <label for="gsText">Was passiert?</label>
+        <textarea id="gsText" style="min-height:90px"
+          placeholder="Anna geht früh auf den Markt, freut sich über die erste Erdbeere, verliert unterwegs ihren Korb und findet ihn am Abend wieder."></textarea>
+      </div>
+
+      <div id="gsListe" style="display:none">
+        <p class="hint">Eine Zeile je Bild. Mimik und Stil holt das
+          Sprachmodell aus dem, was dort steht.</p>
+        <div id="gsSelbst"></div>
+        <p class="hint"><a href="#" id="gsPlus">+ Szene</a></p>
+      </div>
+
+      <div class="axis" style="margin-top:8px">
+        <div>
+          <label for="gsAnzahl">Wie viele Bilder?</label>
+          <input type="number" id="gsAnzahl" min="2" max="24" value="8">
+        </div>
+        <div>
+          <label for="gsFormat">Format</label>
+          <select id="gsFormat">
+            <option value="3:2">3:2 quer</option>
+            <option value="3:4">3:4 hochkant</option>
+            <option value="16:9">16:9 breit</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint">
+        <a href="#" id="gsErzeugen">Szenen schreiben lassen</a>
+        — dauert etwa eine halbe Minute, erzeugt noch keine Bilder.</p>
+
+      <div id="gsSzenen"></div>
+      <p class="hint" id="gsHinweis"></p>
+      <p class="hint" id="gsKnoepfe" style="display:none">
+        <a href="#" id="gsUebernehmen">In den Ablauf übernehmen</a>
+        — dort gegenlesen und starten · oder
+        <a href="#" id="gsSofort">ohne Prüfung starten</a></p>
     </fieldset>
 
     <div id="uploadBox" style="display:none">
@@ -256,6 +315,16 @@
       </div>
       <div class="axis">
         <div>
+          <label for="haltung">Körperhaltung</label>
+          <select id="haltung"></select>
+        </div>
+        <div>
+          <label for="kleidung">Bekleidung</label>
+          <select id="kleidung"></select>
+        </div>
+      </div>
+      <div class="axis">
+        <div>
           <label for="material">Werkstoff</label>
           <select id="material"></select>
         </div>
@@ -380,8 +449,18 @@
           <input type="number" id="cfg" value="1" min="1" max="10" step="0.5">
         </div>
       </div>
-      <label for="negative">Negativer Prompt (wirkt erst ab CFG &gt; 1)</label>
-      <textarea id="negative" style="min-height:48px" placeholder="blurry, low quality"></textarea>
+      <label for="negative">Was <em>nicht</em> ins Bild soll</label>
+      <textarea id="negative" style="min-height:48px"
+        placeholder="Küche, Büro, Schrift, verschwommen — Freitext, deutsch geht auch"></textarea>
+      <label class="check"><input type="checkbox" id="streng">
+        auch dem Modell ausreden (doppelte Rechenzeit)</label>
+      <p class="hint">Standardmäßig arbeitet das Feld als <b>Torwächter</b>:
+        was hier steht, wird aus dem fertigen Prompt gestrichen, bevor
+        gerechnet wird — das kostet nichts. Leer heißt: es passiert gar
+        nichts. Nur wenn etwas ausgeschlossen werden soll, das <i>nicht</i>
+        im Prompt steht (unscharf, sechs Finger), hilft das Häkchen — dann
+        läuft jeder Schritt zweimal.</p>
+      <p class="hint" id="torNote"></p>
     </fieldset>
 
     <button id="go">Erzeugen</button>
@@ -405,7 +484,16 @@
     </div>
     <div class="mosaic" id="series"></div>
 
-    <div class="head"><h2>Alle Bilder</h2><span class="hint">× löscht</span></div>
+    <div class="head"><h2>Alle Bilder</h2>
+      <span class="hint">× löscht ·
+        <a href="#" id="filmAn">Video zusammenstellen</a></span></div>
+    <div id="filmLeiste" style="display:none">
+      <span id="filmZahl">0 Bilder gewählt</span>
+      <label for="filmDauer">Gesamtdauer</label>
+      <input type="number" id="filmDauer" min="2" max="600" value="20"> s
+      <a href="#" id="filmBauen">Video bauen</a> ·
+      <a href="#" id="filmAus">abbrechen</a>
+    </div>
     <div class="grid" id="gallery"></div>
   </section>
 </main>

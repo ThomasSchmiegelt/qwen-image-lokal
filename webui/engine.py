@@ -32,7 +32,8 @@ from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimen
 
 from kataloge import (
     ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, GROUP_ACTIONS, LIGHTS,
-    MATERIALS, PAINTS, PALETTEN, SCENARIOS, SCENES, STYLES, TEMPLATES,
+    BEKLEIDUNGEN, HALTUNGEN, MATERIALS, PAINTS, PALETTEN, SCENARIOS, SCENES,
+    STYLES, TEMPLATES,
     TRANSPARENT_TEMPLATE,
     VIEWS, fragment, variant_axes,
 )
@@ -104,7 +105,8 @@ def _free() -> None:
 
 def build_prompt(text: str, view=None, style=None, light=None, camera=None,
                  paint=None, palette=None, scene=None, angle=None, device=None,
-                 scenario=None, material=None, paint_target: str = "") -> str:
+                 scenario=None, material=None, haltung=None, kleidung=None,
+                 paint_target: str = "") -> str:
     """Haengt die gewaehlten Voreinstellungen an den Prompt an.
 
     Der Blickwinkel steht vorn: er bestimmt die Bildkomposition, waehrend Stil,
@@ -119,6 +121,10 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
         # Anders als der Lack braucht die Farbstimmung kein Ziel: sie faerbt
         # das ganze Bild.
         fragment(PALETTEN, palette),
+        # Haltung und Kleidung frueh: sie bestimmen die Figur, nicht nur die
+        # Anmutung.
+        fragment(HALTUNGEN, haltung),
+        fragment(BEKLEIDUNGEN, kleidung),
         fragment(SCENES, scene),
         fragment(ANGLES, angle),
         fragment(MATERIALS, material),
@@ -211,6 +217,8 @@ class Engine:
         device=None,
         scenario=None,
         material=None,
+        haltung=None,
+        kleidung=None,
         subject: str = "fahrzeug",
         paint_target: str = "",
         lock_seed: bool = False,
@@ -238,13 +246,15 @@ class Engine:
         achsen = variant_axes(subject)
         tables = {"view": VIEWS, "style": STYLES, "light": LIGHTS, "camera": CAMERAS,
                   "paint": PAINTS, "palette": PALETTEN, "scene": SCENES,
-                  "angle": ANGLES, "device": DEVICES, "material": MATERIALS}
+                  "angle": ANGLES, "device": DEVICES, "material": MATERIALS,
+                  "haltung": HALTUNGEN, "kleidung": BEKLEIDUNGEN}
         rng = random.Random(seed)
         jobs = []
         for i in range(count):
             pick = {"view": view, "style": style, "light": light, "camera": camera,
                     "paint": paint, "palette": palette, "scene": scene,
-                    "angle": angle, "device": device,
+                    "angle": angle, "device": device, "haltung": haltung,
+                    "kleidung": kleidung,
                     "scenario": scenario, "material": material}
             if sweep == "varianten":
                 # Jede Achse eigenstaendig gewuerfelt. Ein fester Wert bleibt
@@ -296,6 +306,8 @@ class Engine:
         device=None,
         scenario=None,
         material=None,
+        haltung=None,
+        kleidung=None,
         subject: str = "fahrzeug",
         image_prompts: list | None = None,
         prompts: list | None = None,
@@ -358,7 +370,8 @@ class Engine:
                               else (seed if lock_seed else seed + i)), "prompt": p,
                      "view": None, "style": None, "light": None, "camera": None,
                      "paint": None, "palette": None, "scene": None, "angle": None,
-                     "device": None, "scenario": None, "material": None}
+                     "device": None, "scenario": None, "material": None,
+                     "haltung": None, "kleidung": None}
                     for i, p in enumerate(prompts)]
         else:
             # Mit Namen statt der Reihe nach: die Achsenliste waechst, und eine
@@ -367,6 +380,7 @@ class Engine:
                              light=light, camera=camera, paint=paint,
                              palette=palette, scene=scene, angle=angle,
                              device=device, scenario=scenario, material=material,
+                             haltung=haltung, kleidung=kleidung,
                              subject=subject, paint_target=paint_target,
                              lock_seed=lock_seed)
 

@@ -78,8 +78,9 @@ Umgebungen und Blickwinkel angeboten werden. „Auf Stoßstangenhöhe von hinten
 passt zu einem Auto und zu nichts sonst, ein Gegenstand will „auf der Werkbank"
 und „freigestellt mit Schlagschatten".
 
-Acht Achsen — Farbe, **Farbstimmung**, **Stil**, Umgebung, Licht, Kameraart,
-Blickwinkel und Werkstoff (10 Materialien von Aluminium bis Gusseisen) — lassen
+Bis zu zehn Achsen — Farbe, **Farbstimmung**, **Stil**, Umgebung, Licht,
+Kameraart, Blickwinkel, Werkstoff (10 Materialien von Aluminium bis Gusseisen)
+sowie **Körperhaltung** und **Bekleidung** bei Personen — lassen
 sich je einzeln auf **würfeln**, **unverändert lassen** oder einen festen Wert
 stellen. Der Werkstoff steht standardmäßig aus und wird bei Personen nie
 gewürfelt. So entsteht wahlweise breite Streuung oder eine Serie, in der sich
@@ -103,11 +104,32 @@ Liste der Reihe nach ab — gleichzeitig rechnen kann die eine Grafikkarte
 ohnehin nicht. Wartende lassen sich verschieben und einzeln verwerfen, der
 laufende wird abgebrochen.
 
+Gleichartige Aufträge, die hintereinander warten, **teilen sich einen
+Ladevorgang**. Das lohnt sich: gemessen kostet das Laden rund 70 Sekunden, ein
+kleines Bild danach anderthalb. Zwei einzeln eingereihte Aufträge brauchten
+144 s, gebündelt 78 s. Gebündelt wird streng nur, was wirklich zusammenpasst —
+schlichte Text-zu-Bild-Aufträge ohne Referenzbild, Effekt oder Serienart, bei
+gleicher Größe, Schrittzahl und Format.
+
 **Projekte.** Jedes Vorhaben bekommt sein eigenes Verzeichnis unter
 `projekte/<name>/`: eigene Bilder, eigene Galerie. Ein Auftrag merkt sich beim
 Einreihen, zu welchem Projekt er gehört — wer zwischendurch umschaltet, findet
 seine Bilder trotzdem am richtigen Ort. Das Projekt **Allgemein** zeigt weiter
 auf das alte `outputs/`, dort liegende Bilder müssen nicht umziehen.
+
+**Video aus ausgewählten Bildern.** In der Galerie „Video zusammenstellen"
+anklicken, Bilder in der gewünschten Reihenfolge wählen (sie werden
+durchnummeriert), Gesamtdauer eintragen — Standzeit und Überblendung rechnet
+der Server daraus aus. Die Bilder gehen nahtlos ineinander über, ohne Schnitt
+und ohne Beschriftung.
+
+**Was nicht ins Bild soll.** Das Feld arbeitet als **Torwächter**: die
+eingetragenen Begriffe werden aus dem fertigen Prompt gestrichen, bevor
+gerechnet wird — „Küche" und „Büro" kommen ohnehin als Wort aus einer
+Umgebungsachse oder einem Baustein. Das kostet nichts. Was gestrichen wurde,
+steht danach unter dem Feld. Nur für Dinge, die *nicht* im Prompt stehen
+(unscharf, sechs Finger), hilft das Häkchen „auch dem Modell ausreden" — dann
+läuft jeder Schritt zweimal und das Bild dauert doppelt so lang.
 
 **Bausteine.** Personen, Orte und Gegenstände lassen sich als Prompt mit
 Namen und Bild ablegen und immer wieder verwenden. Beschrieben wird auf
@@ -126,6 +148,15 @@ Bild und ist damit wiederholbar.
 
 Leere Lücken hinterlassen keine Bruchstücke: aus `a basket made of {material}`
 wird ohne Material `a basket`, nicht `a basket made of ,`.
+
+**Geschichte.** Handlung auf Deutsch beschreiben, Bausteine anhaken — das
+Sprachmodell zerlegt sie in Bilder und nimmt **Mimik und Stil aus der
+Handlung**: wer seinen Korb verliert, schaut erschrocken, wer ihn wiederbekommt,
+erleichtert. Heraus kommt kein Sonderformat, sondern die vorhandene
+Blockstruktur eines **Ablaufs** — gegenlesen, ändern, starten, oder ohne
+Prüfung loslaufen lassen. Hat die Hauptperson ein Bild, wird es zum Startbild,
+damit die Folge auf einem Gesicht aufsetzt statt in jedem Bild ein neues zu
+erfinden.
 
 **Prompt aus einem Bild.** Der umgekehrte Weg: ein Bild wählen, das
 Sprachmodell beschreibt es als Prompt und stellt Stil, Licht und Objektiv
@@ -345,12 +376,14 @@ webui/server.py       HTTP-Server, nur Routen und Start
 webui/auftraege.py    Warteschlange und Abwicklung eines Auftrags
 webui/projekte.py     getrennte Ablagen, Projektverzeichnisse
 webui/bausteine.py    Personen, Orte, Gegenstände und Szenen mit Lücken
+webui/geschichte.py   Szenen einer Handlung zu Ablaufblöcken
 webui/engine.py       zweiphasige Pipeline
 webui/kataloge/       Voreinstellungen: anmutung.py (Stil, Licht, Kamera,
                       Farbe), motiv.py (Umgebung, Blickwinkel, Werkstoff),
                       vorlage.py (Prompt-Vorlagen, Effekte, Gruppen)
 webui/sprache/        Ollama: deuten.py (Freitext), uebersetzen.py,
-                      sehen.py (Bilder lesen), ollama.py (der Aufruf)
+                      sehen.py (Bilder lesen), erzaehlen.py (Handlung in
+                      Szenen), ollama.py (der Aufruf)
 webui/ablauf.py       Abläufe als Blöcke, mitgelieferte Folgen
 webui/demo.py         Startbild-Vorgabe und Videobau
 webui/pruefung.py     Oberfläche gegen den Server prüfen

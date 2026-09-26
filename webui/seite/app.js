@@ -20,6 +20,7 @@ const MODES = {
   demo: {label: "Ablauf starten", refs: 0, ph: "", hint: () => ""},
   bausteine: {label: "Baustein-Bild erzeugen", refs: 0, ph: "", hint: () => ""},
   szenen: {label: "Szene erzeugen", refs: 0, ph: "", hint: () => ""},
+  geschichte: {label: "Geschichte erzeugen", refs: 0, ph: "", hint: () => ""},
   varianten: {label: "Varianten erzeugen", refs: 1, sweep: "varianten", count: 12,
               follow: true, lock: false,
               ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
@@ -74,6 +75,8 @@ fetch("/api/info").then(r => r.json()).then(info => {
   BSARTEN = info.bausteinarten || [];
   $("bsArt").innerHTML = BSARTEN.map(
     a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
+  MIMIKLISTE = info.mimik || [];
+  STILLISTE = info.styles || [];
   zeigeBausteine(info.bausteine);
   fill("effect", EFFECTS); fill("form", FORMS);
   AXIS_OFF = info.axis_off || "-";
@@ -168,7 +171,8 @@ $("lockSeed").addEventListener("change", sweepChanged);
 // Servers (variant_axes), links stehen die Felder der Seite.
 const ACHSENFELDER = {paint: "paint", palette: "palette", vstyle: "style",
                       scene: "scene", vlight: "light", device: "device",
-                      angle: "angle", material: "material"};
+                      angle: "angle", material: "material",
+                      haltung: "haltung", kleidung: "kleidung"};
 
 function subjectChanged() {
   const k = SUBJECTS.find(x => x.key === $("subject").value) || SUBJECTS[0];
@@ -236,10 +240,12 @@ function setMode(next) {
   const istDemo = next === "demo";
   const istBausteine = next === "bausteine";
   const istSzenen = next === "szenen";
+  const istGeschichte = next === "geschichte";
   $("szenenBox").style.display = istSzenen ? "block" : "none";
+  $("geschichteBox").style.display = istGeschichte ? "block" : "none";
   // Beide Reiter haben eine eigene Bedienung und brauchen die ueblichen
   // Kaesten nicht -- Prompt, Darstellung, Bildgroesse.
-  const eigen = istDemo || istBausteine || istSzenen;
+  const eigen = istDemo || istBausteine || istSzenen || istGeschichte;
   $("demoBox").style.display = istDemo ? "block" : "none";
   $("bausteinBox").style.display = istBausteine ? "block" : "none";
   // Im Ablauf-Reiter ist das Prompt-Feld ausgeblendet -- dort waere das
@@ -582,6 +588,7 @@ async function start() {
     scene: $("scene").value,
     angle: $("angle").value, device: $("device").value,
     material: $("material").value, subject: $("subject").value,
+    haltung: $("haltung").value, kleidung: $("kleidung").value,
     camera: $("camera").value,
     // In den Varianten haben Stil und Licht eigene Achsenfelder, damit sich
     // beide auf "wuerfeln" stellen lassen.
@@ -589,7 +596,8 @@ async function start() {
     light: mode === "varianten" ? $("vlight").value : $("light").value,
     paint_target: $("paintTarget").value,
     true_cfg_scale: parseFloat($("cfg").value),
-    transparent: $("transparent").checked
+    transparent: $("transparent").checked,
+    streng: $("streng").checked
   };
 
   const laeuftSchon = $("go").classList.contains("busy");
@@ -737,7 +745,7 @@ $("chat").addEventListener("keydown", e => {
 // ---------- Bausteine ----------
 // Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
 // steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
-let BAUSTEINE = [], BSARTEN = [];
+let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [];
 const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
 
 function luecken(text) {
@@ -760,6 +768,7 @@ function zeigeBausteine(liste) {
       </div>`).join("")
     : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
   zeigeWahl();
+  zeigeGsWahl();
 }
 
 // Zu jeder Luecke ein Feld. `mehrzeilig` erlaubt eine Werteliste -- daraus
@@ -992,6 +1001,145 @@ async function einreihenEinfach(zusatz) {
   poll();
 }
 
+// ---------- Geschichte ----------
+// Handlung plus Bausteine ergeben Szenen, Szenen ergeben Bloecke -- und ein
+// Block-Ablauf ist genau das, was der Ablauf-Reiter schon abarbeiten kann.
+let GESCHICHTE = null;
+
+function zeigeGsWahl() {
+  $("gsWahl").innerHTML = BAUSTEINE.length
+    ? BAUSTEINE.map(b => `<label class="wahl"><input type="checkbox"
+        class="gswahl" value="${b.id}"> ${esc(b.name)}</label>`).join("")
+    : `<p class="hint">Erst Bausteine anlegen — ohne Personen, Orte und
+        Gegenstände hat die Geschichte niemanden.</p>`;
+}
+
+// Die Handlung entweder am Stueck oder Szene fuer Szene. Beides landet als
+// ein Text beim Sprachmodell -- bei Einzelszenen nummeriert, damit es die
+// Aufteilung uebernimmt statt selbst zu schneiden.
+let gsSzenenweise = false, gsZeilen = [""];
+
+function zeigeSelbstszenen() {
+  $("gsSelbst").innerHTML = gsZeilen.map((z, i) => `
+    <div class="selbstszene"><span class="nr">${i + 1}</span>
+      <input class="gszeile" data-i="${i}" value="${esc(z)}"
+        placeholder="was in diesem Bild zu sehen ist">
+      <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
+    </div>`).join("");
+  $("gsSelbst").querySelectorAll(".gszeile").forEach(
+    el => el.oninput = () => gsZeilen[+el.dataset.i] = el.value);
+  $("gsAnzahl").value = Math.max(2, gsZeilen.filter(z => z.trim()).length || 2);
+}
+
+function gsZeileWeg(i) {
+  gsZeilen.splice(i, 1);
+  if (!gsZeilen.length) gsZeilen = [""];
+  zeigeSelbstszenen();
+}
+
+function gsArt(szenenweise) {
+  gsSzenenweise = szenenweise;
+  $("gsFrei").style.display = szenenweise ? "none" : "block";
+  $("gsListe").style.display = szenenweise ? "block" : "none";
+  $("gsAnzahl").disabled = szenenweise;
+  if (szenenweise) zeigeSelbstszenen();
+}
+
+$("gsArtFrei").onclick = e => { e.preventDefault(); gsArt(false); };
+$("gsArtSzenen").onclick = e => { e.preventDefault(); gsArt(true); };
+$("gsPlus").onclick = e => {
+  e.preventDefault();
+  gsZeilen.push("");
+  zeigeSelbstszenen();
+};
+
+// Was beim Sprachmodell ankommt.
+function gsHandlung() {
+  if (!gsSzenenweise) return $("gsText").value.trim();
+  const zeilen = gsZeilen.map(z => z.trim()).filter(Boolean);
+  if (!zeilen.length) return "";
+  return "Die Handlung ist bereits in Bilder geteilt. Nimm genau diese "
+    + "Aufteilung, eine Szene je Zeile:\n"
+    + zeilen.map((z, i) => `${i + 1}. ${z}`).join("\n");
+}
+
+$("gsErzeugen").onclick = async e => {
+  e.preventDefault();
+  const text = gsHandlung();
+  if (!text) return say("Erst die Handlung beschreiben.", "err");
+  const ids = [...$("gsWahl").querySelectorAll(".gswahl:checked")].map(x => x.value);
+  if (!ids.length) return say("Erst anhaken, wer und was vorkommt.", "err");
+  say("Die Handlung wird zerlegt …");
+  $("gsErzeugen").textContent = "läuft …";
+  const res = await fetch("/api/geschichte", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text, ids,
+      anzahl: gsSzenenweise
+        ? gsZeilen.filter(z => z.trim()).length
+        : parseInt($("gsAnzahl").value, 10) || 8})
+  }).catch(() => null);
+  $("gsErzeugen").textContent = "Szenen schreiben lassen";
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Die Geschichte ließ sich nicht zerlegen.", "err");
+  }
+  GESCHICHTE = await res.json();
+  zeigeSzenen(GESCHICHTE);
+  say(`${GESCHICHTE.szenen.length} Szenen geschrieben. Gegenlesen, dann starten.`, "ok");
+};
+
+function zeigeSzenen(g) {
+  const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
+  $("gsSzenen").innerHTML = g.szenen.map((s, i) => `
+    <div class="szene"><span class="nr">${i + 1}</span>
+      <div class="sztext"><b>${esc(s.titel)}</b>
+        ${s.mimik ? `<span class="art">${esc(name(MIMIKLISTE, s.mimik))}</span>` : ""}
+        ${s.stil ? `<span class="art">${esc(name(STILLISTE, s.stil))}</span>` : ""}
+        <br><code>${esc(s.handlung)}</code></div>
+    </div>`).join("");
+  $("gsHinweis").textContent = g.hinweis || "";
+  $("gsKnoepfe").style.display = g.szenen.length ? "block" : "none";
+}
+
+// Die Bloecke in den Ablauf-Reiter legen. Startbild ist das Bild der Person,
+// die am haeufigsten vorkommt -- so setzt der Ablauf auf einem Gesicht auf,
+// statt in jedem Bild ein neues zu erfinden.
+async function geschichteInAblauf() {
+  if (!GESCHICHTE) return false;
+  bloecke = JSON.parse(JSON.stringify(GESCHICHTE.bloecke));
+  if (GESCHICHTE.startbild) {
+    const antwort = await fetch("/outputs/" + GESCHICHTE.startbild).catch(() => null);
+    if (antwort && antwort.ok) {
+      const blob = await antwort.blob();
+      demoRef = await new Promise(fertig => {
+        const leser = new FileReader();
+        leser.onload = () => fertig(leser.result);
+        leser.readAsDataURL(blob);
+      });
+      $("demoPreview").src = demoRef;
+      $("demoPreview").style.display = "block";
+      $("demoRefNote").textContent = "Startbild aus dem Baustein übernommen.";
+    }
+  }
+  return true;
+}
+
+$("gsUebernehmen").onclick = async e => {
+  e.preventDefault();
+  if (!await geschichteInAblauf()) return;
+  setMode("demo");
+  blockZeichnen();
+  demoDauer();
+  say("In den Ablauf übernommen. Dort prüfen und starten.", "ok");
+};
+
+$("gsSofort").onclick = async e => {
+  e.preventDefault();
+  if (!await geschichteInAblauf()) return;
+  blockZeichnen();
+  await starteDemo();
+};
+
 // ---------- Projekte ----------
 // Ein Projekt bestimmt, wohin neue Bilder gehen und welche die Galerie zeigt.
 // "Allgemein" ist das alte outputs/ -- die Bilder von frueher bleiben dort.
@@ -1077,6 +1225,9 @@ function poll() {
     try {
       zeigeUebersetzung(s.translated);
       zeigeGelesen(s.gelesen);
+      // Was der Torwaechter gestrichen hat, soll man sehen.
+      $("torNote").textContent = (s.tor || []).length
+        ? "Aus dem Prompt gestrichen: " + s.tor.join(" · ") : "";
       const perImage = s.total ? s.step / s.total : 0;
       $("fill").style.width =
         (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
@@ -1250,13 +1401,74 @@ async function openInGimp(file) {
   say("In GIMP geöffnet. Der erste Start dauert einen Moment.", "ok");
 }
 
+// ---------- Video aus ausgewaehlten Bildern ----------
+// Die Reihenfolge ist die der Auswahl, nicht die der Galerie -- so laesst
+// sich die Abfolge bestimmen, ohne etwas zu verschieben.
+let filmModus = false, filmWahl = [];
+
+function filmUmschalten(an) {
+  filmModus = an;
+  filmWahl = [];
+  $("filmLeiste").style.display = an ? "flex" : "none";
+  $("gallery").classList.toggle("waehlen", an);
+  filmZeigen();
+  loadGallery();
+}
+
+function filmZeigen() {
+  $("filmZahl").textContent = filmWahl.length === 1
+    ? "1 Bild gewählt" : `${filmWahl.length} Bilder gewählt`;
+  $("gallery").querySelectorAll(".kachel").forEach(el => {
+    const platz = filmWahl.indexOf(el.dataset.f);
+    const alt = el.querySelector(".nr");
+    if (alt) alt.remove();
+    if (platz >= 0) {
+      const marke = document.createElement("span");
+      marke.className = "nr";
+      marke.textContent = platz + 1;
+      el.appendChild(marke);
+    }
+  });
+}
+
+function filmWaehlen(datei) {
+  const platz = filmWahl.indexOf(datei);
+  if (platz >= 0) filmWahl.splice(platz, 1);
+  else filmWahl.push(datei);
+  filmZeigen();
+}
+
+$("filmAn").onclick = e => { e.preventDefault(); filmUmschalten(true); };
+$("filmAus").onclick = e => { e.preventDefault(); filmUmschalten(false); };
+
+$("filmBauen").onclick = async e => {
+  e.preventDefault();
+  if (filmWahl.length < 2) return say("Mindestens zwei Bilder wählen.", "err");
+  const dauer = parseFloat($("filmDauer").value) || 20;
+  say(`Video aus ${filmWahl.length} Bildern wird gebaut …`);
+  const res = await fetch("/api/video", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({files: filmWahl, duration: dauer})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Das Video ließ sich nicht bauen.", "err");
+  }
+  const g = await res.json();
+  filmUmschalten(false);
+  zeigeVideo(g.video);
+  say(`Video fertig: ${g.bilder} Bilder in ${g.dauer} s.`, "ok");
+};
+
 async function loadGallery() {
   const antwort = await fetch("/api/gallery").then(r => r.json()).catch(() => null);
   if (!antwort) return;
   $("gallery").innerHTML = antwort.files.map(f =>
-    `<figure class="kachel"><img src="/outputs/${f}" title="${f}" alt="${f}"
-       onclick="show('${f}')"><b onclick="loeschen('${f}')" title="Löschen">×</b></figure>`
-  ).join("");
+    `<figure class="kachel" data-f="${f}"><img src="/outputs/${f}" title="${f}"
+       alt="${f}" onclick="${filmModus ? `filmWaehlen('${f}')` : `show('${f}')`}">`
+    + (filmModus ? "" : `<b onclick="loeschen('${f}')" title="Löschen">×</b>`)
+    + `</figure>`).join("");
+  if (filmModus) filmZeigen();
 }
 
 // Endgueltig, ohne Papierkorb -- deshalb die Rueckfrage.

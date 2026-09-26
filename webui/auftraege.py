@@ -18,6 +18,7 @@ import io
 import itertools
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -50,7 +51,7 @@ def ziel() -> str:
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
 current = {"files": [], "error": None, "translated": {}, "stage": "",
-           "video": None, "gelesen": {}, "nummer": 0, "titel": ""}
+           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": []}
 
 # Die Warteschlange. Wartende Auftraege halten ihre Referenzbilder als
 # Datenzeilen im Speicher -- bei einer Handvoll sind das ein paar Megabyte,
@@ -137,32 +138,105 @@ def uebersicht() -> dict:
                 "verlauf": [_kurz(a) for a in reversed(verlauf)]}
 
 
-def _abarbeiten(auftrag: dict) -> None:
+# Die Achsen, die `plan()` in den Prompt einbaut. Eine Liste, damit sie beim
+# Buendeln und beim Einzellauf garantiert dieselbe ist.
+ACHSEN = ("view", "style", "light", "camera", "paint", "palette", "scene",
+          "angle", "device", "scenario", "material", "haltung", "kleidung")
+
+# Alles, was beim Buendeln uebereinstimmen muss: was die Maschine einmal
+# einstellt und nicht je Bild wechseln kann.
+GLEICH = ("aspect", "base", "steps", "true_cfg_scale", "negative_prompt")
+
+
+def _buendelbar(a: dict, b: dict) -> bool:
+    """Duerfen diese beiden Auftraege einen Ladevorgang teilen?
+
+    Gemessen kostet ein Ladevorgang rund 68 Sekunden, das Rechnen eines
+    kleinen Bildes anderthalb. Wer drei Bilder einzeln einreiht, wartet also
+    dreimal auf dasselbe Modell. Zusammen geht das in einem Durchgang.
+
+    Streng gefasst: nur schlichte Text-zu-Bild-Auftraege ohne Referenzbild,
+    Effekt, Vorlage oder Serienart. Bei denen ist der fertige Prompt genau
+    das, was `plan()` daraus macht -- bei allem anderen baut `run_series` den
+    Text noch um, und die Abkuerzung ueber `prompts=` ginge daneben.
+    """
+    if a["art"] != "generate" or b["art"] != "generate":
+        return False
+    if a.get("projekt") != b.get("projekt"):
+        return False
+    pa, pb = a.get("params") or {}, b.get("params") or {}
+    for p in (pa, pb):
+        if (p.get("mode") or "t2i") != "t2i":
+            return False
+        if p.get("images") or p.get("effect") or p.get("form"):
+            return False
+        if p.get("sweep") or p.get("prompts") or p.get("transparent"):
+            return False
+        if int(p.get("count", 1) or 1) != 1:
+            return False
+    return all(str(pa.get(k, "")) == str(pb.get(k, "")) for k in GLEICH)
+
+
+def _fertiger_prompt(params: dict) -> tuple[str, int]:
+    """Prompt und Seed eines Auftrags, so wie `plan()` sie bauen wuerde.
+
+    Ueber `plan()` statt von Hand: die Achsenliste waechst, und zwei Stellen,
+    die denselben Text bauen, laufen frueher oder spaeter auseinander.
+    """
+    seed = int(params.get("seed", 42))
+    auftragsliste = Engine.plan(
+        params.get("prompt", ""), 1, seed, None,
+        subject=params.get("subject") or "fahrzeug",
+        paint_target=params.get("paint_target") or "",
+        **{k: params.get(k) or None for k in ACHSEN})
+    return auftragsliste[0]["prompt"], auftragsliste[0]["seed"]
+
+
+def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
     """Einen Auftrag ausfuehren. Nur der Arbeiter ruft das auf."""
     global _projekt_des_laufs
     engine.lock.acquire()
     try:
         _projekt_des_laufs = auftrag.get("projekt") or projekte.ALLGEMEIN
-        auftrag["zustand"] = "laeuft"
+        alle = [auftrag] + (weitere or [])
+        for a in alle:
+            a["zustand"] = "laeuft"
         engine.aborted = False
+        titel = (auftrag["titel"] if len(alle) == 1
+                 else f"{len(alle)} Auftraege zusammen")
         current.update(files=[], error=None, translated={}, video=None,
-                       gelesen={}, stage="wird vorbereitet",
-                       nummer=auftrag["nummer"], titel=auftrag["titel"])
-        (run_demo if auftrag["art"] == "demo" else run_job)(auftrag["params"])
+                       gelesen={}, tor=[], stage="wird vorbereitet",
+                       nummer=auftrag["nummer"], titel=titel)
+        if len(alle) == 1:
+            (run_demo if auftrag["art"] == "demo" else run_job)(auftrag["params"])
+        else:
+            # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
+            # an run_series, genau wie bei einem Ablauf.
+            fertig = [_fertiger_prompt(a["params"]) for a in alle]
+            gemeinsam = dict(auftrag["params"])
+            gemeinsam["prompts"] = [t for t, _ in fertig]
+            gemeinsam["seeds"] = [sd for _, sd in fertig]
+            run_job(gemeinsam)
     finally:
-        # Gehoerte der Auftrag zu einem Baustein, bekommt der jetzt sein Bild.
-        kennung = (auftrag.get("params") or {}).get("baustein")
-        if kennung and current["files"]:
-            bausteine.bild_setzen(auftrag.get("projekt") or projekte.ALLGEMEIN,
-                                  str(kennung), current["files"][0])
-        auftrag["bilder"] = len(current["files"])
-        auftrag["fehler"] = current["error"]
-        auftrag["zustand"] = ("fehler" if current["error"]
-                              else "abgebrochen" if engine.aborted else "fertig")
-        # Die Vorgaben samt Referenzbildern werden nicht aufgehoben.
-        auftrag.pop("params", None)
+        alle = [auftrag] + (weitere or [])
+        zustand = ("fehler" if current["error"]
+                   else "abgebrochen" if engine.aborted else "fertig")
+        for i, a in enumerate(alle):
+            # Im Buendel gehoert jedem Auftrag genau ein Bild, in der
+            # Reihenfolge der Prompts. Allein bekommt er alle.
+            eigene = (current["files"] if len(alle) == 1
+                      else current["files"][i:i + 1])
+            kennung = (a.get("params") or {}).get("baustein")
+            if kennung and eigene:
+                bausteine.bild_setzen(a.get("projekt") or projekte.ALLGEMEIN,
+                                      str(kennung), eigene[0])
+            a["bilder"] = len(eigene)
+            a["fehler"] = current["error"]
+            a["zustand"] = zustand
+            # Die Vorgaben samt Referenzbildern werden nicht aufgehoben.
+            a.pop("params", None)
         with _wecker:
-            verlauf.append(auftrag)
+            verlauf.extend(alle)
             del verlauf[:-VERLAUF_LAENGE]
         engine.lock.release()
 
@@ -173,8 +247,13 @@ def _arbeiter() -> None:
             while not warteschlange:
                 _wecker.wait()
             auftrag = warteschlange.pop(0)
+            # Was gleich dahinter steht und dazu passt, laeuft mit -- das
+            # spart je Auftrag einen vollstaendigen Ladevorgang.
+            weitere = []
+            while warteschlange and _buendelbar(auftrag, warteschlange[0]):
+                weitere.append(warteschlange.pop(0))
         try:
-            _abarbeiten(auftrag)
+            _abarbeiten(auftrag, weitere)
         except Exception:                      # darf den Faden nie beenden
             traceback.print_exc()
 
@@ -237,6 +316,54 @@ def _translate_inputs(params: dict) -> dict:
     return fertig
 
 
+def _cfg_fuer(params: dict) -> float:
+    """Der CFG-Wert fuer diesen Auftrag.
+
+    Ein negativer Prompt wirkt nur oberhalb von 1 (engine.py:
+    `true_cfg_scale > 1`), und dort laeuft jeder Schritt zweimal -- das Bild
+    dauert also rund doppelt so lang. Angehoben wird deshalb nur auf
+    ausdruecklichen Wunsch ("streng"). Steht nichts im Feld, kostet es
+    ohnehin nichts: der negative Zweig faellt ganz weg.
+    """
+    wert = float(params.get("true_cfg_scale", 1.0) or 1.0)
+    if (wert <= 1.0 and params.get("streng")
+            and (params.get("negative_prompt") or "").strip()):
+        return 2.5
+    return wert
+
+
+def _ausschluesse(text: str) -> list[str]:
+    """Die Begriffe aus dem Feld "was nicht ins Bild soll"."""
+    return [t.strip().lower() for t in re.split(r"[,;\n]", text or "") if t.strip()]
+
+
+def torwaechter(prompt: str, ausschluss: str) -> tuple[str, list[str]]:
+    """Streicht ausgeschlossene Begriffe aus dem fertigen Prompt.
+
+    Der billige Weg: "Kueche" und "Buero" stehen als Wort im Prompt -- meist
+    aus einer Umgebungsachse oder einem Baustein. Sie dort zu entfernen
+    kostet nichts, waehrend es dem Modell auszureden die Rechenzeit
+    verdoppelt. Entfernt wird das ganze Aufzaehlungsglied, in dem der Begriff
+    steht, sonst bliebe ein Satzbruchstueck zurueck.
+
+    Gibt den bereinigten Prompt und die tatsaechlich entfernten Stuecke
+    zurueck -- stillschweigend soll das nicht geschehen.
+    """
+    begriffe = _ausschluesse(ausschluss)
+    if not begriffe or not prompt:
+        return prompt, []
+    behalten, entfernt = [], []
+    for glied in prompt.split(","):
+        klein = glied.lower()
+        treffer = next((b for b in begriffe if b in klein), None)
+        if treffer:
+            entfernt.append(f"{glied.strip()} (wegen „{treffer}“)")
+        else:
+            behalten.append(glied)
+    sauber = ",".join(behalten).strip().strip(",").strip()
+    return (sauber or prompt), entfernt
+
+
 def _series_kwargs(params: dict, refs: list, kind: str, on_image) -> dict:
     """Uebersetzt einen Parametersatz der Schnittstelle in Engine-Argumente.
 
@@ -253,7 +380,7 @@ def _series_kwargs(params: dict, refs: list, kind: str, on_image) -> dict:
         follow_reference=bool(params.get("follow_reference", True)),
         steps=int(params.get("steps", 40)),
         seed=int(params.get("seed", 42)),
-        true_cfg_scale=float(params.get("true_cfg_scale", 1.0)),
+        true_cfg_scale=_cfg_fuer(params),
         transparent=bool(params.get("transparent", False)),
         effect=params.get("effect") or None,
         form=params.get("form") or None,
@@ -300,9 +427,27 @@ def run_job(params: dict) -> None:
                 with open(manifest, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-        # `prompts` kommt von einer Serie ueber eine Variable: dieselbe Person
-        # in vier Jacken. Alle teilen sich einen Ladevorgang.
+        # `prompts` kommt von einer Serie ueber eine Variable oder aus einem
+        # Buendel: dieselbe Person in vier Jacken, ein Ladevorgang fuer alle.
         fertige = [p for p in (params.get("prompts") or []) if str(p).strip()]
+        if not fertige:
+            # Ohne fertige Liste baut plan() den Prompt -- damit der
+            # Torwaechter auch dort greift, wird er hier einmal gebaut.
+            fertige = [_fertiger_prompt(params)[0]] if params.get("prompt") else []
+            if fertige and int(params.get("count", 1) or 1) != 1:
+                fertige = []          # Serien baut plan() selbst
+
+        ausschluss = params.get("negative_prompt") or ""
+        gestrichen = []
+        if fertige and ausschluss.strip():
+            geprueft = []
+            for text in fertige:
+                sauber, weg = torwaechter(text, ausschluss)
+                geprueft.append(sauber)
+                gestrichen += weg
+            fertige = geprueft
+        current["tor"] = gestrichen
+
         engine.run_series(**_series_kwargs(params, refs, kind, on_image),
                           **({"prompts": fertige} if fertige else {}))
         done = len(current["files"])

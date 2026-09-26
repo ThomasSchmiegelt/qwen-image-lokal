@@ -222,7 +222,11 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
 "prompt"     Die Beschreibung auf ENGLISCH, ein Satz. Unveränderliches gehört
              in den Text: ungefähres Alter, Statur, Gesicht, Haarfarbe und
-             Frisur. Alles, was sich von Bild zu Bild ändern darf -- vor allem
+             Frisur. Nennt die Beschreibung einen Charakterzug -- schüchtern,
+             streng, herzlich, misstrauisch --, setze ihn als sichtbares
+             Merkmal um: Haltung, Blick, Zug um den Mund. "streng" wird zu
+             "an upright bearing and a level, unsmiling gaze", nicht zu
+             "strict". Alles, was sich von Bild zu Bild ändern darf -- vor allem
              Kleidung und Schuhe -- setzt du als Lücke in geschweifte Klammern,
              zum Beispiel {kleidung} oder {schuhe}. Höchstens vier Lücken,
              Namen klein und ohne Umlaute.
