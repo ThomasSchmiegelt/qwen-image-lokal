@@ -78,6 +78,15 @@ fetch("/api/info").then(r => r.json()).then(info => {
     a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
   MIMIKLISTE = info.mimik || [];
   STILLISTE = info.styles || [];
+  fill("gsStil", info.styles);
+  fill("gsWelt", info.welten);
+  // Gross fuer die schoepferische Arbeit, klein fuer alles andere.
+  $("gsModell").innerHTML =
+    `<option value="${info.gross}">${esc(info.gross)} (gross, besser)</option>`
+    + `<option value="${(info.chat || {}).model || ""}">`
+    + `${esc((info.chat || {}).model || "klein")} (klein, schneller)</option>`;
+  zeigeSelbstszenen();
+  zeigeGrad();
   zeigeBausteine(info.bausteine);
   fill("effect", EFFECTS); fill("form", FORMS);
   AXIS_OFF = info.axis_off || "-";
@@ -801,7 +810,7 @@ function zeigeBausteine(liste) {
       </div>`).join("")
     : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
   zeigeWahl();
-  zeigeGsWahl();
+  zeigeSelbstszenen();
 }
 
 // Zu jeder Luecke ein Feld. `mehrzeilig` erlaubt eine Werteliste -- daraus
@@ -1070,108 +1079,177 @@ async function einreihenEinfach(zusatz) {
 }
 
 // ---------- Geschichte ----------
-// Handlung plus Bausteine ergeben Szenen, Szenen ergeben Bloecke -- und ein
-// Block-Ablauf ist genau das, was der Ablauf-Reiter schon abarbeiten kann.
-let GESCHICHTE = null;
-
-function zeigeGsWahl() {
-  $("gsWahl").innerHTML = BAUSTEINE.length
-    ? BAUSTEINE.map(b => `<label class="wahl"><input type="checkbox"
-        class="gswahl" value="${b.id}"> ${esc(b.name)}</label>`).join("")
-    : `<p class="hint">Erst Bausteine anlegen — ohne Personen, Orte und
-        Gegenstände hat die Geschichte niemanden.</p>`;
-}
-
-// Die Handlung entweder am Stueck oder Szene fuer Szene. Beides landet als
-// ein Text beim Sprachmodell -- bei Einzelszenen nummeriert, damit es die
-// Aufteilung uebernimmt statt selbst zu schneiden.
-let gsSzenenweise = false, gsZeilen = [""];
+// Drei Schritte: umreissen, gliedern, schreiben lassen. Der Stil und die
+// Frage Wirklichkeit oder Erfindung stehen ganz vorn, weil beides fuer jede
+// Szene gilt -- und weil ein Modell, dem niemand sagt, dass Drachen erlaubt
+// sind, die Handlung so lange zurechtbiegt, bis sie alltagstauglich wird.
+let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
 
 function zeigeSelbstszenen() {
   $("gsSelbst").innerHTML = gsZeilen.map((z, i) => `
     <div class="selbstszene"><span class="nr">${i + 1}</span>
-      <input class="gszeile" data-i="${i}" value="${esc(z)}"
+      <input class="gszeile" data-i="${i}" value="${esc(z.text)}"
         placeholder="was in diesem Bild zu sehen ist">
+      <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
+        title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
       <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
-    </div>`).join("");
-  $("gsSelbst").querySelectorAll(".gszeile").forEach(
-    el => el.oninput = () => gsZeilen[+el.dataset.i] = el.value);
-  $("gsAnzahl").value = Math.max(2, gsZeilen.filter(z => z.trim()).length || 2);
+    </div>`).join("")
+    + (BAUSTEINE.length
+        ? `<p class="hint">Einfügen: ` + BAUSTEINE.map(x =>
+            `<a href="#" onclick="gsEinfuegen('${esc(x.name)}');return false">/${esc(x.name)}</a>`
+          ).join(" · ") + `</p>`
+        : "");
+  $("gsSelbst").querySelectorAll(".gszeile").forEach(el => {
+    el.oninput = () => gsZeilen[+el.dataset.i].text = el.value;
+    el.onfocus = () => gsLetzteNr = +el.dataset.i;
+  });
+  $("gsSelbst").querySelectorAll(".gsbilder").forEach(el => {
+    el.oninput = () => {
+      gsZeilen[+el.dataset.i].bilder = Math.max(1, parseInt(el.value, 10) || 1);
+      gsSumme();
+    };
+  });
+  gsSumme();
+}
+
+function gsSumme() {
+  const n = gsZeilen.reduce((s, z) => s + (z.bilder || 1), 0);
+  $("gsSumme").textContent = `${gsZeilen.filter(z => z.text.trim()).length} Szenen, `
+    + `${n} Bild(er)`;
+}
+
+// Einen Baustein in die zuletzt angeklickte Zeile schreiben.
+function gsEinfuegen(name) {
+  const i = Math.min(gsLetzteNr, gsZeilen.length - 1);
+  gsZeilen[i].text = (gsZeilen[i].text + " /" + name).trim();
+  zeigeSelbstszenen();
 }
 
 function gsZeileWeg(i) {
   gsZeilen.splice(i, 1);
-  if (!gsZeilen.length) gsZeilen = [""];
+  if (!gsZeilen.length) gsZeilen = [{text: "", bilder: 1}];
   zeigeSelbstszenen();
 }
 
-function gsArt(szenenweise) {
-  gsSzenenweise = szenenweise;
-  $("gsFrei").style.display = szenenweise ? "none" : "block";
-  $("gsListe").style.display = szenenweise ? "block" : "none";
-  $("gsAnzahl").disabled = szenenweise;
-  if (szenenweise) zeigeSelbstszenen();
+// Regler und Einordnung halten sich stimmig: der Regler sagt, wie weit weg
+// von der Wirklichkeit, das Feld sagt wohin.
+const GRADTEXT = [
+  "ganz die wirkliche Welt — nichts Übernatürliches",
+  "ganz die wirkliche Welt — nichts Übernatürliches",
+  "wirklich, mit einem Hauch von Unwirklichem am Rand",
+  "wirklich, mit einem Hauch von Unwirklichem am Rand",
+  "die Grenze zum Unmöglichen ist durchlässig",
+  "die Grenze zum Unmöglichen ist durchlässig",
+  "erfundene Welt mit eigenen, folgerichtigen Regeln",
+  "erfundene Welt mit eigenen, folgerichtigen Regeln",
+  "Magie und Fabelwesen gehören dazu",
+  "Magie und Fabelwesen gehören dazu",
+  "Märchenlogik — Wunder brauchen keine Begründung",
+];
+
+function zeigeGrad() {
+  const n = +$("gsFiktion").value;
+  $("gsFiktionText").textContent = `${n * 10} % Fiktion — ${GRADTEXT[n]}`;
+  const passend = n <= 3 ? "wirklich" : n <= 5 ? "scifi"
+                : n <= 7 ? "fantasie" : n <= 9 ? "fantasie" : "maerchen";
+  if ($("gsWelt").value === "wirklich" || n <= 3) $("gsWelt").value = passend;
 }
 
-$("gsArtFrei").onclick = e => { e.preventDefault(); gsArt(false); };
-$("gsArtSzenen").onclick = e => { e.preventDefault(); gsArt(true); };
+$("gsFiktion").addEventListener("input", zeigeGrad);
+
 $("gsPlus").onclick = e => {
   e.preventDefault();
-  gsZeilen.push("");
+  gsZeilen.push({text: "", bilder: 1});
   zeigeSelbstszenen();
 };
 
-// Was beim Sprachmodell ankommt.
-function gsHandlung() {
-  if (!gsSzenenweise) return $("gsText").value.trim();
-  const zeilen = gsZeilen.map(z => z.trim()).filter(Boolean);
-  if (!zeilen.length) return "";
-  return "Die Handlung ist bereits in Bilder geteilt. Nimm genau diese "
-    + "Aufteilung, eine Szene je Zeile:\n"
-    + zeilen.map((z, i) => `${i + 1}. ${z}`).join("\n");
-}
-
-$("gsErzeugen").onclick = async e => {
+// --- Schritt 1: umreissen ---
+$("gsUmreissen").onclick = async e => {
   e.preventDefault();
-  const text = gsHandlung();
-  if (!text) return say("Erst die Handlung beschreiben.", "err");
-  const ids = [...$("gsWahl").querySelectorAll(".gswahl:checked")].map(x => x.value);
-  if (!ids.length) return say("Erst anhaken, wer und was vorkommt.", "err");
-  say("Die Handlung wird zerlegt …");
-  $("gsErzeugen").textContent = "läuft …";
-  const res = await fetch("/api/geschichte", {
+  const idee = $("gsIdee").value.trim();
+  if (!idee) return say("Erst eine Idee eintippen.", "err");
+  const res = await fetch("/api/expose", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({text, ids,
-      anzahl: gsSzenenweise
-        ? gsZeilen.filter(z => z.trim()).length
-        : parseInt($("gsAnzahl").value, 10) || 8})
+    body: JSON.stringify({idee, fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value})
   }).catch(() => null);
-  $("gsErzeugen").textContent = "Szenen schreiben lassen";
   if (!res || !res.ok) {
     const err = res ? await res.json().catch(() => ({})) : {};
-    return say(err.error || "Die Geschichte ließ sich nicht zerlegen.", "err");
+    return say(err.error || "Das ließ sich nicht umreißen.", "err");
   }
-  GESCHICHTE = await res.json();
-  zeigeSzenen(GESCHICHTE);
-  say(`${GESCHICHTE.szenen.length} Szenen geschrieben. Gegenlesen, dann starten.`, "ok");
+  buttonState("busy");
+  poll();
+  say("Die Geschichte wird umrissen …");
 };
 
-function zeigeSzenen(g) {
-  const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
-  $("gsSzenen").innerHTML = g.szenen.map((s, i) => `
-    <div class="szene"><span class="nr">${i + 1}</span>
-      <div class="sztext"><b>${esc(s.titel)}</b>
-        ${s.mimik ? `<span class="art">${esc(name(MIMIKLISTE, s.mimik))}</span>` : ""}
-        ${s.stil ? `<span class="art">${esc(name(STILLISTE, s.stil))}</span>` : ""}
-        <br><code>${esc(s.handlung)}</code></div>
-    </div>`).join("");
-  $("gsHinweis").textContent = g.hinweis || "";
-  $("gsKnoepfe").style.display = g.szenen.length ? "block" : "none";
+function zeigeExpose(e) {
+  if (!e || !e.kurz || e.kurz === $("gsKurz").value) return;
+  $("gsKurz").value = e.kurz;
+  if (e.stil) $("gsStil").value = e.stil;
+  if (e.welt) {
+    $("gsWelt").value = e.welt;
+    // Den Regler nur nachziehen, wenn er noch auf Anschlag steht -- eine
+    // bewusst gewaehlte Zwischenstellung soll nicht ueberschrieben werden.
+    const jetzt = +$("gsFiktion").value;
+    if (jetzt === 0 || jetzt === 10) {
+      $("gsFiktion").value = {wirklich: 0, scifi: 6, fantasie: 8, maerchen: 10}[e.welt] ?? jetzt;
+      zeigeGrad();
+    }
+  }
+  if (e.szenen && e.szenen.length) {
+    gsZeilen = e.szenen.map(t => ({text: t, bilder: 1}));
+    zeigeSelbstszenen();
+  }
+  say(`„${e.titel || "Geschichte"}“ umrissen — Stil und Welt sind gesetzt, `
+      + "das Inhaltsverzeichnis ist ein Vorschlag.", "ok");
 }
 
-// Die Bloecke in den Ablauf-Reiter legen. Startbild ist das Bild der Person,
-// die am haeufigsten vorkommt -- so setzt der Ablauf auf einem Gesicht auf,
-// statt in jedem Bild ein neues zu erfinden.
+// --- Schritt 3: Prompts schreiben lassen ---
+$("gsErzeugen").onclick = async e => {
+  e.preventDefault();
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  if (!zeilen.length) return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  const res = await fetch("/api/gliederung", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen, stil: $("gsStil").value, welt: $("gsWelt").value,
+                          kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value,
+                          prosa: $("gsProsa").checked})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Die Prompts ließen sich nicht schreiben.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say("Die Prompts werden geschrieben …");
+};
+
+async function zeigeGliederung(prompts) {
+  if (!prompts || !prompts.length) return;
+  if (GESCHICHTE && GESCHICHTE.prompts
+      && GESCHICHTE.prompts.length === prompts.length
+      && GESCHICHTE.prompts[0].prompt === prompts[0].prompt) return;
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  const g = await fetch("/api/szenen", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen, prompts, stil: $("gsStil").value})
+  }).then(r => r.json()).catch(() => null);
+  if (!g) return;
+  GESCHICHTE = {...g, prompts};
+  const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
+  $("gsSzenen").innerHTML = prompts.map((p, i) => `
+    <div class="szene"><span class="nr">${i + 1}</span>
+      <div class="sztext"><b>${esc(p.zeile)}</b>
+        ${p.mimik ? `<span class="art">${esc(name(MIMIKLISTE, p.mimik))}</span>` : ""}
+        <br><code>${esc(p.prompt)}</code>
+        ${p.prosa ? `<br><i>${esc(p.prosa)}</i>` : ""}</div>
+    </div>`).join("");
+  $("gsHinweis").textContent = `${g.bilder} Bild(er) entstehen daraus.`;
+  $("gsKnoepfe").style.display = "block";
+}
+
+// --- Schritt 4: in den Ablauf oder gleich erzeugen ---
 async function geschichteInAblauf() {
   if (!GESCHICHTE) return false;
   bloecke = JSON.parse(JSON.stringify(GESCHICHTE.bloecke));
@@ -1367,6 +1445,8 @@ function poll() {
         (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
       paintSeries(s.results || [], s.count, s.image);
       zeigeWarteschlange(s);
+      zeigeExpose(s.expose);
+      zeigeGliederung(s.gliederung);
       laufendeArbeit = !!(s.busy && s.titel);
       wartendeAnzahl = (s.wartend || []).length;
       // Wechselt der laufende Auftrag, ist der vorige fertig -- seine Bilder

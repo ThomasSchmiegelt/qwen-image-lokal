@@ -11,7 +11,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from kataloge import MIMIK, STYLES  # noqa: E402
+from kataloge import GEZEICHNET, MIMIK, STYLES  # noqa: E402
 
 from .ollama import GROSS, MODEL, antwort, entladen  # noqa: E402
 
@@ -135,7 +135,8 @@ geschrieben hast. Halte Kleidung, Tageszeit und Stimmung stimmig, es sei
 denn, die Zeile verlangt einen Bruch."""
 
 
-def gliederung(zeilen: list[str], stil: str = "", model: str | None = None,
+def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
+               kurz: str = "", fiktion=None, model: str | None = None,
                fortschritt=None) -> list[dict]:
     """Aus den Zeilen einer Gliederung die Bildprompts, der Reihe nach.
 
@@ -145,8 +146,20 @@ def gliederung(zeilen: list[str], stil: str = "", model: str | None = None,
     """
     name = model or GROSS
     system = GLIEDERUNG_SYSTEM.format(mimik=", ".join(MIMIK))
+    if kurz.strip():
+        system += f"\n\nWorum es geht: {kurz.strip()}"
+    # Die Weltzuordnung zuerst: ohne sie biegt das Modell eine Fantasiehandlung
+    # so lange zurecht, bis sie alltagstauglich wird.
+    if welt in WELTEN:
+        system += f"\n\n{WELTEN[welt][1]}"
+    _, satz = grad(fiktion)
+    if satz:
+        system += f"\n\n{satz}"
     if stil in STYLES:
         system += f"\n\nDie ganze Folge ist im Stil: {STYLES[stil][1]}"
+        if stil in GEZEICHNET:
+            system += (" Es ist eine Zeichnung, kein Foto -- beschreibe nichts "
+                       "Fotografisches wie Objektive, Filmkorn oder Blende.")
 
     verlauf, szenen = [], []
     try:
@@ -210,3 +223,133 @@ def prosa(szenen: list[dict], model: str | None = None) -> list[str]:
     if not isinstance(roh, dict) or not isinstance(roh.get("absaetze"), list):
         return []
     return [str(a or "").strip()[:900] for a in roh["absaetze"]][:len(szenen)]
+
+
+
+# --- Expose --------------------------------------------------------------
+# Vor der ersten Szene: worum geht es, in welchem Stil, und spielt das in der
+# wirklichen Welt oder einer erfundenen? Das Letzte ist kein Beiwerk. Ein
+# Modell, dem niemand sagt, dass Drachen vorkommen duerfen, versucht die
+# Handlung zurechtzubiegen, bis sie plausibel wird.
+
+WELTEN = {
+    "wirklich": ("Wirklichkeit",
+                 "Die Geschichte spielt in der wirklichen Welt. Alles muss "
+                 "physikalisch moeglich und alltaeglich glaubhaft sein."),
+    "fantasie": ("Fantasie",
+                 "Die Geschichte spielt in einer erfundenen Welt. Magie, "
+                 "Fabelwesen und unmoegliche Orte sind ausdruecklich erlaubt "
+                 "und sollen nicht wegerklaert werden."),
+    "scifi":    ("Zukunft",
+                 "Die Geschichte spielt in der Zukunft. Technik darf weit "
+                 "ueber das Heutige hinausgehen, soll aber in sich stimmig "
+                 "bleiben."),
+    "maerchen": ("Märchen",
+                 "Die Geschichte ist ein Maerchen. Sprechende Tiere, Zauber "
+                 "und Wunder gehoeren dazu; Logik tritt hinter das Bild."),
+}
+
+# Wie wirklich soll es sein? Ein Regler von 0 bis 10 statt einer Ja-Nein-
+# Frage: das Spannende liegt oft dazwischen -- eine Welt, die fast die unsere
+# ist, in der aber eine Sache nicht stimmt und niemand sich daran stoert.
+GRADE = (
+    (1,  ["wirklich"],
+     "Nichts Uebernatuerliches. Alles muss physikalisch moeglich und "
+     "alltaeglich glaubhaft sein."),
+    (3,  ["wirklich"],
+     "Die wirkliche Welt, aber am Rand ein Hauch von Unwirklichem -- nie "
+     "erklaert, nie ausgesprochen."),
+    (5,  ["wirklich", "scifi"],
+     "Die Grenze zum Unmoeglichen ist durchlaessig: einzelne Dinge duerfen "
+     "nicht stimmen, ohne dass jemand darueber staunt."),
+    (7,  ["scifi", "fantasie"],
+     "Eine erfundene Welt mit eigenen Regeln. Sie darf weit von der unseren "
+     "abweichen, muss aber in sich folgerichtig bleiben."),
+    (9,  ["fantasie", "maerchen"],
+     "Magie und Fabelwesen gehoeren dazu und werden nicht wegerklaert."),
+    (10, ["maerchen"],
+     "Maerchenlogik: Wunder brauchen keine Begruendung, das Bild geht vor "
+     "der Erklaerung."),
+)
+
+
+def grad(fiktion) -> tuple[list[str], str]:
+    """Aus dem Regler die erlaubten Welten und den Satz fuer das Modell.
+
+    Nimmt auch True/False -- der Regler ersetzte einen Haken, und alte
+    Aufrufe sollen nicht brechen.
+    """
+    if fiktion is None:
+        return list(WELTEN), ""
+    if fiktion is True:
+        fiktion = 9
+    elif fiktion is False:
+        fiktion = 0
+    try:
+        wert = max(0, min(int(fiktion), 10))
+    except (TypeError, ValueError):
+        return list(WELTEN), ""
+    for grenze, welten, satz in GRADE:
+        if wert <= grenze:
+            return welten, satz
+    return list(WELTEN), ""
+
+
+EXPOSE_SYSTEM = """Du planst eine Bilderfolge.
+
+Der Benutzer nennt eine Idee. Antworte ausschließlich mit JSON und genau
+diesen Schlüsseln:
+
+"kurz"    Drei bis fünf deutsche Sätze: worum es geht, wer vorkommt, wie es
+          ausgeht. Kein Vorspann, keine Überschrift.
+"welt"    Einer dieser Schlüssel: {welten}
+          Wähle ehrlich. Kommen Drachen oder Magie vor, ist es "fantasie",
+          auch wenn die Idee nüchtern klingt.
+"stil"    Ein Schlüssel aus der Stilliste, der zur Geschichte passt und für
+          ALLE Bilder gelten soll: {stile}
+"titel"   Zwei bis vier Wörter, deutsch.
+"szenen"  Vorschlag für die Gliederung: eine Liste deutscher Zeilen, je eine
+          Szene, fünf bis zehn Stück. Eine Zeile sagt, was in diesem einen
+          Bild zu sehen ist."""
+
+
+def expose(idee: str, fiktion=None, model: str | None = None) -> dict:
+    """Aus einer Idee die Kurzbeschreibung samt Stil und Weltzuordnung.
+
+    `fiktion` ist der Regler des Benutzers, 0 bis 10, und schlaegt das
+    Urteil des Modells. None laesst es selbst entscheiden.
+    """
+    leer = {"kurz": "", "welt": "wirklich", "stil": "", "titel": "", "szenen": []}
+    if not (idee or "").strip():
+        return leer
+    name = model or GROSS
+    erlaubt, satz = grad(fiktion)
+    system = EXPOSE_SYSTEM.format(
+        welten=", ".join(f'"{k}" ({WELTEN[k][0]})' for k in erlaubt),
+        stile=", ".join(STYLES))
+    if satz:
+        system += f"\n\nDer Benutzer hat den Wirklichkeitsgrad vorgegeben: {satz}"
+    try:
+        roh = antwort({
+            "model": name, "format": "json", "keep_alive": "10m",
+            "options": {"temperature": 0.8, "num_predict": 900},
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": idee}],
+        }, timeout=600)
+    finally:
+        entladen(name)
+    if not isinstance(roh, dict):
+        return leer
+    welt = str(roh.get("welt") or "").strip()
+    if welt not in erlaubt:
+        welt = erlaubt[0]
+    stil = str(roh.get("stil") or "").strip()
+    szenen = [str(z or "").strip()[:200] for z in (roh.get("szenen") or [])
+              if str(z or "").strip()]
+    return {
+        "kurz": str(roh.get("kurz") or "").strip()[:900],
+        "welt": welt,
+        "stil": stil if stil in STYLES else "",
+        "titel": str(roh.get("titel") or "").strip()[:60],
+        "szenen": szenen[:MAX_SZENEN],
+    }

@@ -198,6 +198,7 @@ class Handler(BaseHTTPRequestHandler):
             status["gelesen"] = dict(current["gelesen"])
             status["tor"] = list(current["tor"])
             status["gliederung"] = list(current["gliederung"])
+            status["expose"] = dict(current["expose"])
             status["nummer"] = current["nummer"]
             status["titel"] = current["titel"]
             status.update(uebersicht())
@@ -228,6 +229,8 @@ class Handler(BaseHTTPRequestHandler):
                                      for k, v in bausteine.ARTEN.items()]
             info["mimik"] = [{"key": k, "label": v[0]} for k, v in MIMIK.items()]
             info["gross"] = chat.GROSS
+            info["welten"] = [{"key": k, "label": v[0]}
+                              for k, v in chat.WELTEN.items()]
             info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
@@ -329,6 +332,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "video": os.path.basename(ziel),
                                     "bilder": len(pfade), "dauer": dauer})
 
+        if path == "/api/expose":
+            # Zuerst: worum geht es, welcher Stil, welche Welt. Der Stil gilt
+            # danach fuer alle Szenen.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            if not (params.get("idee") or "").strip():
+                return self._json(400, {"error": "Keine Idee"})
+            # "fiktion" darf fehlen -- dann entscheidet das Modell selbst.
+            fiktion = params.get("fiktion")
+            auftrag = einreihen("expose", {
+                "idee": str(params["idee"]),
+                "fiktion": None if fiktion is None else bool(fiktion),
+                "modell": str(params.get("modell") or "") or None})
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
+
         if path == "/api/gliederung":
             # Das Inhaltsverzeichnis: je Zeile eine Szene, /Name verweist auf
             # einen Baustein. Eingereiht statt sofort ausgefuehrt, weil das
@@ -349,6 +368,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "Keine Szene im Inhaltsverzeichnis"})
             auftrag = einreihen("prompts", {
                 "zeilen": zeilen, "stil": str(params.get("stil") or ""),
+                "welt": str(params.get("welt") or ""),
+                "kurz": str(params.get("kurz") or ""),
+                "fiktion": params.get("fiktion"),
                 "modell": str(params.get("modell") or "") or None,
                 "prosa": bool(params.get("prosa"))})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"],
@@ -374,9 +396,15 @@ class Handler(BaseHTTPRequestHandler):
             benutzt = [alle[k] for k in {s["person"] for s in szenen} | \
                        {s["ort"] for s in szenen} | {s["gegenstand"] for s in szenen}
                        if k in alle]
+            bloecke = geschichte.zu_bloecken(szenen, benutzt)
+            je_szene = [int(z.get("bilder") or 1)
+                        for z in (params.get("zeilen") or [])]
+            if any(n > 1 for n in je_szene):
+                geschichte.mit_streuung(bloecke, je_szene, stil,
+                                        int(params.get("seed") or 42))
             return self._json(200, {
-                "szenen": szenen,
-                "bloecke": geschichte.zu_bloecken(szenen, benutzt),
+                "szenen": szenen, "bloecke": bloecke,
+                "bilder": sum(len(b["bausteine"]) for b in bloecke),
                 "startbild": geschichte.startbild(szenen, benutzt)})
 
         if path == "/api/geschichte":

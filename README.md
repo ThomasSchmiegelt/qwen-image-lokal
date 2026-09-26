@@ -159,8 +159,32 @@ Wald" → „mach es hochkant" → „und jetzt als Comic" → „davon bitte se
 Stück". Jeder Nachsatz ändert genau eine Sache und lässt den Rest stehen; der
 Verlauf steht unter dem Feld, „neu anfangen" vergisst ihn.
 
-**Geschichte.** Wahlweise am Stück oder **Szene für Szene** über einen
-Hinzufügen-Knopf. Handlung auf Deutsch beschreiben, Bausteine anhaken — das
+**Geschichte** in vier Schritten. **Umreißen:** eine Idee genügt — das
+Sprachmodell schreibt die Kurzfassung, schlägt den Stil für die ganze Folge
+vor und macht einen Vorschlag fürs Inhaltsverzeichnis. Ein **Regler von 0 bis
+100 % Fiktion** sagt ihm, wie wirklich es zugehen soll; ohne diese Angabe
+biegt es eine Fantasiehandlung so lange zurecht, bis sie alltagstauglich ist.
+Gemessen an derselben Idee: bei 0 % sucht eine Frau nachts ein verlegtes Buch,
+bei 100 % wandeln sich die Regale, während sie sucht.
+
+**Gliedern:** je Zeile eine Szene, mit `/Name` holst du einen Baustein herein
+(`/Anna rennt durch die /Markthalle`). Rechts steht, wie viele Bilder aus
+dieser Szene entstehen — mehrere zeigen denselben Augenblick aus wechselndem
+Blickwinkel. Gewürfelt wird dabei nur der Blick, nicht Stil, Ort, Kleidung
+oder Kameraart: eine gewürfelte Überwachungskamera machte aus einem Manga
+mittendrin ein Lichtbild. Bei den elf gezeichneten Stilen steht zusätzlich
+ausdrücklich im Prompt, dass kein Foto entstehen soll.
+
+**Schreiben lassen:** die Prompts entstehen der Reihe nach, jede Szene sieht
+die vorigen. Dafür ist das große Modell (`qwen3.8:27b-mtp-q4_K_M`, 16,5 GB)
+vorgesehen — gemessen rund 30 s zum Laden und dann 7 s je Szene, und es
+bleibt zwischen den Szenen geladen. Optional schreibt es auch die Prosa dazu.
+Weil es die Grafikkarte belegt, läuft das als Auftrag in der Warteschlange.
+
+**Erzeugen:** in den Ablauf übernehmen und gegenlesen, oder gleich Bilder und
+Video.
+
+Der alte Weg — Handlung auf Deutsch beschreiben, Bausteine anhaken — das
 Sprachmodell zerlegt sie in Bilder und nimmt **Mimik und Stil aus der
 Handlung**: wer seinen Korb verliert, schaut erschrocken, wer ihn wiederbekommt,
 erleichtert. Heraus kommt kein Sonderformat, sondern die vorhandene

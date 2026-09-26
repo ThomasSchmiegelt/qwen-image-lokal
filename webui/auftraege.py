@@ -51,7 +51,7 @@ def ziel() -> str:
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
 current = {"files": [], "error": None, "translated": {}, "stage": "",
-           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": [], "gliederung": []}
+           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": [], "gliederung": [], "expose": {}}
 
 # Die Warteschlange. Wartende Auftraege halten ihre Referenzbilder als
 # Datenzeilen im Speicher -- bei einer Handvoll sind das ein paar Megabyte,
@@ -66,6 +66,8 @@ VERLAUF_LAENGE = 20
 
 def _titel(art: str, params: dict) -> str:
     """Eine Zeile, an der man den Auftrag in der Liste wiedererkennt."""
+    if art == "expose":
+        return "Geschichte umreissen"
     if art == "prompts":
         return f"Prompts schreiben, {len(params.get('zeilen') or [])} Szenen"
     if art == "demo":
@@ -207,10 +209,11 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
         titel = (auftrag["titel"] if len(alle) == 1
                  else f"{len(alle)} Auftraege zusammen")
         current.update(files=[], error=None, translated={}, video=None,
-                       gelesen={}, tor=[], gliederung=[], stage="wird vorbereitet",
+                       gelesen={}, tor=[], gliederung=[], expose={}, stage="wird vorbereitet",
                        nummer=auftrag["nummer"], titel=titel)
         if len(alle) == 1:
-            laeufe = {"demo": run_demo, "prompts": run_prompts}
+            laeufe = {"demo": run_demo, "prompts": run_prompts,
+                      "expose": run_expose}
             laeufe.get(auftrag["art"], run_job)(auftrag["params"])
         else:
             # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
@@ -488,6 +491,29 @@ def run_job(params: dict) -> None:
     # Die Sperre haelt und loest der Arbeiter -- siehe _abarbeiten().
 
 
+def run_expose(params: dict) -> None:
+    """Die Geschichte umreissen: Kurzfassung, Welt, Stil, Szenenvorschlag.
+
+    Steht vor allem anderen, weil hier der globale Stil und die Frage
+    Wirklichkeit oder Erfindung entschieden werden -- beides gilt danach fuer
+    jede Szene.
+    """
+    try:
+        current["stage"] = "Grosses Sprachmodell wird geladen"
+        erg = chat.expose(params.get("idee") or "",
+                          fiktion=params.get("fiktion"),
+                          model=params.get("modell") or None)
+        current["expose"] = erg
+        current["stage"] = ""
+        engine.note("idle", "Geschichte umrissen" if erg["kurz"]
+                    else "Das Sprachmodell hat nichts geliefert")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        engine.note("error", current["error"])
+
+
 def run_prompts(params: dict) -> None:
     """Aus der Gliederung die Bildprompts schreiben, der Reihe nach.
 
@@ -504,6 +530,9 @@ def run_prompts(params: dict) -> None:
             current["stage"] = f"Prompt {nr} von {gesamt}"
 
         szenen = chat.gliederung(zeilen, stil=params.get("stil") or "",
+                                 welt=params.get("welt") or "",
+                                 kurz=params.get("kurz") or "",
+                                 fiktion=params.get("fiktion"),
                                  model=params.get("modell") or None,
                                  fortschritt=fortschritt)
         if params.get("prosa"):

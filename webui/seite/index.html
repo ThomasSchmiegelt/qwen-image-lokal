@@ -127,57 +127,72 @@
 
     <fieldset id="geschichteBox" style="display:none">
       <legend>Geschichte</legend>
-      <p class="hint">Handlung beschreiben, Bausteine anhaken — das
-        Sprachmodell zerlegt sie in Bilder und nimmt Mimik und Stil aus der
-        Handlung. Heraus kommt ein Ablauf, den du im Reiter <b>Ablauf</b>
-        gegenlesen und ändern kannst.</p>
 
-      <label>Wer und was kommt vor?</label>
-      <div id="gsWahl"></div>
-
-      <div class="head" style="margin-top:14px">
-        <h2>Handlung</h2>
-        <span><a href="#" id="gsArtFrei">am Stück</a> ·
-          <a href="#" id="gsArtSzenen">Szene für Szene</a></span>
+      <p class="hint"><b>1. Umreißen.</b> Eine Idee genügt. Das Sprachmodell
+        schreibt die Kurzfassung, schlägt den Stil für die ganze Folge vor und
+        sagt, ob es in der Wirklichkeit oder einer erfundenen Welt spielt —
+        das muss es wissen, sonst biegt es Drachen weg.</p>
+      <label for="gsIdee">Idee</label>
+      <textarea id="gsIdee" style="min-height:52px"
+        placeholder="Ein Drache bewacht eine Bibliothek und ein Mädchen will ein Buch ausleihen"></textarea>
+      <label for="gsFiktion">Wirklichkeitsgrad</label>
+      <div class="regler">
+        <span>wirklich</span>
+        <input type="range" id="gsFiktion" min="0" max="10" step="1" value="0">
+        <span>Fiktion</span>
       </div>
+      <p class="hint" id="gsFiktionText"></p>
+      <p class="hint">Die Angabe bindet das Sprachmodell — auch für jede
+        einzelne Szene, nicht nur fürs Umreißen. Dazwischen liegt das
+        Interessante: eine Welt wie unsere, in der eine Sache nicht stimmt
+        und niemand sich daran stört.</p>
+      <p class="hint"><a href="#" id="gsUmreissen">Umreißen lassen</a>
+        — füllt Kurzfassung, Stil, Welt und einen Vorschlag fürs
+        Inhaltsverzeichnis.</p>
+      <textarea id="gsKurz" style="min-height:52px"
+        placeholder="Kurzfassung — entsteht beim Umreißen, änderbar"></textarea>
 
-      <div id="gsFrei">
-        <label for="gsText">Was passiert?</label>
-        <textarea id="gsText" style="min-height:90px"
-          placeholder="Anna geht früh auf den Markt, freut sich über die erste Erdbeere, verliert unterwegs ihren Korb und findet ihn am Abend wieder."></textarea>
-      </div>
-
-      <div id="gsListe" style="display:none">
-        <p class="hint">Eine Zeile je Bild. Mimik und Stil holt das
-          Sprachmodell aus dem, was dort steht.</p>
-        <div id="gsSelbst"></div>
-        <p class="hint"><a href="#" id="gsPlus">+ Szene</a></p>
-      </div>
-
-      <div class="axis" style="margin-top:8px">
+      <div class="axis">
         <div>
-          <label for="gsAnzahl">Wie viele Bilder?</label>
-          <input type="number" id="gsAnzahl" min="2" max="24" value="8">
+          <label for="gsStil">Stil für die ganze Folge</label>
+          <select id="gsStil"></select>
         </div>
         <div>
-          <label for="gsFormat">Format</label>
-          <select id="gsFormat">
-            <option value="3:2">3:2 quer</option>
-            <option value="3:4">3:4 hochkant</option>
-            <option value="16:9">16:9 breit</option>
-          </select>
+          <label for="gsWelt">Welt</label>
+          <select id="gsWelt"></select>
         </div>
       </div>
-      <p class="hint">
-        <a href="#" id="gsErzeugen">Szenen schreiben lassen</a>
-        — dauert etwa eine halbe Minute, erzeugt noch keine Bilder.</p>
+
+      <p class="hint" style="margin-top:14px"><b>2. Inhaltsverzeichnis.</b>
+        Je Zeile eine Szene. Mit <code>/</code> und dem Namen holst du einen
+        Baustein herein — <code>/Anna rennt durch die /Markthalle</code>.
+        Rechts steht, wie viele Bilder aus dieser Szene entstehen; mehrere
+        zeigen denselben Augenblick aus wechselndem Blickwinkel.</p>
+      <div id="gsSelbst"></div>
+      <p class="hint"><a href="#" id="gsPlus">+ Szene</a> · <span id="gsSumme"></span></p>
+
+      <div class="axis">
+        <div>
+          <label for="gsModell">Sprachmodell</label>
+          <select id="gsModell"></select>
+        </div>
+        <div>
+          <label class="check" style="margin-top:26px">
+            <input type="checkbox" id="gsProsa"> auch den Text dazu schreiben
+          </label>
+        </div>
+      </div>
+      <p class="hint"><b>3.</b>
+        <a href="#" id="gsErzeugen">Prompts schreiben lassen</a>
+        — rund eine halbe Minute zum Laden, dann etwa sieben Sekunden je
+        Szene. Bilder entstehen dabei noch keine.</p>
 
       <div id="gsSzenen"></div>
       <p class="hint" id="gsHinweis"></p>
-      <p class="hint" id="gsKnoepfe" style="display:none">
+      <p class="hint" id="gsKnoepfe" style="display:none"><b>4.</b>
         <a href="#" id="gsUebernehmen">In den Ablauf übernehmen</a>
         — dort gegenlesen und starten · oder
-        <a href="#" id="gsSofort">ohne Prüfung starten</a></p>
+        <a href="#" id="gsSofort">Bilder und Video jetzt erzeugen</a></p>
     </fieldset>
 
     <fieldset id="katalogBox" style="display:none">

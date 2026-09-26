@@ -154,6 +154,20 @@ PALETTEN = {
 }
 
 
+# Welche Stile gezeichnet sind und nicht fotografiert. Wichtig fuer Folgen:
+# ist der Stil Manga, darf keine Achse in Richtung Foto ziehen -- eine
+# gewuerfelte "Ueberwachungskamera" oder "Spiegelreflex" macht aus dem
+# Manga sonst mittendrin ein Lichtbild.
+GEZEICHNET = {
+    "zeichentrick", "anime", "comic", "manga", "aquarell", "oel", "bleistift",
+    "maerchen", "minimal", "plastik", "kitsch",
+}
+
+# Sagt dem Modell ausdruecklich, dass kein Foto entstehen soll.
+NICHT_FOTO = ("This is a drawn illustration, not a photograph: no camera "
+              "grain, no lens blur, no photographic lighting.")
+
+
 # Gesichtsausdruck. Fuer Geschichten: die Mimik soll aus der Handlung kommen,
 # und ausformuliert trifft sie das Modell zuverlaessiger als ein einzelnes
 # Wort wie "traurig". Bewusst knapp gehalten -- der Rest des Prompts hat auch

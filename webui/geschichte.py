@@ -17,10 +17,13 @@ war das schon bei den Abwandlungen der Grund, den Bezug beim Ausgangsbild zu
 lassen.
 """
 
+import random
 import re
 
 import bausteine
-from kataloge import MIMIK, STYLES
+from kataloge import (
+    CAMERAS, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO, STYLES, VIEWS,
+)
 
 # Wie die Person bewahrt wird, waehrend Ort, Handlung und Stil wechseln.
 BLEIBT = "the person's face, hair and build"
@@ -201,3 +204,62 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             "stil": stil,
         })
     return szenen
+
+
+
+# --- Mehrere Bilder je Szene --------------------------------------------
+# Gewuerfelt wird nur der Blick auf den Augenblick: Objektiv oder Standpunkt.
+# Und davon genau eines je Bild.
+#
+# Nicht gewuerfelt werden Stil, Ort, Farbstimmung und Kleidung -- die gehoeren
+# der Geschichte, nicht dem Zufall. Ausdruecklich auch nicht die Kameraart:
+# eine gewuerfelte Ueberwachungskamera machte aus einem Manga mittendrin ein
+# Lichtbild. Und nicht die Koerperhaltung: die Szene sagt schon, was die
+# Person tut, und "rennend" plus "mit verschraenkten Armen" ergibt wieder den
+# Widerspruch, der anderswo die doppelten Gliedmassen erzeugt hat.
+STREUACHSEN = (CAMERAS, VIEWS)
+
+
+def streuung(text: str, anzahl: int, seed: int, stil: str = "") -> list[str]:
+    """`anzahl` Fassungen desselben Augenblicks.
+
+    Die erste bleibt unangetastet -- sie ist die Szene, wie sie gemeint war.
+    Die uebrigen bekommen je einen anderen Blick darauf.
+    """
+    anzahl = max(1, min(int(anzahl or 1), 20))
+    fassungen = [text]
+    if anzahl == 1:
+        return fassungen
+    rng = random.Random(seed)
+    benutzt = set()
+    for _ in range(anzahl - 1):
+        # Genau eine Angabe je Bild, und moeglichst keine zweimal.
+        tabelle = STREUACHSEN[rng.randrange(len(STREUACHSEN))]
+        offen = [k for k in tabelle if (id(tabelle), k) not in benutzt] or list(tabelle)
+        wahl = rng.choice(offen)
+        benutzt.add((id(tabelle), wahl))
+        fassungen.append(f"{text}, {tabelle[wahl][1]}")
+    # Bei einem gezeichneten Stil ausdruecklich sagen, dass kein Foto
+    # entsteht: die Objektivangaben ziehen sonst dorthin.
+    if stil in GEZEICHNET:
+        fassungen = [f"{f} {NICHT_FOTO}" for f in fassungen]
+    return fassungen
+
+
+def mit_streuung(bloecke: list[dict], je_szene: list[int], stil: str = "",
+                 seed: int = 42) -> list[dict]:
+    """Jede Szene eines Ablaufs auf ihre Bildzahl bringen.
+
+    `je_szene` ist so lang wie die Szenenfolge; fehlt ein Wert, bleibt es bei
+    einem Bild. Die Bloecke behalten ihre Struktur, nur ihre Bausteinliste
+    waechst.
+    """
+    nr = 0
+    for block in bloecke:
+        neue = []
+        for text in block.get("bausteine") or []:
+            anzahl = je_szene[nr] if nr < len(je_szene) else 1
+            neue += streuung(text, anzahl, seed + nr * 101, stil)
+            nr += 1
+        block["bausteine"] = neue
+    return bloecke
