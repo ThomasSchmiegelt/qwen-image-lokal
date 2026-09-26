@@ -91,7 +91,7 @@ Neben den Bildern entsteht ein `*.jsonl`-Manifest mit einer Zeile je Variante.
 oder Lichtstimmung — der Reihe nach oder gewürfelt. Optional derselbe Seed für
 alle Bilder, was Kleidung, Umgebung und Bildaufbau stabil hält.
 
-**Voreinstellungen** in `webui/presets.py`, frei erweiterbar: 17 Stile,
+**Voreinstellungen** in `webui/kataloge/`, frei erweiterbar: 21 Stile,
 10 Lichtstimmungen, 11 Kameraperspektiven, 10 Blickwinkel, 8 Vorlagen
 (Porträt, Logo, Buchumschlag, Verpackung, Icon, Web- und App-Muster) sowie
 17 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
@@ -302,13 +302,16 @@ scheiterte erst viel später im Server mit `KeyError: ''`.
 start.sh              Server starten, Browser öffnen
 webui/server.py       HTTP-Server, nur Standardbibliothek
 webui/engine.py       zweiphasige Pipeline
-webui/presets.py      Stile, Lichter, Kameras, Blickwinkel, Vorlagen, Effekte
+webui/kataloge/       Voreinstellungen: anmutung.py (Stil, Licht, Kamera,
+                      Farbe), motiv.py (Umgebung, Blickwinkel, Werkstoff),
+                      vorlage.py (Prompt-Vorlagen, Effekte, Gruppen)
 webui/chat.py         Freitext über Ollama deuten und prüfen
 webui/ablauf.py       Abläufe als Blöcke, mitgelieferte Folgen
 webui/demo.py         Startbild-Vorgabe und Videobau
 webui/pruefung.py     Oberfläche gegen den Server prüfen
 demo/demonstration.py dieselbe Vorführung von der Kommandozeile
-webui/index.html      Oberfläche
+webui/seite/          Oberfläche: index.html (Aufbau), stil.css (Aussehen),
+                      app.js (Verhalten)
 gimp/qwen-image/      GIMP-3-Plugin
 gimp/install.sh       Plugin verknüpfen
 ```

@@ -19,7 +19,7 @@ Nach jedem Block kann das Ausgangsbild wieder eingeblendet werden
 """
 
 from demo import KULISSEN
-from presets import VARIANT_TEMPLATE
+from kataloge import VARIANT_TEMPLATE
 
 # Wortlaut für die beiden Prompt-Vorlagen.
 _BEHUTSAM = VARIANT_TEMPLATE

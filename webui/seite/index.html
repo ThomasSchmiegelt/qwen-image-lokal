@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen-Image 2.1</title>
+<link rel="stylesheet" href="/seite/stil.css">
+</head>
+<body>
+<div id="staleBar"></div>
+<header>
+  <h1>Qwen-Image 2.1</h1>
+  <span id="dims"></span>
+</header>
+
+<main>
+  <section class="panel">
+    <div id="chatBox" style="display:none">
+      <div class="chatbar">
+        <textarea id="chat" rows="4"
+          placeholder="Sag einfach, was du willst …"></textarea>
+        <button id="chatGo" title="Verstehen und loslegen (Strg+Eingabe)">&rarr;</button>
+      </div>
+      <p class="hint" id="chatNote"></p>
+    </div>
+
+    <div class="tabs">
+      <button id="tab-t2i" class="on">Text&rarr;Bild</button>
+      <button id="tab-edit">Bearbeiten</button>
+      <button id="tab-gruppe">Gruppe</button>
+      <button id="tab-person">Perspektiven</button>
+      <button id="tab-varianten">Varianten</button>
+      <button id="tab-demo">Ablauf</button>
+    </div>
+
+    <div id="uploadBox" style="display:none">
+      <label for="file">Referenzbilder <span id="refCount"></span></label>
+      <input type="file" id="file" accept="image/*" multiple>
+      <div class="thumbs" id="thumbs"></div>
+      <p class="hint" id="uploadHint"></p>
+      <p class="hint" id="refNote"></p>
+      <p class="hint" id="ableitenZeile" style="display:none">
+        <a href="#" id="ableiten">Prompt aus dem ersten Bild ableiten</a>
+        — beschreibt das Bild und stellt Stil, Licht und Objektiv passend ein.</p>
+    </div>
+
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt"></textarea>
+    <p class="hint">Deutsch ist in Ordnung — deutsche Eingaben werden vor dem
+      Auftrag ins Englische übersetzt, weil das Bildmodell dem besser folgt.</p>
+    <p class="hint" id="transNote" style="display:none"></p>
+    <p class="hint" id="tplHint" style="display:none"></p>
+
+    <fieldset id="demoBox" style="display:none">
+      <legend>Ablauf</legend>
+
+      <label for="ablaufWahl">Vorlage</label>
+      <select id="ablaufWahl"></select>
+      <p class="hint" id="ablaufInfo"></p>
+
+      <label for="demoFile">Eigenes Startbild (optional)</label>
+      <input type="file" id="demoFile" accept="image/*">
+      <img id="demoPreview" alt="Startbild" style="display:none;max-width:100%;border-radius:6px;margin-top:8px">
+      <p class="hint" id="demoRefNote"></p>
+
+      <label for="demoPrompt" id="demoPromptLabel">…oder beschreiben, wer erzeugt werden soll</label>
+      <textarea id="demoPrompt" style="min-height:48px"
+        placeholder="leer lassen für die Vorgabe: eine Person vor einem geparkten Auto"></textarea>
+
+      <div class="head" style="margin-top:16px">
+        <h2>Blöcke</h2>
+        <span><a href="#" id="blockNeu">+ Block</a> · <a href="#" id="alsText">als Text</a></span>
+      </div>
+      <textarea id="ablaufText" style="display:none;min-height:150px;font-family:monospace;font-size:11px"></textarea>
+      <div id="bloecke"></div>
+
+      <div class="row3" style="margin-top:14px">
+        <div>
+          <label for="demoBase">Auflösung</label>
+          <select id="demoBase">
+            <option value="1024">1024</option>
+            <option value="1536">1536</option>
+          </select>
+        </div>
+        <div>
+          <label for="demoSteps">Schritte</label>
+          <input type="number" id="demoSteps" value="24" min="8" max="60">
+        </div>
+        <div>
+          <label for="demoDuration">Video (s)</label>
+          <input type="number" id="demoDuration" value="25" min="8" max="120">
+        </div>
+      </div>
+      <p class="hint" id="demoDauer"></p>
+    </fieldset>
+
+    <fieldset id="gruppeBox" style="display:none">
+      <legend>Gruppe</legend>
+      <label for="action">Was soll geschehen?</label>
+      <select id="action"></select>
+      <div id="groupSizeBox" style="display:none">
+        <label for="groupSize">Wie viele Personen sind auf dem Gruppenfoto?</label>
+        <input type="number" id="groupSize" value="2" min="1" max="12">
+        <p class="hint">Das Modell kann nicht zählen. Aus deiner Angabe plus der
+          Zahl der Personenbilder ergibt sich, wie viele am Ende im Bild stehen
+          sollen.</p>
+      </div>
+
+    </fieldset>
+
+    <fieldset id="variantenBox" style="display:none">
+      <legend>Varianten</legend>
+
+      <label for="subject">Motivart</label>
+      <select id="subject"></select>
+      <p class="hint">Bestimmt, welche Umgebungen und Blickwinkel zur Auswahl
+        stehen. „Auf Stoßstangenhöhe von hinten&ldquo; passt zu einem Auto und
+        zu nichts sonst.</p>
+
+      <label for="keep">Was muss unverändert bleiben?</label>
+      <input id="keep" value="The black tow hitch with the ball neck">
+
+      <label style="margin-top:16px">Achsen &ndash; was soll sich ändern?</label>
+
+      <div class="axis">
+        <div>
+          <label for="paint">Farbe</label>
+          <select id="paint"></select>
+        </div>
+        <div>
+          <label for="paintTarget">… wovon?</label>
+          <input id="paintTarget" placeholder="z. B. die Jacke der Person">
+        </div>
+      </div>
+      <p class="hint" id="paintPreview"></p>
+
+      <div class="axis" style="margin-top:12px">
+        <div>
+          <label for="palette">Farbstimmung</label>
+          <select id="palette"></select>
+        </div>
+        <div>
+          <label for="vstyle">Stil</label>
+          <select id="vstyle"></select>
+        </div>
+      </div>
+
+      <div class="axis">
+        <div>
+          <label for="scene">Umgebung</label>
+          <select id="scene"></select>
+        </div>
+        <div>
+          <label for="vlight">Licht</label>
+          <select id="vlight"></select>
+        </div>
+      </div>
+      <div class="axis">
+        <div>
+          <label for="device">Kameraart</label>
+          <select id="device"></select>
+        </div>
+        <div>
+          <label for="angle">Blickwinkel</label>
+          <select id="angle"></select>
+        </div>
+      </div>
+      <div class="axis">
+        <div>
+          <label for="material">Werkstoff</label>
+          <select id="material"></select>
+        </div>
+        <div></div>
+      </div>
+
+      <p class="hint"><b>würfeln</b> ändert die Achse bei jedem Bild.
+        <b>unverändert lassen</b> rührt sie gar nicht an. Ein fester Wert gilt
+        für die ganze Serie. Deutsch ist überall in Ordnung.<br>
+        Beispiel: Stil fest auf <b>Comic</b>, alles andere auf <b>würfeln</b> —
+        dann bleibt der Zeichenstil, und Umgebung, Licht und Blickwinkel
+        wechseln. Die <b>Farbstimmung</b> färbt anders als die Farbe das ganze
+        Bild und braucht kein Ziel.</p>
+    </fieldset>
+
+    <fieldset id="boxVorlage">
+      <legend>Vorlage &amp; Effekt</legend>
+      <div class="row">
+        <div>
+          <label for="form">Vorlage</label>
+          <select id="form"></select>
+        </div>
+        <div>
+          <label for="effect">Effekt</label>
+          <select id="effect"></select>
+        </div>
+      </div>
+      <p class="hint" id="cmdHint"></p>
+    </fieldset>
+
+    <fieldset id="boxDarstellung">
+      <legend>Darstellung</legend>
+      <label for="view">Blickwinkel</label>
+      <select id="view"></select>
+
+      <div class="row3">
+        <div>
+          <label for="style">Stil</label>
+          <select id="style"></select>
+        </div>
+        <div>
+          <label for="light">Licht</label>
+          <select id="light"></select>
+        </div>
+        <div>
+          <label for="camera">Kamera</label>
+          <select id="camera"></select>
+        </div>
+      </div>
+
+      <label for="scenario">Inszenierung</label>
+      <select id="scenario"></select>
+      <p class="hint">Beschreibt das Aussehen &ndash; leuchtende Geister,
+        Tafelrunde, Detektive. Ausformuliert statt als Filmtitel, das trifft
+        das Modell zuverlässiger.</p>
+
+      <label for="sweep">Serie variieren</label>
+      <select id="sweep">
+        <option value="">nichts variieren &ndash; nur der Seed ändert sich</option>
+        <option value="varianten">Varianten: Farbe, Umgebung, Licht, Kamera, Winkel würfeln</option>
+        <option value="view">Umrundung: vorne, Seite, hinten, oben, unten</option>
+        <option value="camera">Kameraperspektiven der Reihe nach</option>
+        <option value="style">Stile der Reihe nach</option>
+        <option value="light">Lichtstimmungen der Reihe nach</option>
+        <option value="random">alles würfeln</option>
+      </select>
+
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label for="count">Anzahl Bilder</label>
+          <input type="number" id="count" value="1" min="1" max="20">
+        </div>
+        <div>
+          <label for="seed">Seed (&minus;1 = zufällig)</label>
+          <input type="number" id="seed" value="-1">
+        </div>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="lockSeed">
+        <label for="lockSeed">Seed für alle Bilder gleich halten</label>
+      </div>
+      <p class="hint" id="seedHint"></p>
+      <p class="hint">Eine Serie teilt sich das Laden des Modells &ndash; das erste Bild kostet
+        gut anderthalb Minuten, jedes weitere nur noch die reine Rechenzeit.</p>
+    </fieldset>
+
+    <fieldset id="boxBild">
+      <legend>Bild</legend>
+      <div class="row">
+        <div>
+          <label for="aspect">Seitenverhältnis</label>
+          <select id="aspect"></select>
+        </div>
+        <div>
+          <label for="base">Auflösung</label>
+          <select id="base">
+            <option value="1024">1024 (schnell)</option>
+            <option value="1536">1536</option>
+            <option value="2048">2048 (langsam)</option>
+          </select>
+        </div>
+      </div>
+      <div class="check" id="followBox" style="display:none">
+        <input type="checkbox" id="follow" checked>
+        <label for="follow">Größe vom Referenzbild übernehmen</label>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="transparent">
+        <label for="transparent">Transparenter Hintergrund (RGBA)</label>
+      </div>
+    </fieldset>
+
+    <fieldset id="boxFein">
+      <legend>Feineinstellung</legend>
+      <div class="row">
+        <div>
+          <label for="steps">Schritte</label>
+          <input type="number" id="steps" value="40" min="1" max="100">
+        </div>
+        <div>
+          <label for="cfg">CFG</label>
+          <input type="number" id="cfg" value="1" min="1" max="10" step="0.5">
+        </div>
+      </div>
+      <label for="negative">Negativer Prompt (wirkt erst ab CFG &gt; 1)</label>
+      <textarea id="negative" style="min-height:48px" placeholder="blurry, low quality"></textarea>
+    </fieldset>
+
+    <button id="go">Erzeugen</button>
+    <button id="stop" style="display:none">Abbrechen</button>
+    <div class="bar"><i id="fill"></i></div>
+    <div id="status">bereit</div>
+    <p class="hint" style="margin-top:14px">
+      <a href="#" id="beenden">Programm beenden</a> — hält den Server an und
+      gibt die Grafikkarte frei.</p>
+  </section>
+
+  <section class="panel">
+    <div class="stage" id="stage"><p>Noch kein Bild erzeugt.</p></div>
+    <div class="meta" id="meta"></div>
+
+    <div class="head" id="seriesHead" style="display:none">
+      <h2>Diese Serie</h2>
+      <a id="zip" href="#">Alle als ZIP herunterladen</a>
+    </div>
+    <div class="mosaic" id="series"></div>
+
+    <div class="head"><h2>Alle Bilder</h2><span class="hint">× löscht</span></div>
+    <div class="grid" id="gallery"></div>
+  </section>
+</main>
+
+<script src="/seite/app.js"></script>
+</body>
+</html>

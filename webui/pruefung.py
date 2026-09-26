@@ -25,9 +25,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def seite() -> tuple[str, str]:
-    with open(os.path.join(HERE, "index.html"), encoding="utf-8") as fh:
+    """Aufbau und Verhalten der Oberflaeche.
+
+    Beides liegt seit der Aufteilung in eigenen Dateien: `seite/index.html`
+    traegt die Elemente, `seite/app.js` das Skript. Geprueft wird weiter im
+    Zusammenhang -- gerade die Frage, ob jedes angesprochene Element auch
+    existiert, laesst sich nur ueber beide hinweg beantworten.
+    """
+    ordner = os.path.join(HERE, "seite")
+    with open(os.path.join(ordner, "index.html"), encoding="utf-8") as fh:
         text = fh.read()
-    return text, re.search(r"<script>(.*)</script>", text, re.S).group(1)
+    with open(os.path.join(ordner, "app.js"), encoding="utf-8") as fh:
+        skript = fh.read()
+    return text, skript
 
 
 def pruefe_elemente(text: str, skript: str) -> list[str]:

@@ -30,7 +30,7 @@ import torch
 from diffusers import QwenImage21Pipeline
 from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_dimensions
 
-from presets import (
+from kataloge import (
     ANGLES, AXIS_OFF, CAMERAS, DEVICES, EFFECTS, FORMS, GROUP_ACTIONS, LIGHTS,
     MATERIALS, PAINTS, PALETTEN, SCENARIOS, SCENES, STYLES, TEMPLATES,
     TRANSPARENT_TEMPLATE,
