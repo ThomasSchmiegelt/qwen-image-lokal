@@ -1338,6 +1338,7 @@ $("gsErzeugen").onclick = async e => {
     body: JSON.stringify({zeilen, stil: $("gsStil").value, welt: $("gsWelt").value,
                           kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
                           modell: $("gsModell").value,
+                          schluessel: GSAKTUELL, band: gsBandNr,
                           prosa: $("gsProsa").checked})
   }).catch(() => null);
   if (!res || !res.ok) {

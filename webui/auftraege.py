@@ -34,6 +34,7 @@ import ablauf  # noqa: E402
 import demo  # noqa: E402
 import projekte  # noqa: E402
 import bausteine  # noqa: E402
+import baender  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -542,6 +543,13 @@ def run_prompts(params: dict) -> None:
             for i, s in enumerate(szenen):
                 s["prosa"] = absaetze[i] if i < len(absaetze) else ""
         current["gliederung"] = szenen
+        # Sofort in die Geschichte schreiben, nicht erst wenn die Seite es
+        # nachholt: `current` wird vom naechsten Auftrag geleert, und eine
+        # Minute Arbeit des grossen Modells darf daran nicht haengen.
+        if params.get("schluessel"):
+            baender.speichern(_projekt_des_laufs, str(params["schluessel"]),
+                              {"band": int(params.get("band") or 1),
+                               "prompts": szenen})
         current["stage"] = ""
         geschrieben = sum(1 for s in szenen if s.get("prompt"))
         engine.note("idle", f"{geschrieben} von {len(zeilen)} Prompts geschrieben")

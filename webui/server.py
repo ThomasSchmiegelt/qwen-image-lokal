@@ -407,6 +407,8 @@ class Handler(BaseHTTPRequestHandler):
                 "welt": str(params.get("welt") or ""),
                 "kurz": str(params.get("kurz") or ""),
                 "fiktion": params.get("fiktion"),
+                "schluessel": str(params.get("schluessel") or "") or None,
+                "band": int(params.get("band") or 1),
                 "modell": str(params.get("modell") or "") or None,
                 "prosa": bool(params.get("prosa"))})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"],
