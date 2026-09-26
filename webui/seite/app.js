@@ -18,6 +18,8 @@ const MODES = {
            ph: "standing in a city street, wearing a dark coat",
            hint: () => "Ein Bild der Person. Die Serie fliegt einmal um sie herum."},
   demo: {label: "Ablauf starten", refs: 0, ph: "", hint: () => ""},
+  bausteine: {label: "Baustein-Bild erzeugen", refs: 0, ph: "", hint: () => ""},
+  szenen: {label: "Szene erzeugen", refs: 0, ph: "", hint: () => ""},
   varianten: {label: "Varianten erzeugen", refs: 1, sweep: "varianten", count: 12,
               follow: true, lock: false,
               ph: "(optional) zusätzliche Angaben, die für jede Variante gelten",
@@ -69,6 +71,10 @@ fetch("/api/info").then(r => r.json()).then(info => {
       + " übersetzt und stellt die Regler unten ein. Erzeugt wird erst auf deinen Klick.";
   }
   zeigeProjekte(info.projekte, info.projekt);
+  BSARTEN = info.bausteinarten || [];
+  $("bsArt").innerHTML = BSARTEN.map(
+    a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
+  zeigeBausteine(info.bausteine);
   fill("effect", EFFECTS); fill("form", FORMS);
   AXIS_OFF = info.axis_off || "-";
   // Alle Achsenfelder fuellt subjectChanged() aus info.subjects[].axes --
@@ -228,19 +234,26 @@ function setMode(next) {
 
   const tpl = templates[next];
   const istDemo = next === "demo";
+  const istBausteine = next === "bausteine";
+  const istSzenen = next === "szenen";
+  $("szenenBox").style.display = istSzenen ? "block" : "none";
+  // Beide Reiter haben eine eigene Bedienung und brauchen die ueblichen
+  // Kaesten nicht -- Prompt, Darstellung, Bildgroesse.
+  const eigen = istDemo || istBausteine || istSzenen;
   $("demoBox").style.display = istDemo ? "block" : "none";
+  $("bausteinBox").style.display = istBausteine ? "block" : "none";
   // Im Ablauf-Reiter ist das Prompt-Feld ausgeblendet -- dort waere das
   // Ableiten wirkungslos. Der Reiter hat dafuer seine eigene Zeile.
   document.querySelectorAll(".ableiten").forEach(
-    el => { el.style.display = istDemo ? "none" : "block"; });
+    el => { el.style.display = eigen ? "none" : "block"; });
   ["boxVorlage", "boxDarstellung", "boxBild", "boxFein", "uploadBox"].forEach(
-    id => { if (istDemo) $(id).style.display = "none"; });
+    id => { if (eigen) $(id).style.display = "none"; });
   $("prompt").parentElement.querySelectorAll("#prompt, #transNote, #tplHint")
-    .forEach(el => { el.style.display = istDemo ? "none" : ""; });
+    .forEach(el => { el.style.display = eigen ? "none" : ""; });
   document.querySelectorAll("label[for=prompt]").forEach(
-    el => el.style.display = istDemo ? "none" : "");
-  if (!istDemo) { $("boxVorlage").style.display = ""; $("boxDarstellung").style.display = "";
-                  $("boxBild").style.display = ""; $("boxFein").style.display = ""; }
+    el => el.style.display = eigen ? "none" : "");
+  if (!eigen) { $("boxVorlage").style.display = ""; $("boxDarstellung").style.display = "";
+                $("boxBild").style.display = ""; $("boxFein").style.display = ""; }
   demoDauer();
   const istVarianten = next === "varianten";
   $("gruppeBox").style.display = next === "gruppe" ? "block" : "none";
@@ -721,6 +734,264 @@ $("chat").addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
 });
 
+// ---------- Bausteine ----------
+// Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
+// steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
+let BAUSTEINE = [], BSARTEN = [];
+const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
+
+function luecken(text) {
+  return [...new Set([...(text || "").matchAll(LUECKE)].map(m => m[1]))];
+}
+
+function zeigeBausteine(liste) {
+  if (!Array.isArray(liste)) return;
+  BAUSTEINE = liste;
+  const label = k => (BSARTEN.find(a => a.key === k) || {}).label || k;
+  $("bausteinListe").innerHTML = liste.length
+    ? liste.map(b => `<div class="baustein">
+        ${b.bild ? `<img src="/outputs/${b.bild}" alt="${esc(b.name)}"
+             onclick="show('${b.bild}')">` : `<span class="ohnebild">?</span>`}
+        <div class="bstext"><b>${esc(b.name)}</b>
+          <span class="art">${esc(label(b.art))}</span><br>
+          <code>${esc(b.prompt)}</code></div>
+        <span class="knopf" onclick="bausteinLaden('${b.id}')" title="bearbeiten">✎</span>
+        <span class="knopf" onclick="bausteinWeg('${b.id}')" title="löschen">×</span>
+      </div>`).join("")
+    : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
+  zeigeWahl();
+}
+
+// Zu jeder Luecke ein Feld. `mehrzeilig` erlaubt eine Werteliste -- daraus
+// wird spaeter eine Serie mit einem Bild je Zeile.
+function luckenFelder(wohin, text, vorgaben, mehrzeilig) {
+  const namen = luecken(text);
+  $(wohin).innerHTML = namen.map(n => `
+    <label for="${wohin}-${n}">${esc(n)}</label>
+    ${mehrzeilig
+      ? `<textarea id="${wohin}-${n}" class="lueckenfeld" data-l="${n}"
+           style="min-height:40px">${esc((vorgaben || {})[n] || "")}</textarea>`
+      : `<input id="${wohin}-${n}" class="lueckenfeld" data-l="${n}"
+           value="${esc((vorgaben || {})[n] || "")}">`}`).join("");
+  return namen;
+}
+
+function lueckenWerte(wohin) {
+  const werte = {};
+  $(wohin).querySelectorAll(".lueckenfeld").forEach(
+    el => werte[el.dataset.l] = el.value);
+  return werte;
+}
+
+async function bausteinRuf(rumpf) {
+  const res = await fetch("/api/baustein", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(rumpf)
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    say(err.error || "Das hat nicht geklappt.", "err");
+    return null;
+  }
+  return res.json();
+}
+
+async function bausteineHolen() {
+  const info = await fetch("/api/info").then(r => r.json()).catch(() => null);
+  if (info) zeigeBausteine(info.bausteine);
+}
+
+$("bsErzeugen").onclick = async e => {
+  e.preventDefault();
+  const text = $("bsText").value.trim();
+  if (!text) return say("Erst auf Deutsch beschreiben.", "err");
+  say("Der Prompt wird geschrieben …");
+  const g = await bausteinRuf({tu: "prompt", text, art: $("bsArt").value});
+  if (!g) return;
+  $("bsPrompt").value = g.prompt;
+  luckenFelder("bsVariablen", g.prompt, g.variablen, false);
+  say(`Prompt erzeugt, ${luecken(g.prompt).length} Lücke(n). Bitte gegenlesen.`, "ok");
+};
+
+$("bsPrompt").addEventListener("input", () => {
+  luckenFelder("bsVariablen", $("bsPrompt").value, lueckenWerte("bsVariablen"), false);
+});
+
+function bausteinAusFeldern() {
+  return {id: $("bsPrompt").dataset.id || "", art: $("bsArt").value,
+          name: $("bsName").value, prompt: $("bsPrompt").value,
+          variablen: lueckenWerte("bsVariablen")};
+}
+
+$("bsSpeichern").onclick = async e => {
+  e.preventDefault();
+  if (!$("bsPrompt").value.trim()) return say("Kein Prompt.", "err");
+  const b = await bausteinRuf({tu: "speichern", baustein: bausteinAusFeldern()});
+  if (!b) return;
+  await bausteineHolen();
+  say(`„${b.name}“ gespeichert.`, "ok");
+  bausteinLeeren();
+};
+
+$("bsBild").onclick = async e => {
+  e.preventDefault();
+  if (!$("bsPrompt").value.trim()) return say("Kein Prompt.", "err");
+  const b = await bausteinRuf({tu: "speichern", baustein: bausteinAusFeldern()});
+  if (!b) return;
+  await bausteineHolen();
+  // Mit den Vorgaben gefuellt -- das Bild soll den Baustein zeigen, wie er
+  // gemeint ist, nicht mit offenen Luecken.
+  const g = await bausteinRuf({tu: "zusammensetzen", ids: [b.id], werte: b.variablen});
+  if (!g) return;
+  await einreihenEinfach({prompt: g.prompt, baustein: b.id, aspect: "3:4"});
+  say(`„${b.name}“ gespeichert, Bild dazu eingereiht.`, "ok");
+};
+
+$("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
+
+function bausteinLeeren() {
+  ["bsName", "bsText", "bsPrompt"].forEach(id => $(id).value = "");
+  $("bsPrompt").dataset.id = "";
+  $("bsVariablen").innerHTML = "";
+}
+
+function bausteinLaden(id) {
+  const b = BAUSTEINE.find(x => x.id === id);
+  if (!b) return;
+  $("bsArt").value = b.art;
+  $("bsName").value = b.name;
+  $("bsPrompt").value = b.prompt;
+  $("bsPrompt").dataset.id = b.id;
+  luckenFelder("bsVariablen", b.prompt, b.variablen, false);
+  say(`„${b.name}“ geladen. Ändern und speichern.`);
+}
+
+async function bausteinWeg(id) {
+  const b = BAUSTEINE.find(x => x.id === id);
+  if (!confirm(`„${b ? b.name : id}“ löschen?`)) return;
+  if (!await bausteinRuf({tu: "loeschen", id})) return;
+  await bausteineHolen();
+  say("Baustein gelöscht.", "ok");
+}
+
+// --- Zusammensetzen ---
+function zeigeWahl() {
+  $("bsWahl").innerHTML = BAUSTEINE.length
+    ? BAUSTEINE.map(b => `<label class="wahl"><input type="checkbox"
+        class="bswahl" value="${b.id}"> ${esc(b.name)}</label>`).join("")
+    : "";
+  $("bsWahl").querySelectorAll(".bswahl").forEach(
+    el => el.onchange = wahlGeaendert);
+  wahlGeaendert();
+}
+
+function gewaehlte() {
+  const ids = [...$("bsWahl").querySelectorAll(".bswahl:checked")].map(el => el.value);
+  return BAUSTEINE.filter(b => ids.includes(b.id));
+}
+
+function wahlGeaendert() {
+  const teile = gewaehlte();
+  const text = teile.map(b => b.prompt).join(" ");
+  const vorgaben = {};
+  teile.forEach(b => Object.assign(vorgaben, b.variablen || {}));
+  luckenFelder("bsFelder", text, {...vorgaben, ...lueckenWerte("bsFelder")}, true);
+  $("bsFelder").querySelectorAll(".lueckenfeld").forEach(
+    el => el.addEventListener("input", vorschau));
+  vorschau();
+}
+
+// Eine Luecke mit mehreren Zeilen ergibt eine Serie: ein Bild je Zeile.
+function serienWerte() {
+  const werte = lueckenWerte("bsFelder");
+  let laenge = 1;
+  Object.values(werte).forEach(v => {
+    const zeilen = String(v).split("\n").filter(z => z.trim());
+    if (zeilen.length > laenge) laenge = zeilen.length;
+  });
+  const reihe = [];
+  for (let i = 0; i < laenge; i++) {
+    const eins = {};
+    Object.entries(werte).forEach(([k, v]) => {
+      const zeilen = String(v).split("\n").filter(z => z.trim());
+      eins[k] = zeilen.length ? zeilen[Math.min(i, zeilen.length - 1)].trim() : "";
+    });
+    reihe.push(eins);
+  }
+  return reihe;
+}
+
+async function vorschau() {
+  const teile = gewaehlte();
+  if (!teile.length) { $("bsVorschau").value = ""; return; }
+  const reihe = serienWerte();
+  const g = await bausteinRuf({tu: "zusammensetzen",
+                               ids: teile.map(b => b.id), werte: reihe[0]});
+  if (!g) return;
+  // Den reinen Prompt getrennt aufheben -- ihn spaeter aus der Anzeige
+  // zurueckzuschneiden waere bruechig.
+  $("bsVorschau").dataset.prompt = g.prompt;
+  $("bsVorschau").value = reihe.length > 1
+    ? `${g.prompt}\n\n… und ${reihe.length - 1} weitere daraus`
+    : g.prompt;
+}
+
+$("bsUebernehmen").onclick = e => {
+  e.preventDefault();
+  const text = $("bsVorschau").dataset.prompt || "";
+  if (!text.trim()) return say("Erst Bausteine anhaken.", "err");
+  setMode("t2i");
+  $("prompt").value = text;
+  say("In den Prompt übernommen.", "ok");
+};
+
+$("bsSerie").onclick = async e => {
+  e.preventDefault();
+  const teile = gewaehlte();
+  if (!teile.length) return say("Erst Bausteine anhaken.", "err");
+  const ids = teile.map(b => b.id);
+  const reihe = serienWerte();
+  const prompts = [];
+  let vorlage = "";
+  for (const werte of reihe) {
+    const g = await bausteinRuf({tu: "zusammensetzen", ids, werte});
+    if (!g) return;
+    prompts.push(g.prompt);
+    vorlage = g.vorlage;
+  }
+  // Die Szene behaelt ihre Luecken und die zuletzt benutzten Werte -- so
+  // laesst sie sich spaeter wiederholen und weiter abwandeln.
+  const name = $("szName").value.trim();
+  let merken = null;
+  if (name) {
+    merken = await bausteinRuf({tu: "speichern", baustein: {
+      art: "szene", name, prompt: vorlage, variablen: reihe[0]}});
+    if (merken) await bausteineHolen();
+  }
+  await einreihenEinfach({
+    prompt: prompts[0], prompts, aspect: $("szFormat").value,
+    ...(merken ? {baustein: merken.id} : {})});
+  say(`${prompts.length} Bild(er) eingereiht`
+      + (merken ? `, als Szene „${name}“ gemerkt.` : "."), "ok");
+};
+
+// Einen schlichten Auftrag einreihen, ohne die Regler der anderen Reiter.
+async function einreihenEinfach(zusatz) {
+  const rumpf = {mode: "t2i", aspect: "3:2", base: parseInt($("base").value, 10) || 1024,
+                 steps: parseInt($("steps").value, 10) || 24, count: 1,
+                 seed: parseInt($("seed").value, 10) || 42, ...zusatz};
+  const res = await fetch("/api/generate", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(rumpf)
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Einreihen ging nicht.", "err");
+  }
+  buttonState("busy");
+  poll();
+}
+
 // ---------- Projekte ----------
 // Ein Projekt bestimmt, wohin neue Bilder gehen und welche die Galerie zeigt.
 // "Allgemein" ist das alte outputs/ -- die Bilder von frueher bleiben dort.
@@ -745,7 +1016,7 @@ async function projektTun(rumpf) {
     return null;
   }
   const info = await fetch("/api/info").then(r => r.json()).catch(() => null);
-  if (info) zeigeProjekte(info.projekte, info.projekt);
+  if (info) { zeigeProjekte(info.projekte, info.projekt); zeigeBausteine(info.bausteine); }
   loadGallery();
   return res.json();
 }
@@ -784,6 +1055,16 @@ $("projektWeg").onclick = async e => {
 // vorige fertig ist.
 let laufendeNummer = 0;
 
+// Versehentlich zugemacht: der Server laeuft weiter, die Arbeit geht also
+// nicht verloren -- nur zusehen kann man dann nicht mehr. Deshalb nachfragen,
+// solange etwas laeuft oder wartet.
+let laufendeArbeit = false, wartendeAnzahl = 0, beendetGewollt = false;
+window.addEventListener("beforeunload", e => {
+  if (beendetGewollt || (!laufendeArbeit && !wartendeAnzahl)) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+
 function poll() {
   clearInterval(polling);
   polling = setInterval(async () => {
@@ -801,6 +1082,8 @@ function poll() {
         (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
       paintSeries(s.results || [], s.count, s.image);
       zeigeWarteschlange(s);
+      laufendeArbeit = !!(s.busy && s.titel);
+      wartendeAnzahl = (s.wartend || []).length;
       // Wechselt der laufende Auftrag, ist der vorige fertig -- seine Bilder
       // sollen dann sofort in der Galerie stehen, nicht erst ganz am Ende.
       if (s.nummer && s.nummer !== laufendeNummer) {
@@ -998,13 +1281,24 @@ async function loeschen(datei) {
 
 // Haelt den Server an. Danach ist die Seite tot -- das muss sie auch sagen.
 async function programmBeenden() {
-  if (!confirm("Das Programm beenden? Ein laufender Auftrag wird abgebrochen.")) return;
+  const offen = (laufendeArbeit ? 1 : 0) + wartendeAnzahl;
+  const frage = offen
+    ? `Es ${offen === 1 ? "ist noch ein Auftrag" : `sind noch ${offen} Aufträge`} `
+      + "offen. Trotzdem beenden?"
+    : "Das Programm beenden?";
+  if (!confirm(frage)) return;
+  beendetGewollt = true;                 // die Warnung beim Schliessen aus
   await fetch("/api/shutdown", {method: "POST"}).catch(() => null);
+  // Den Reiter schliessen darf nur, wer ihn selbst geoeffnet hat. start.sh
+  // oeffnet ihn ueber den Browser, also schlaegt das meistens fehl -- dann
+  // bleibt die Abschiedsseite stehen.
   document.body.innerHTML = "<main><section class=\"panel\"><h1>Beendet</h1>"
     + "<p>Der Server ist angehalten, die Grafikkarte ist frei. "
-    + "Zum Weitermachen im Terminal wieder <code>./start.sh</code> starten.</p>"
-    + "</section></main>";
+    + "Dieser Reiter kann zu. Zum Weitermachen im Terminal wieder "
+    + "<code>./start.sh</code> starten.</p></section></main>";
+  window.close();
 }
+
 
 fetch("/api/status").then(r => r.json()).then(s => {
   if (s.busy) { buttonState("busy"); poll(); }

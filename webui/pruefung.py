@@ -17,6 +17,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -49,11 +51,32 @@ def pruefe_elemente(text: str, skript: str) -> list[str]:
     fehlend = sorted(set(re.findall(r'\$\("([^"]+)"\)', skript)) - set(kennungen))
     if fehlend:
         fehler.append(f"angesprochen, aber nicht vorhanden: {fehlend}")
-    for auf, zu in (("(", ")"), ("{", "}"), ("[", "]")):
-        if skript.count(auf) != skript.count(zu):
-            fehler.append(f"Klammern {auf}{zu} unausgeglichen: "
-                          f"{skript.count(auf)} zu {skript.count(zu)}")
+    fehler += pruefe_syntax()
     return fehler
+
+
+def pruefe_syntax() -> list[str]:
+    """Das Skript wirklich zerlegen lassen, wenn node zur Hand ist.
+
+    Klammern zu zaehlen war untauglich: eine Klammer in einer Zeichenkette
+    oder in einem regulaeren Ausdruck ist keine Klammer im Code, und beide
+    Richtungen haben schon falschen Alarm ausgeloest. `node --check` weiss es
+    genau. Ohne node bleibt das Zaehlen als grobe Rueckfallebene.
+    """
+    datei = os.path.join(HERE, "seite", "app.js")
+    if shutil.which("node"):
+        fertig = subprocess.run(["node", "--check", datei],
+                                capture_output=True, text=True)
+        if fertig.returncode:
+            erste = [z for z in fertig.stderr.splitlines() if z.strip()][:3]
+            return ["node meldet einen Syntaxfehler: " + " / ".join(erste)]
+        return []
+    with open(datei, encoding="utf-8") as fh:
+        code = _nur_code(fh.read())
+    return [f"Klammern {auf}{zu} unausgeglichen: "
+            f"{code.count(auf)} zu {code.count(zu)} (node fehlt, nur grob gezaehlt)"
+            for auf, zu in (("(", ")"), ("{", "}"), ("[", "]"))
+            if code.count(auf) != code.count(zu)]
 
 
 # Alles, was der Browser selbst mitbringt, plus die Schlüsselwörter, die vor
@@ -191,7 +214,7 @@ def main() -> int:
     felder = len(set(re.findall(r"\binfo\.(\w+)", skript))) if info else 0
     aufrufe = len(set(re.findall(r"(?<![.\w$])([a-zA-Z_$][\w$]*)\s*\(", _nur_code(skript))))
     print(f"in Ordnung: {geprueft} Elemente, {felder} Serverfelder, "
-          f"{aufrufe} Aufrufe, Klammern geschlossen")
+          f"{aufrufe} Aufrufe, Skript zerlegbar")
     return 0
 
 

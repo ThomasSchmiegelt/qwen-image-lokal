@@ -31,6 +31,7 @@ from auftraege import (  # noqa: E402
     verschieben,
 )
 import projekte  # noqa: E402
+import bausteine  # noqa: E402
 import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
@@ -175,6 +176,7 @@ class Handler(BaseHTTPRequestHandler):
             status["titel"] = current["titel"]
             status.update(uebersicht())
             status["projekt"] = projekte.aktiv()
+            status["bausteine"] = bausteine.liste(projekte.aktiv())
             # Solange noch etwas wartet, ist die Oberflaeche nicht fertig --
             # sonst hoerte sie nach dem ersten Auftrag auf nachzufragen.
             status["busy"] = status["busy"] or bool(status["wartend"])
@@ -195,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
                              if now.get(k) != SOURCE_AT_START.get(k))
             info["source"] = {"stale": bool(changed), "changed": changed}
             info["projekte"] = projekte.liste()
+            info["bausteine"] = bausteine.liste(projekte.aktiv())
+            info["bausteinarten"] = [{"key": k, "label": v}
+                                     for k, v in bausteine.ARTEN.items()]
             info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
@@ -272,6 +277,40 @@ class Handler(BaseHTTPRequestHandler):
             weg = verschieben(int(params.get("nummer") or 0),
                               -1 if params.get("richtung") == "hoch" else 1)
             return self._json(200 if weg else 404, {"ok": weg})
+
+        if path == "/api/baustein":
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            projekt = projekte.aktiv()
+            was = params.get("tu")
+
+            if was == "speichern":
+                return self._json(200, bausteine.speichern(projekt, params.get("baustein") or {}))
+            if was == "loeschen":
+                gut = bausteine.loeschen(projekt, str(params.get("id") or ""))
+                return self._json(200 if gut else 404, {"ok": gut})
+            if was == "prompt":
+                # Deutsche Beschreibung -> englischer Prompt mit Luecken.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                text = (params.get("text") or "").strip()
+                if not text:
+                    return self._json(400, {"error": "Keine Beschreibung"})
+                erg = chat.baustein_prompt(text, str(params.get("art") or "person"))
+                if not erg["prompt"]:
+                    return self._json(502, {"error":
+                        "Das Sprachmodell hat keinen Prompt geliefert."})
+                return self._json(200, erg)
+            if was == "zusammensetzen":
+                alle = {b["id"]: b for b in bausteine.liste(projekt)}
+                teile = [alle[k] for k in (params.get("ids") or []) if k in alle]
+                return self._json(200, {
+                    "prompt": bausteine.zusammensetzen(teile, params.get("werte") or {}),
+                    # Dieselbe Mischung mit offenen Luecken -- so wird sie als
+                    # Szene gespeichert und bleibt wiederverwendbar.
+                    "vorlage": bausteine.vorlage(teile)})
+            return self._json(400, {"error": "unbekannte Aktion"})
 
         if path == "/api/projekt":
             # Anlegen, wechseln, umbenennen, loeschen. Alles am eigenen

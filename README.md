@@ -109,6 +109,24 @@ Einreihen, zu welchem Projekt er gehört — wer zwischendurch umschaltet, finde
 seine Bilder trotzdem am richtigen Ort. Das Projekt **Allgemein** zeigt weiter
 auf das alte `outputs/`, dort liegende Bilder müssen nicht umziehen.
 
+**Bausteine.** Personen, Orte und Gegenstände lassen sich als Prompt mit
+Namen und Bild ablegen und immer wieder verwenden. Beschrieben wird auf
+Deutsch, das Sprachmodell schreibt daraus den englischen Prompt — und setzt
+alles, was sich ändern darf, als Lücke in geschweifte Klammern:
+
+```
+a woman in her thirties, slim, short dark hair, wearing {kleidung} and {schuhe}
+```
+
+Im Reiter **Zusammenstellen** hakt man Bausteine an, füllt die Lücken und
+erzeugt daraus ein Bild. Mehrere Zeilen in einem Lückenfeld ergeben eine ganze
+Serie — dieselbe Person in vier Jacken, alle in einem Ladevorgang. Das Ergebnis
+lässt sich als **Szene** merken: sie behält ihre Lücken, bekommt das erzeugte
+Bild und ist damit wiederholbar.
+
+Leere Lücken hinterlassen keine Bruchstücke: aus `a basket made of {material}`
+wird ohne Material `a basket`, nicht `a basket made of ,`.
+
 **Prompt aus einem Bild.** Der umgekehrte Weg: ein Bild wählen, das
 Sprachmodell beschreibt es als Prompt und stellt Stil, Licht und Objektiv
 gleich passend ein (gemessen 5–9 s). Im Ablauf-Reiter wird ein hochgeladenes
@@ -326,6 +344,7 @@ start.sh              Server starten, Browser öffnen
 webui/server.py       HTTP-Server, nur Routen und Start
 webui/auftraege.py    Warteschlange und Abwicklung eines Auftrags
 webui/projekte.py     getrennte Ablagen, Projektverzeichnisse
+webui/bausteine.py    Personen, Orte, Gegenstände und Szenen mit Lücken
 webui/engine.py       zweiphasige Pipeline
 webui/kataloge/       Voreinstellungen: anmutung.py (Stil, Licht, Kamera,
                       Farbe), motiv.py (Umgebung, Blickwinkel, Werkstoff),

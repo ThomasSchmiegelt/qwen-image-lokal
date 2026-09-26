@@ -26,6 +26,7 @@ STYLES = {
     "scifi": ("Science-Fiction", "hard science fiction look, brushed metal and composite surfaces, glowing accent edges, cool blue-white palette, believable engineering"),
     "kitsch": ("Kitschig", "unashamedly kitsch, candy colours, glitter and sparkles, rainbow gradients, hearts and stars, glossy greeting-card sheen"),
     "plastik": ("Plastik-Look", "made of glossy injection-moulded plastic like a collectible toy figure, smooth rounded edges, visible mould seams, saturated toy colours"),
+    "bleistift": ("Bleistift", "graphite pencil drawing on textured paper, visible hatching and cross-hatching, soft smudged shading, eraser highlights, no colour"),
     "schillernd": ("Schillernd", "iridescent holographic look, rainbow sheen sliding across every surface, oil-slick colour shift, prismatic highlights, mirror-bright foil and chrome, wet-looking reflective fabric"),
 }
 

@@ -48,6 +48,18 @@ def _schluessel(name: str) -> str:
     return roh or f"projekt-{int(time.time())}"
 
 
+def ordner(schluessel: str) -> str:
+    """Das Datenverzeichnis eines Projekts -- fuer alles ausser den Bildern.
+
+    Auch Allgemein bekommt hier eines, obwohl seine Bilder in `outputs/`
+    liegen: die Bausteine brauchen einen Platz, und `outputs/` soll nur
+    Bilder enthalten.
+    """
+    pfad = os.path.join(WURZEL, schluessel)
+    os.makedirs(pfad, exist_ok=True)
+    return pfad
+
+
 def bilder(schluessel: str) -> str:
     """Das Bildverzeichnis eines Projekts. Legt es bei Bedarf an."""
     pfad = ALT if schluessel == ALLGEMEIN else os.path.join(WURZEL, schluessel, "bilder")
@@ -72,7 +84,8 @@ def liste() -> list[dict]:
     if os.path.isdir(WURZEL):
         for name in sorted(os.listdir(WURZEL)):
             pfad = os.path.join(WURZEL, name)
-            if not os.path.isdir(pfad) or not SCHLUESSEL.fullmatch(name):
+            if (name == ALLGEMEIN or not os.path.isdir(pfad)
+                    or not SCHLUESSEL.fullmatch(name)):
                 continue
             eintraege.append({"key": name, "label": _lies_namen(name),
                               "bilder": _zaehle(os.path.join(pfad, "bilder"))})

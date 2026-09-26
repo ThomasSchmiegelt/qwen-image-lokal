@@ -7,6 +7,7 @@ jeden Wert nach. Ein 4B-Modell haelt sich nicht immer an Vorgaben.
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -14,7 +15,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from kataloge import CAMERAS, EFFECTS, FORMS, LIGHTS, STYLES, VIEWS, overrides  # noqa: E402
 
-from .ollama import MODEL, OLLAMA, THINK  # noqa: E402
+from .ollama import MODEL, OLLAMA, THINK, antwort  # noqa: E402
 
 ASPECTS = ["1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16"]
 RESOLUTIONS = [1024, 1536, 2048]
@@ -210,3 +211,89 @@ def sanitise(raw: dict, has_images: int) -> dict:
 
 def interpret(text: str, has_images: int = 0, model: str | None = None) -> dict:
     return sanitise(ask(text, has_images, model), has_images)
+
+
+# --- Bausteine -----------------------------------------------------------
+BAUSTEIN_SYSTEM = {
+    "person": """Du schreibst den Bildprompt für eine Person, die immer wieder
+verwendet werden soll.
+
+Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
+
+"prompt"     Die Beschreibung auf ENGLISCH, ein Satz. Unveränderliches gehört
+             in den Text: ungefähres Alter, Statur, Gesicht, Haarfarbe und
+             Frisur. Alles, was sich von Bild zu Bild ändern darf -- vor allem
+             Kleidung und Schuhe -- setzt du als Lücke in geschweifte Klammern,
+             zum Beispiel {kleidung} oder {schuhe}. Höchstens vier Lücken,
+             Namen klein und ohne Umlaute.
+"variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
+             als einzelner Text, nicht als Liste. Fällt dir zu einer
+             Lücke keine Vorgabe ein, mach dort keine Lücke.
+
+Beispiel: {"prompt": "a woman in her thirties, slim, high cheekbones, short
+dark hair, wearing {kleidung} and {schuhe}", "variablen": {"kleidung": "a red
+wool coat", "schuhe": "brown leather boots"}}""",
+
+    "ort": """Du schreibst den Bildprompt für einen Ort, der immer wieder
+verwendet werden soll.
+
+Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
+
+"prompt"     Die Beschreibung auf ENGLISCH, ein Satz, beginnend mit einer
+             Ortsangabe wie "in", "on" oder "at". Was den Ort ausmacht, gehört
+             in den Text. Wechselndes wie Tageszeit oder Wetter setzt du als
+             Lücke in geschweifte Klammern, etwa {tageszeit} oder {wetter}.
+             Höchstens drei Lücken, Namen klein und ohne Umlaute.
+"variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
+             als einzelner Text, nicht als Liste. Fällt dir zu einer
+             Lücke keine Vorgabe ein, mach dort keine Lücke.""",
+
+    "gegenstand": """Du schreibst den Bildprompt für einen Gegenstand, der
+immer wieder verwendet werden soll.
+
+Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
+
+"prompt"     Die Beschreibung auf ENGLISCH, ein Satz. Form, Material und
+             Merkmale gehören in den Text. Wechselndes wie Farbe oder Zustand
+             setzt du als Lücke in geschweifte Klammern, etwa {farbe}.
+             Höchstens drei Lücken, Namen klein und ohne Umlaute.
+"variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
+             als einzelner Text, nicht als Liste. Fällt dir zu einer
+             Lücke keine Vorgabe ein, mach dort keine Lücke.""",
+}
+
+
+def baustein_prompt(text: str, art: str = "person",
+                    model: str | None = None) -> dict:
+    """Aus einer deutschen Beschreibung einen Baustein-Prompt mit Luecken.
+
+    Die Luecken sind der eigentliche Zweck: dieselbe Person soll spaeter vier
+    Jacken durchprobieren koennen, ohne dass man den Prompt neu schreibt. Was
+    zurueckkommt, wird nicht blind geglaubt -- die Luecken im Text sind
+    massgeblich, nicht die Liste des Modells.
+    """
+    system = BAUSTEIN_SYSTEM.get(art) or BAUSTEIN_SYSTEM["person"]
+    roh = antwort({
+        "model": model or MODEL,
+        "format": "json",
+        "options": {"temperature": 0.2, "num_predict": 400},
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": text}],
+    })
+    if not isinstance(roh, dict):
+        return {"prompt": "", "variablen": {}}
+    prompt = str(roh.get("prompt") or "").strip()[:600]
+    gegeben = roh.get("variablen") if isinstance(roh.get("variablen"), dict) else {}
+    # Nur Luecken, die wirklich im Text stehen.
+    offen = re.findall(r"\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}", prompt)
+
+    def vorgabe(wert):
+        # Mal kommt eine Liste von Moeglichkeiten statt einer Vorgabe zurueck.
+        # Dann ist die erste gemeint; stumpf in Text verwandelt staende sonst
+        # "['morning', 'afternoon']" im Prompt.
+        if isinstance(wert, list):
+            wert = wert[0] if wert else ""
+        return str(wert or "").strip()[:120]
+
+    return {"prompt": prompt,
+            "variablen": {k: vorgabe(gegeben.get(k)) for k in dict.fromkeys(offen)}}

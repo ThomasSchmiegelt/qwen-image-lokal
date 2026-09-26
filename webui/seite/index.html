@@ -46,7 +46,78 @@
       <button id="tab-person">Perspektiven</button>
       <button id="tab-varianten">Varianten</button>
       <button id="tab-demo">Ablauf</button>
+      <button id="tab-bausteine">Bausteine</button>
+      <button id="tab-szenen">Zusammenstellen</button>
     </div>
+
+    <fieldset id="bausteinBox" style="display:none">
+      <legend>Bausteine</legend>
+      <p class="hint">Personen, Orte und Gegenstände zum Wiederverwenden.
+        Was sich ändern darf, steht in geschweiften Klammern —
+        <code>{kleidung}</code> — und wird beim Benutzen gefüllt.</p>
+
+      <div id="bausteinListe"></div>
+
+      <div class="head" style="margin-top:14px">
+        <h2>Neu anlegen</h2>
+      </div>
+      <div class="axis">
+        <div>
+          <label for="bsArt">Art</label>
+          <select id="bsArt"></select>
+        </div>
+        <div>
+          <label for="bsName">Name</label>
+          <input id="bsName" placeholder="z. B. Anna">
+        </div>
+      </div>
+      <label for="bsText">Beschreibung auf Deutsch</label>
+      <textarea id="bsText" style="min-height:52px"
+        placeholder="eine Frau Mitte dreißig, schlank, kurze dunkle Haare"></textarea>
+      <p class="hint"><a href="#" id="bsErzeugen">Prompt daraus erzeugen</a>
+        — das Sprachmodell schreibt ihn auf Englisch und schlägt die Lücken vor.</p>
+
+      <label for="bsPrompt">Prompt (änderbar)</label>
+      <textarea id="bsPrompt" style="min-height:52px"
+        placeholder="a woman in her thirties, wearing {kleidung}"></textarea>
+      <div id="bsVariablen"></div>
+      <p class="hint">
+        <a href="#" id="bsSpeichern">Speichern</a> ·
+        <a href="#" id="bsBild">Speichern und Bild dazu erzeugen</a> ·
+        <a href="#" id="bsLeeren">Felder leeren</a></p>
+
+    </fieldset>
+
+    <fieldset id="szenenBox" style="display:none">
+      <legend>Zusammenstellen</legend>
+      <p class="hint">Bausteine anhaken, Lücken füllen, daraus ein Bild oder
+        eine ganze Serie. Mehrere Zeilen in einem Lückenfeld ergeben ein Bild
+        je Zeile — dieselbe Person in vier Jacken.</p>
+      <div id="bsWahl"></div>
+      <div id="bsFelder"></div>
+      <label for="bsVorschau">Ergibt</label>
+      <textarea id="bsVorschau" style="min-height:52px" readonly></textarea>
+
+      <div class="axis" style="margin-top:10px">
+        <div>
+          <label for="szName">Als Szene merken unter</label>
+          <input id="szName" placeholder="leer lassen: nicht merken">
+        </div>
+        <div>
+          <label for="szFormat">Format</label>
+          <select id="szFormat">
+            <option value="3:4">3:4 hochkant</option>
+            <option value="3:2">3:2 quer</option>
+            <option value="1:1">1:1 quadratisch</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint">Eine gemerkte Szene behält ihre Lücken und bekommt das
+        erste erzeugte Bild — damit lässt sie sich später wiederholen.</p>
+      <p class="hint">
+        <a href="#" id="bsSerie">Erzeugen</a> ·
+        <a href="#" id="bsUebernehmen">nur in den Prompt übernehmen</a></p>
+    </fieldset>
 
     <div id="uploadBox" style="display:none">
       <label for="file">Referenzbilder <span id="refCount"></span></label>
@@ -318,9 +389,10 @@
     <div class="bar"><i id="fill"></i></div>
     <div id="status">bereit</div>
     <div id="warteschlange"></div>
-    <p class="hint" style="margin-top:14px">
-      <a href="#" id="beenden">Programm beenden</a> — hält den Server an und
-      gibt die Grafikkarte frei.</p>
+    <button id="beenden">Beenden</button>
+    <p class="hint">Hält den Server an, gibt die Grafikkarte frei und schließt
+      den Reiter. Nur dieser Knopf beendet das Programm — den Reiter einfach
+      zuzumachen lässt den Server weiterlaufen, damit nichts verlorengeht.</p>
   </section>
 
   <section class="panel">

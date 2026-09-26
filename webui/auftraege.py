@@ -32,6 +32,7 @@ import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
 import projekte  # noqa: E402
+import bausteine  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -149,6 +150,11 @@ def _abarbeiten(auftrag: dict) -> None:
                        nummer=auftrag["nummer"], titel=auftrag["titel"])
         (run_demo if auftrag["art"] == "demo" else run_job)(auftrag["params"])
     finally:
+        # Gehoerte der Auftrag zu einem Baustein, bekommt der jetzt sein Bild.
+        kennung = (auftrag.get("params") or {}).get("baustein")
+        if kennung and current["files"]:
+            bausteine.bild_setzen(auftrag.get("projekt") or projekte.ALLGEMEIN,
+                                  str(kennung), current["files"][0])
         auftrag["bilder"] = len(current["files"])
         auftrag["fehler"] = current["error"]
         auftrag["zustand"] = ("fehler" if current["error"]
@@ -294,7 +300,11 @@ def run_job(params: dict) -> None:
                 with open(manifest, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-        engine.run_series(**_series_kwargs(params, refs, kind, on_image))
+        # `prompts` kommt von einer Serie ueber eine Variable: dieselbe Person
+        # in vier Jacken. Alle teilen sich einen Ladevorgang.
+        fertige = [p for p in (params.get("prompts") or []) if str(p).strip()]
+        engine.run_series(**_series_kwargs(params, refs, kind, on_image),
+                          **({"prompts": fertige} if fertige else {}))
         done = len(current["files"])
         engine.note("idle", f"fertig: {done} Bild(er)" if done else "abgebrochen")
     except Exception:
