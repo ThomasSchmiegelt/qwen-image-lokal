@@ -122,8 +122,19 @@ def build_prompt(text: str, view=None, style=None, light=None, camera=None,
         # das ganze Bild.
         fragment(PALETTEN, palette),
         # Haltung und Kleidung frueh: sie bestimmen die Figur, nicht nur die
-        # Anmutung.
-        fragment(HALTUNGEN, haltung),
+        # Anmutung. Bei der Haltung kommt ein Gegensatz dazu: die
+        # Variantenvorlage verlangt "do not move it", und das schlaegt eine
+        # blosse Haltungsangabe. Gemessen an vier Bildern blieb die Person
+        # dabei praktisch unveraendert stehen. Deshalb hier ausdruecklich,
+        # dass gerade die Haltung sich aendern soll.
+        # Der Anatomiehinweis haengt an der Haltung, nicht am ganzen Prompt:
+        # falsche Gliedmassen entstehen dort, wo sich der Koerper neu ordnet.
+        # Beobachtet an einem Bild mit drei Fuessen.
+        (f"the pose changes to this: {HALTUNGEN[haltung][1]} -- only the face, "
+         "the identity and the clothing stay as in the reference. "
+         "Correct anatomy: exactly two arms, two hands with five fingers each, "
+         "two legs and two feet, joints bending the way they can"
+         if haltung in HALTUNGEN else None),
         fragment(BEKLEIDUNGEN, kleidung),
         fragment(SCENES, scene),
         fragment(ANGLES, angle),

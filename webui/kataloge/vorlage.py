@@ -30,9 +30,12 @@ TRANSPARENT_TEMPLATE = (
 # Merkmale. Ein Diffusionsmodell ueberschreibt sonst gern mit.
 VARIANT_TEMPLATE = (
     "A photograph of the same subject as in the reference image. "
-    "{keep} must remain exactly identical to the reference: same model, same shape, "
-    "same size, same colour, same finish, same mounting position and the same "
-    "proportions relative to the vehicle. Do not redesign it, do not move it, "
+    # "relative to the vehicle" stand hier fest, obwohl die Vorlage seit
+    # laengerem auch fuer Gegenstaende und Personen gilt -- bei einer Person
+    # war das schlicht Unsinn.
+    "{keep} must remain exactly identical to the reference: same shape, "
+    "same size, same colour, same finish, the same position in the frame and "
+    "the same proportions. Do not redesign it, do not move it, "
     "do not change its colour. Everything else in the picture may differ. {extra}"
 )
 
