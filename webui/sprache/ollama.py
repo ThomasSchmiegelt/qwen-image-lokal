@@ -16,6 +16,19 @@ MODEL = os.environ.get("QWEN_CHAT_MODEL", "qwen3.5:4b")
 THINK = re.compile(r"<think>.*?</think>", re.S)
 
 
+# Das grosse Modell fuer die schoepferische Arbeit. Es wiegt 16,5 GB und
+# braucht entsprechend lange zum Laden -- fuer eine Reihe von Aufrufen bleibt
+# es deshalb geladen und wird erst am Ende freigegeben.
+GROSS = os.environ.get("QWEN_CHAT_GROSS", "qwen3.8:27b-mtp-q4_K_M")
+
+
+def entladen(model: str | None = None) -> None:
+    """Gibt ein gehaltenes Modell frei. Danach hat das Bildmodell wieder Platz."""
+    antwort({"model": model or GROSS, "keep_alive": 0,
+             "messages": [{"role": "user", "content": "."}],
+             "options": {"num_predict": 1}}, timeout=60)
+
+
 def antwort(body: dict, timeout: int = 180) -> dict | str | None:
     """Schickt eine fertige Anfrage an Ollama und gibt die Antwort zurueck.
 

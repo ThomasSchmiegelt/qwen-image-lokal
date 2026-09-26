@@ -51,7 +51,7 @@ def ziel() -> str:
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
 current = {"files": [], "error": None, "translated": {}, "stage": "",
-           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": []}
+           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": [], "gliederung": []}
 
 # Die Warteschlange. Wartende Auftraege halten ihre Referenzbilder als
 # Datenzeilen im Speicher -- bei einer Handvoll sind das ein paar Megabyte,
@@ -66,6 +66,8 @@ VERLAUF_LAENGE = 20
 
 def _titel(art: str, params: dict) -> str:
     """Eine Zeile, an der man den Auftrag in der Liste wiedererkennt."""
+    if art == "prompts":
+        return f"Prompts schreiben, {len(params.get('zeilen') or [])} Szenen"
     if art == "demo":
         if params.get("bloecke"):
             return f"Ablauf, {len(params['bloecke'])} Bloecke"
@@ -205,10 +207,11 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
         titel = (auftrag["titel"] if len(alle) == 1
                  else f"{len(alle)} Auftraege zusammen")
         current.update(files=[], error=None, translated={}, video=None,
-                       gelesen={}, tor=[], stage="wird vorbereitet",
+                       gelesen={}, tor=[], gliederung=[], stage="wird vorbereitet",
                        nummer=auftrag["nummer"], titel=titel)
         if len(alle) == 1:
-            (run_demo if auftrag["art"] == "demo" else run_job)(auftrag["params"])
+            laeufe = {"demo": run_demo, "prompts": run_prompts}
+            laeufe.get(auftrag["art"], run_job)(auftrag["params"])
         else:
             # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
             # an run_series, genau wie bei einem Ablauf.
@@ -483,6 +486,40 @@ def run_job(params: dict) -> None:
         current["error"] = err.strip().splitlines()[-1]
         engine.note("error", current["error"])
     # Die Sperre haelt und loest der Arbeiter -- siehe _abarbeiten().
+
+
+def run_prompts(params: dict) -> None:
+    """Aus der Gliederung die Bildprompts schreiben, der Reihe nach.
+
+    Laeuft als Auftrag und nicht als Direktaufruf, weil das grosse Modell die
+    Grafikkarte belegt: nur so wartet ein Bildauftrag daneben, statt sich mit
+    ihm um den Speicher zu streiten. Der Fortschritt landet in `stage`, damit
+    die Seite ihn zeigen kann -- bei 16,5 GB und mehreren Szenen dauert es.
+    """
+    try:
+        zeilen = [z.get("text") or "" for z in (params.get("zeilen") or [])]
+        current["stage"] = "Grosses Sprachmodell wird geladen"
+
+        def fortschritt(nr, gesamt):
+            current["stage"] = f"Prompt {nr} von {gesamt}"
+
+        szenen = chat.gliederung(zeilen, stil=params.get("stil") or "",
+                                 model=params.get("modell") or None,
+                                 fortschritt=fortschritt)
+        if params.get("prosa"):
+            current["stage"] = "Text wird geschrieben"
+            absaetze = chat.prosa(szenen, model=params.get("modell") or None)
+            for i, s in enumerate(szenen):
+                s["prosa"] = absaetze[i] if i < len(absaetze) else ""
+        current["gliederung"] = szenen
+        current["stage"] = ""
+        geschrieben = sum(1 for s in szenen if s.get("prompt"))
+        engine.note("idle", f"{geschrieben} von {len(zeilen)} Prompts geschrieben")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        engine.note("error", current["error"])
 
 
 class Abgebrochen(Exception):

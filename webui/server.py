@@ -197,6 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             status["video"] = current["video"]
             status["gelesen"] = dict(current["gelesen"])
             status["tor"] = list(current["tor"])
+            status["gliederung"] = list(current["gliederung"])
             status["nummer"] = current["nummer"]
             status["titel"] = current["titel"]
             status.update(uebersicht())
@@ -226,6 +227,7 @@ class Handler(BaseHTTPRequestHandler):
             info["bausteinarten"] = [{"key": k, "label": v}
                                      for k, v in bausteine.ARTEN.items()]
             info["mimik"] = [{"key": k, "label": v[0]} for k, v in MIMIK.items()]
+            info["gross"] = chat.GROSS
             info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
@@ -326,6 +328,56 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(500, {"error": f"ffmpeg scheiterte: {exc}"})
             return self._json(200, {"ok": True, "video": os.path.basename(ziel),
                                     "bilder": len(pfade), "dauer": dauer})
+
+        if path == "/api/gliederung":
+            # Das Inhaltsverzeichnis: je Zeile eine Szene, /Name verweist auf
+            # einen Baustein. Eingereiht statt sofort ausgefuehrt, weil das
+            # grosse Modell die Grafikkarte belegt.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            projekt = projekte.aktiv()
+            alle = bausteine.liste(projekt)
+            roh = params.get("zeilen") or []
+            zeilen = []
+            for z in roh:
+                text, teile = geschichte.verweise(str(z.get("text") or ""), alle)
+                if text:
+                    zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
+                                   "teile": teile})
+            if not zeilen:
+                return self._json(400, {"error": "Keine Szene im Inhaltsverzeichnis"})
+            auftrag = einreihen("prompts", {
+                "zeilen": zeilen, "stil": str(params.get("stil") or ""),
+                "modell": str(params.get("modell") or "") or None,
+                "prosa": bool(params.get("prosa"))})
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"],
+                                    "zeilen": [{"text": z["text"], "ort": z["ort"],
+                                                "teile": [t["name"] for t in z["teile"]]}
+                                               for z in zeilen]})
+
+        if path == "/api/szenen":
+            # Aus Gliederung plus geschriebenen Prompts die Ablaufbloecke.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            projekt = projekte.aktiv()
+            alle = {b["id"]: b for b in bausteine.liste(projekt)}
+            zeilen = []
+            for z in (params.get("zeilen") or []):
+                teile = [alle[k] for k in (z.get("ids") or []) if k in alle]
+                zeilen.append({"text": z.get("text") or "", "ort": z.get("ort") or "",
+                               "teile": teile})
+            stil = str(params.get("stil") or "")
+            szenen = geschichte.gliederung_zu_szenen(
+                zeilen, params.get("prompts") or [], list(alle.values()), stil)
+            benutzt = [alle[k] for k in {s["person"] for s in szenen} | \
+                       {s["ort"] for s in szenen} | {s["gegenstand"] for s in szenen}
+                       if k in alle]
+            return self._json(200, {
+                "szenen": szenen,
+                "bloecke": geschichte.zu_bloecken(szenen, benutzt),
+                "startbild": geschichte.startbild(szenen, benutzt)})
 
         if path == "/api/geschichte":
             # Handlung -> Szenen -> Bloecke, wie der Ablauf-Reiter sie kennt.

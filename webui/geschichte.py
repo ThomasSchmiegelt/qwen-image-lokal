@@ -139,3 +139,65 @@ def startbild(szenen: list[dict], teile: list[dict]) -> str:
         if b["id"] == beste:
             return b.get("bild") or ""
     return ""
+
+
+
+# --- Gliederung ----------------------------------------------------------
+# Der zweite Weg zur Geschichte: das Inhaltsverzeichnis steht zuerst. Je Zeile
+# eine Szene, mit /Name auf einen Baustein verweisend, der Ort daneben, der
+# Stil fuer die ganze Folge. Erst danach schreibt das Sprachmodell die
+# Prompts -- es hat dann nur noch eine Aufgabe statt drei.
+
+VERWEIS = re.compile(r"/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})")
+
+
+def verweise(zeile: str, teile: list[dict]) -> tuple[str, list[dict]]:
+    """Loest /Name gegen die Bausteine auf.
+
+    Zurueck kommt die Zeile ohne die Schraegstriche -- damit sie sich lesen
+    laesst -- und die gefundenen Bausteine. Ein Name, den es nicht gibt,
+    bleibt als Wort stehen; stillschweigend verschlucken waere schlimmer als
+    ihn im Text zu lassen.
+    """
+    nach_name = {(b.get("name") or "").lower(): b for b in teile}
+    gefunden, gesehen = [], set()
+
+    def ersatz(treffer):
+        b = nach_name.get(treffer.group(1).lower())
+        if not b:
+            return treffer.group(0)
+        if b["id"] not in gesehen:
+            gesehen.add(b["id"])
+            gefunden.append(b)
+        return b.get("name") or treffer.group(1)
+
+    return VERWEIS.sub(ersatz, zeile or "").strip(), gefunden
+
+
+def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
+                         teile: list[dict], stil: str) -> list[dict]:
+    """Die Gliederung und die geschriebenen Prompts zu Szenen zusammenfuehren.
+
+    Die Zuordnung Person/Ort/Gegenstand kommt aus der Gliederung, nicht vom
+    Sprachmodell -- der Benutzer hat sie ja selbst festgelegt.
+    """
+    nach_nr = {p.get("nr"): p for p in prompts}
+    szenen = []
+    for i, zeile in enumerate(zeilen, 1):
+        p = nach_nr.get(i) or {}
+        text = p.get("prompt") or ""
+        if not text:
+            continue
+        benutzt = {b["id"]: b for b in (zeile.get("teile") or [])}
+        def erster(art):
+            return next((k for k, b in benutzt.items() if b.get("art") == art), "")
+        szenen.append({
+            "titel": (zeile.get("text") or "")[:60] or f"Bild {i}",
+            "person": erster("person"),
+            "ort": zeile.get("ort") or erster("ort"),
+            "gegenstand": erster("gegenstand"),
+            "handlung": text,
+            "mimik": p.get("mimik") or "",
+            "stil": stil,
+        })
+    return szenen

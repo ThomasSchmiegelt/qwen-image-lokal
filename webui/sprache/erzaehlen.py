@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from kataloge import MIMIK, STYLES  # noqa: E402
 
-from .ollama import MODEL, antwort  # noqa: E402
+from .ollama import GROSS, MODEL, antwort, entladen  # noqa: E402
 
 MAX_SZENEN = 24
 
@@ -104,3 +104,109 @@ def geschichte(text: str, teile: list[dict], anzahl: int = 8,
         hinweis = (f"{len(szenen)} Szenen statt {anzahl} — das Sprachmodell hält "
                    "sich nicht immer an die Zahl. Im Ablauf nachbessern.")
     return {"szenen": szenen, "hinweis": hinweis}
+
+
+
+# --- Inhaltsverzeichnis -> Prompts ---------------------------------------
+# Der andere Weg: nicht ein Fliesstext, den das Modell zerschneidet, sondern
+# eine Gliederung, die der Benutzer selbst geschrieben hat. Je Zeile eine
+# Szene, der Ort steht daneben, der Stil gilt fuer die ganze Folge. Das Modell
+# hat dann nur noch eine Aufgabe -- aus einer deutschen Zeile ein englisches
+# Bild machen -- und die kann es gut.
+
+GLIEDERUNG_SYSTEM = """Du schreibst Bildprompts für eine Bilderfolge.
+
+Du bekommst Szene für Szene eine deutsche Zeile und antwortest jedes Mal mit
+JSON und genau diesen Schlüsseln:
+
+"prompt"  Was in diesem Bild zu sehen ist, auf ENGLISCH, ein bis zwei Sätze.
+          Beschreibe einen Augenblick, keine Abfolge -- kein "then", kein
+          "after". Keine Eigennamen: wer gemeint ist, steht schon in der
+          Figurenbeschreibung, die separat davorgesetzt wird. Beschreibe
+          Haltung, Handlung, Blickrichtung und was im Bild zu sehen ist.
+          Nenne den Ort nur, wenn er in der Zeile steht -- sonst wird er
+          separat ergänzt.
+"mimik"   Ein Schlüssel aus der Liste, oder "".
+
+Mimik: {mimik}
+
+Die Folge hängt zusammen: du siehst, was du für die vorigen Bilder
+geschrieben hast. Halte Kleidung, Tageszeit und Stimmung stimmig, es sei
+denn, die Zeile verlangt einen Bruch."""
+
+
+def gliederung(zeilen: list[str], stil: str = "", model: str | None = None,
+               fortschritt=None) -> list[dict]:
+    """Aus den Zeilen einer Gliederung die Bildprompts, der Reihe nach.
+
+    Je Zeile ein Aufruf, damit das Modell die vorigen Bilder kennt. Das
+    Modell bleibt dabei geladen (`keep_alive`) -- sonst kostete jede Szene
+    erneut das Laden von 16,5 GB. Freigegeben wird am Schluss.
+    """
+    name = model or GROSS
+    system = GLIEDERUNG_SYSTEM.format(mimik=", ".join(MIMIK))
+    if stil in STYLES:
+        system += f"\n\nDie ganze Folge ist im Stil: {STYLES[stil][1]}"
+
+    verlauf, szenen = [], []
+    try:
+        for nr, zeile in enumerate(zeilen, 1):
+            text = (zeile or "").strip()
+            if not text:
+                continue
+            if fortschritt:
+                fortschritt(nr, len(zeilen))
+            roh = antwort({
+                "model": name,
+                "format": "json",
+                "keep_alive": "10m",          # zwischen den Szenen geladen lassen
+                "options": {"temperature": 0.7, "num_predict": 500},
+                "messages": [{"role": "system", "content": system},
+                             *verlauf,
+                             {"role": "user",
+                              "content": f"Szene {nr} von {len(zeilen)}: {text}"}],
+            }, timeout=600)
+            if not isinstance(roh, dict) or not str(roh.get("prompt") or "").strip():
+                szenen.append({"nr": nr, "zeile": text, "prompt": "", "mimik": ""})
+                continue
+            prompt = str(roh["prompt"]).strip()[:400]
+            mimik = str(roh.get("mimik") or "").strip()
+            szenen.append({"nr": nr, "zeile": text, "prompt": prompt,
+                           "mimik": mimik if mimik in MIMIK else ""})
+            verlauf += [{"role": "user", "content": f"Szene {nr}: {text}"},
+                        {"role": "assistant", "content": prompt}]
+            del verlauf[:-12]
+    finally:
+        entladen(name)                        # die Karte braucht gleich das Bildmodell
+    return szenen
+
+
+PROSA_SYSTEM = """Du schreibst den Text zu einer Bilderfolge.
+
+Du bekommst die Szenen als Liste. Antworte mit JSON:
+{"absaetze": ["…", "…"]} -- genau ein deutscher Absatz je Szene, zwei bis
+vier Sätze, erzählend und in der Reihenfolge der Szenen. Kein Vorspann, keine
+Überschriften, keine Nummern."""
+
+
+def prosa(szenen: list[dict], model: str | None = None) -> list[str]:
+    """Zu jeder Szene ein Absatz Prosa -- aus der Gliederung, nicht erfunden."""
+    if not szenen:
+        return []
+    name = model or GROSS
+    liste = "\n".join(f"{s.get('nr', i + 1)}. {s.get('zeile') or s.get('prompt')}"
+                       for i, s in enumerate(szenen))
+    try:
+        roh = antwort({
+            "model": name,
+            "format": "json",
+            "keep_alive": "10m",
+            "options": {"temperature": 0.8, "num_predict": 1600},
+            "messages": [{"role": "system", "content": PROSA_SYSTEM},
+                         {"role": "user", "content": liste}],
+        }, timeout=600)
+    finally:
+        entladen(name)
+    if not isinstance(roh, dict) or not isinstance(roh.get("absaetze"), list):
+        return []
+    return [str(a or "").strip()[:900] for a in roh["absaetze"]][:len(szenen)]
