@@ -6,15 +6,29 @@ die nebenbei die Regler umstellen.
 """
 
 # Anweisungen, die je nach Modus vor den Benutzertext gesetzt werden.
+# Was Diffusionsmodellen an Menschen regelmaessig misslingt. Beobachtet an
+# verschmolzenen Hosenbeinen, einem dritten Schuh und verschmierten
+# Zahnreihen. Ein knapper Hinweis hilft spuerbar und kostet nur ein paar
+# Wortmarken -- er gehoert ueberall dorthin, wo ein Koerper neu gezeichnet
+# wird, nicht nur an die Haltungsachse.
+ANATOMIE = (
+    "Correct human anatomy: exactly two arms, two hands with five fingers "
+    "each, two legs and two feet, nothing doubled, nothing merged, nothing "
+    "overlapping itself. If teeth are visible, draw them cleanly: even, "
+    "correctly shaped, the right number."
+)
+
 TEMPLATES = {
     "gruppe": (
         "A single group photograph showing all {n} people from the reference images together "
         "in one frame, side by side. Keep every person's face, hair and identity clearly "
-        "recognizable and consistent with their reference image. {extra}"
+        "recognizable and consistent with their reference image. " + ANATOMIE
+        + " {extra}"
     ),
     "person": (
         "The same person as in the reference image, {extra}. Keep the person's identity, "
-        "hairstyle, build and outfit consistent with the reference image, in the same setting."
+        "hairstyle, build and outfit consistent with the reference image, in the same setting. "
+        + ANATOMIE
     ),
 }
 
@@ -51,9 +65,8 @@ VARIANT_TEMPLATE_POSE = (
     "the same clothing, the same colours and materials. "
     "The body takes a new pose -- draw the whole figure fresh for that pose "
     "rather than keeping the old one. "
-    "Correct anatomy: exactly two arms, two hands with five fingers each, two "
-    "legs and two feet, nothing doubled, nothing merged, nothing overlapping "
-    "itself. Everything else in the picture may differ. {extra}"
+    + ANATOMIE +
+    " Everything else in the picture may differ. {extra}"
 )
 
 # Die Variantenvorlage ist selbst eine Modusvorlage -- hier eingehaengt, damit

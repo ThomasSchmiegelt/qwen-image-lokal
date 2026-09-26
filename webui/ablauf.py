@@ -19,7 +19,7 @@ Nach jedem Block kann das Ausgangsbild wieder eingeblendet werden
 """
 
 from demo import KULISSEN
-from kataloge import VARIANT_TEMPLATE
+from kataloge import ANATOMIE, VARIANT_TEMPLATE
 
 # Wortlaut für die beiden Prompt-Vorlagen.
 _BEHUTSAM = VARIANT_TEMPLATE
@@ -39,10 +39,9 @@ _AKTION = (
     "{bleibt} must stay clearly recognisable."
 )
 
-# Zaehne geraten Diffusionsmodellen notorisch schief -- zu viele, verschmiert,
-# doppelte Reihen. Ein knapper Hinweis am Ende jeder Anweisung hilft spuerbar.
-_ZAEHNE = ("If teeth are visible, draw them cleanly: even, correctly shaped, "
-           "the right number, never smeared or doubled.")
+# Zaehne und Gliedmassen geraten Diffusionsmodellen notorisch schief. Der
+# Hinweis steht gemeinsam mit dem der Bildvorlagen in kataloge/vorlage.py --
+# zwei Fassungen desselben Satzes liefen frueher oder spaeter auseinander.
 
 # Ein Stilwechsel laesst den alten Ort durchscheinen: aus dem Startbild
 # wandert dann gern ein Auto in die Ecke der Wueste. Bloecke, die den Ort
@@ -67,7 +66,7 @@ def prompt_fuer(block: dict, baustein: str) -> str:
         text = f"{kopf}, {baustein}"
     if block.get("ersetzt"):
         text = f"{text} {_ERSETZT}"
-    return f"{text} {_ZAEHNE}"
+    return f"{text} {ANATOMIE}"
 
 
 def gruppen_prompt(block: dict) -> str:
@@ -79,7 +78,7 @@ def gruppen_prompt(block: dict) -> str:
     """
     bausteine = bausteine_von(block)
     text = bausteine[0] if bausteine else ""
-    return f"{text} {_ZAEHNE}".strip()
+    return f"{text} {ANATOMIE}".strip()
 
 
 def bausteine_von(block: dict) -> list[str]:

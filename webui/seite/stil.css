@@ -281,3 +281,13 @@
 .selbstszene { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em; }
 .selbstszene input { flex: 1; }
+
+/* Gespraechsverlauf der Freitexteingabe: was gesagt wurde und was daraus
+   wurde -- damit ein Nachsatz nachvollziehbar bleibt. */
+#chatLog { margin: 8px 0 4px; }
+#chatLog .zug {
+  font-size: 12px; padding: 4px 8px; border-radius: 6px; margin-bottom: 3px;
+  background: #1b1f27;
+}
+#chatLog .zug.ich { background: #222a3a; }
+#chatLog .zug b { color: var(--muted); font-weight: 400; margin-right: 6px; }

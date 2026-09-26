@@ -44,6 +44,11 @@ from kataloge import (  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SEITE = os.path.join(HERE, "seite")
+# Der Gespraechsverlauf der Freitexteingabe. Ein Benutzer, ein Gespraech --
+# das Programm laeuft ohnehin nur fuer einen. Abgeschnitten, damit ein langer
+# Nachmittag den Systemtext nicht aus dem Fenster draengt.
+gespraech: list[dict] = []
+GESPRAECH_LAENGE = 12
 HOST = os.environ.get("QWEN_HOST", "127.0.0.1")
 PORT = int(os.environ.get("QWEN_PORT", "7860"))
 SAFE_NAME = re.compile(r"[\w.\-]+\.(png|jsonl|mp4)")
@@ -482,11 +487,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
         if path == "/api/chat":
+            # Mit Gedaechtnis: der Verlauf liegt beim Server, damit ein
+            # Nachsatz wie "und jetzt noch einen Hut dazu" weiss, worauf er
+            # sich bezieht. Ein Benutzer, ein Gespraech -- das Programm
+            # laeuft ohnehin nur fuer einen.
             length = int(self.headers.get("Content-Length", 0))
             try:
                 params = json.loads(self.rfile.read(length) or b"{}")
             except json.JSONDecodeError as exc:
                 return self._json(400, {"error": f"ungueltiges JSON: {exc}"})
+            if params.get("neu"):
+                gespraech.clear()
+                return self._json(200, {"ok": True, "verlauf": []})
             text = (params.get("text") or "").strip()
             if not text:
                 return self._json(400, {"error": "Kein Text"})
@@ -495,10 +507,19 @@ class Handler(BaseHTTPRequestHandler):
             if engine.lock.locked():
                 return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
             try:
-                return self._json(200, chat.interpret(
-                    text, int(params.get("has_images") or 0)))
+                plan = chat.interpret(text, int(params.get("has_images") or 0),
+                                      verlauf=list(gespraech))
             except RuntimeError as exc:
                 return self._json(502, {"error": str(exc)})
+            gespraech.append({"role": "user", "content": text})
+            # Das Modell bekommt seine eigene Antwort als JSON zurueck -- so
+            # weiss es beim naechsten Satz, was gerade eingestellt ist.
+            gespraech.append({"role": "assistant",
+                              "content": json.dumps(plan, ensure_ascii=False)})
+            del gespraech[:-GESPRAECH_LAENGE]
+            plan["verlauf"] = [{"wer": m["role"], "was": m["content"][:400]}
+                               for m in gespraech]
+            return self._json(200, plan)
 
         if path != "/api/generate":
             return self._json(404, {"error": "not found"})

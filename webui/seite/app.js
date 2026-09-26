@@ -669,6 +669,7 @@ async function sendChat() {
   }
   const plan = await res.json();
   applyPlan(plan);
+  zeigeGespraech(plan.verlauf);
   $("chatNote").textContent = (plan.note || "Verstanden.")
     + ` Einstellungen unten prüfen, dann auf „${MODES[mode].label}“.`;
   $("chat").value = "";
@@ -677,6 +678,34 @@ async function sendChat() {
   setTimeout(() => $("go").classList.remove("ready"), 6000);
 }
 $("chatGo").onclick = sendChat;
+
+// Der Verlauf steht beim Server; hier wird nur gezeigt, was war. So ist
+// nachvollziehbar, worauf sich ein "und jetzt noch einen Hut dazu" bezieht.
+function zeigeGespraech(verlauf) {
+  if (!Array.isArray(verlauf) || !verlauf.length) {
+    $("chatLog").innerHTML = "";
+    return;
+  }
+  $("chatLog").innerHTML = verlauf.map(z => {
+    if (z.wer === "user") {
+      return `<div class="zug ich"><b>du</b>${esc(z.was)}</div>`;
+    }
+    let notiz = z.was;
+    try { notiz = JSON.parse(z.was).note || z.was; } catch (e) { /* roh zeigen */ }
+    return `<div class="zug"><b>verstanden</b>${esc(notiz)}</div>`;
+  }).join("")
+    + `<p class="hint"><a href="#" onclick="gespraechNeu();return false">`
+    + `neu anfangen</a> — vergisst das Bisherige.</p>`;
+}
+
+async function gespraechNeu() {
+  await fetch("/api/chat", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({neu: true})
+  }).catch(() => null);
+  $("chatLog").innerHTML = "";
+  say("Gespräch zurückgesetzt.", "ok");
+}
 $("beenden").onclick = e => { e.preventDefault(); programmBeenden(); };
 $("ableiten").onclick = e => { e.preventDefault(); promptAusBild(); };
 $("ableitenBild").onchange = e => {

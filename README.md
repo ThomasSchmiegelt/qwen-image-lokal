@@ -149,6 +149,11 @@ Bild und ist damit wiederholbar.
 Leere Lücken hinterlassen keine Bruchstücke: aus `a basket made of {material}`
 wird ohne Material `a basket`, nicht `a basket made of ,`.
 
+**Freitext mit Gedächtnis.** Das Gespräch geht weiter: „ein rotes Auto im
+Wald" → „mach es hochkant" → „und jetzt als Comic" → „davon bitte sechs
+Stück". Jeder Nachsatz ändert genau eine Sache und lässt den Rest stehen; der
+Verlauf steht unter dem Feld, „neu anfangen" vergisst ihn.
+
 **Geschichte.** Handlung auf Deutsch beschreiben, Bausteine anhaken — das
 Sprachmodell zerlegt sie in Bilder und nimmt **Mimik und Stil aus der
 Handlung**: wer seinen Korb verliert, schaut erschrocken, wer ihn wiederbekommt,

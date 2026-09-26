@@ -38,6 +38,10 @@ def system_prompt(has_images: int) -> str:
     )
     return f"""Du stellst eine lokale Bildgenerierung ein. {situation}
 
+Das Gespräch geht weiter: Sagt der Benutzer danach "und noch ein Hut dazu"
+oder "mach es hochkant", dann ändere die vorige Einstellung an dieser einen
+Stelle und gib sie sonst unverändert zurück. Fang nicht von vorn an.
+
 Antworte AUSSCHLIESSLICH mit einem JSON-Objekt. Kein Text davor oder danach.
 
 Feld "prompt": die Bildbeschreibung auf ENGLISCH, ausformuliert und bildhaft.
@@ -93,8 +97,15 @@ Beispiele:
 lieber ein Feld weglassen als raten."""
 
 
-def ask(text: str, has_images: int = 0, model: str | None = None) -> dict:
-    """Fragt Ollama. Wirft RuntimeError mit einer lesbaren Meldung."""
+def ask(text: str, has_images: int = 0, model: str | None = None,
+        verlauf: list[dict] | None = None) -> dict:
+    """Fragt Ollama. Wirft RuntimeError mit einer lesbaren Meldung.
+
+    `verlauf` sind die bisherigen Wechsel des Gespraechs, als Wechselfolge
+    von Benutzer- und Modellbeitraegen. Damit versteht "und jetzt noch einen
+    Hut dazu", worauf es sich bezieht -- ohne Verlauf faengt jeder Satz bei
+    null an.
+    """
     body = {
         "model": model or MODEL,
         # Nur "json", kein JSON-Schema: ein Schema erzwingt zwar gueltige
@@ -109,6 +120,7 @@ def ask(text: str, has_images: int = 0, model: str | None = None) -> dict:
         "options": {"temperature": 0.2, "num_predict": 700},
         "messages": [
             {"role": "system", "content": system_prompt(has_images)},
+            *(verlauf or []),
             {"role": "user", "content": text},
         ],
     }
@@ -209,8 +221,9 @@ def sanitise(raw: dict, has_images: int) -> dict:
     return out
 
 
-def interpret(text: str, has_images: int = 0, model: str | None = None) -> dict:
-    return sanitise(ask(text, has_images, model), has_images)
+def interpret(text: str, has_images: int = 0, model: str | None = None,
+              verlauf: list[dict] | None = None) -> dict:
+    return sanitise(ask(text, has_images, model, verlauf), has_images)
 
 
 # --- Bausteine -----------------------------------------------------------
