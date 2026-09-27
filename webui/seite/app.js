@@ -1126,6 +1126,14 @@ function zeigeSelbstszenen() {
             `<a href="#" onclick="gsEinfuegen('\\\\', '${x.key}');return false"
                title="${esc(x.label)}">\\${x.key}</a>${x.paar ? " (2 Bilder)" : ""}`
           ).join(" · ") + `</p>`
+        : "")
+    // Was sich einmal bewaehrt hat, steht neben den festen Einstellungen:
+    // ein gemerkter Prompt wird genauso gerufen.
+    + (GEMERKTE.length
+        ? `<p class="hint">Gemerkt: ` + GEMERKTE.map(x =>
+            `<a href="#" onclick="gsEinfuegen('\\', '${esc(x.name)}');return false"
+               title="${esc(x.prompt.slice(0, 160))}">\\${esc(x.name)}</a>`
+          ).join(" · ") + `</p>`
         : "");
   $("gsSelbst").querySelectorAll(".gszeile").forEach(el => {
     el.oninput = () => gsZeilen[+el.dataset.i].text = el.value;
@@ -1938,6 +1946,7 @@ async function merken(datei, name) {
   if (e === null) return;
   NOTEN[datei] = e;
   await notenHolen();
+  zeigeSelbstszenen();             // die Liste unter den Szenen waechst mit
   if (e.name) {
     say(`Gemerkt. In einer Szene mit \\${e.name} oder \\${e.nr} aufrufbar.`, "ok");
   } else {

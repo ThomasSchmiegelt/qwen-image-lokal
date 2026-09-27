@@ -525,7 +525,19 @@ def run_prompts(params: dict) -> None:
     die Seite ihn zeigen kann -- bei 16,5 GB und mehreren Szenen dauert es.
     """
     try:
-        zeilen = [z.get("text") or "" for z in (params.get("zeilen") or [])]
+        roh = params.get("zeilen") or []
+        zeilen = [z.get("text") or "" for z in roh]
+        # Was sich in den Augen spiegelt, tippt der Benutzer deutsch; im
+        # Prompt muss es englisch stehen. Ein Aufruf fuer alle Angaben, vor
+        # dem grossen Modell -- danach ist die Karte belegt.
+        angaben = sorted({(z.get("spiegelung") or "").strip()
+                          for z in roh if (z.get("spiegelung") or "").strip()})
+        englisch = {}
+        if angaben:
+            current["stage"] = "Angaben werden übersetzt"
+            fertig = chat.translate({f"a{i}": t for i, t in enumerate(angaben)})
+            englisch = {t: fertig.get(f"a{i}") or t
+                        for i, t in enumerate(angaben)}
         current["stage"] = "Grosses Sprachmodell wird geladen"
 
         def fortschritt(nr, gesamt):
@@ -537,6 +549,14 @@ def run_prompts(params: dict) -> None:
                                  fiktion=params.get("fiktion"),
                                  model=params.get("modell") or None,
                                  fortschritt=fortschritt)
+        # Ueber die Nummer zuordnen, nicht ueber die Position: leere Zeilen
+        # ueberspringt das Sprachmodell, und dann sitzt die Spiegelung in der
+        # falschen Szene.
+        for szene in szenen:
+            i = int(szene.get("nr") or 0) - 1
+            quelle = (roh[i].get("spiegelung") or "").strip() if 0 <= i < len(roh) else ""
+            if quelle:
+                szene["spiegelung"] = englisch.get(quelle, quelle)
         if params.get("prosa"):
             current["stage"] = "Text wird geschrieben"
             absaetze = chat.prosa(szenen, model=params.get("modell") or None)

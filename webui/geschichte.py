@@ -220,7 +220,9 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             return next((k for k, b in benutzt.items() if b.get("art") == art), "")
         szenen.append({
             "einstellung": zeile.get("einstellung") or "",
-            "spiegelung": zeile.get("spiegelung") or "",
+            # Die uebersetzte Fassung schlaegt die getippte: beim Schreiben
+            # der Prompts wurde sie schon ins Englische gebracht.
+            "spiegelung": p.get("spiegelung") or zeile.get("spiegelung") or "",
             "titel": (zeile.get("text") or "")[:60] or f"Bild {i}",
             "person": erster("person"),
             "ort": zeile.get("ort") or erster("ort"),
@@ -359,6 +361,45 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
 EINSTELLUNG = re.compile(
     r"\\([A-Za-zÄÖÜäöüß0-9][\wÄÖÜäöüß-]{0,29})(?:\(([^)]{1,120})\))?")
 
+# Frueher hiess "raus" einmal "zelle". Eine gespeicherte Geschichte, die den
+# alten Namen fuehrt, soll nicht schweigend ohne Kamera dastehen.
+ALTE_NAMEN = {"zelle": "raus"}
+
+# Die Angabe in der Klammer ist deutsch getippt, der Prompt ist englisch.
+# Hoehen und Entfernungen lassen sich hier uebersetzen, ohne dafuer das
+# Sprachmodell zu bemuehen -- es sind eine Handvoll Woerter.
+ZAHLWORT = {"ein": 1, "eine": 1, "eins": 1, "zwei": 2, "drei": 3, "vier": 4,
+            "fuenf": 5, "fünf": 5, "sechs": 6, "sieben": 7, "acht": 8,
+            "neun": 9, "zehn": 10, "elf": 11, "zwoelf": 12, "zwölf": 12,
+            "zwanzig": 20, "dreissig": 30, "dreißig": 30, "halb": 0.5}
+EINHEIT = {"meter": "metres", "metern": "metres", "m": "metres",
+           "zentimeter": "centimetres", "zentimetern": "centimetres",
+           "cm": "centimetres", "kilometer": "kilometres", "km": "kilometres"}
+
+
+def _masse_englisch(angabe: str) -> str:
+    r"""\decke(fuenf Meter) -> "five metres". Was nicht passt, bleibt.
+
+    Nur Zahl und Einheit: alles andere waere geraten. Steht etwas anderes in
+    der Klammer, geht es unveraendert in den Prompt -- englisch getippt ist
+    es dann ohnehin richtig.
+    """
+    teile = (angabe or "").strip().lower().split()
+    if len(teile) != 2:
+        return angabe
+    zahl, einheit = teile
+    if einheit not in EINHEIT:
+        return angabe
+    if zahl in ZAHLWORT:
+        wert = ZAHLWORT[zahl]
+    else:
+        try:
+            wert = float(zahl.replace(",", "."))
+        except ValueError:
+            return angabe
+    schoen = f"{wert:g}"
+    return f"{schoen} {EINHEIT[einheit]}"
+
 
 def einstellung_von(zeile: str, eigene: dict | None = None) -> tuple[str, str, str]:
     r"""Trennt \Name von der Zeile. Zurueck kommt (Text ohne, Schluessel).
@@ -374,10 +415,10 @@ def einstellung_von(zeile: str, eigene: dict | None = None) -> tuple[str, str, s
 
     def ersatz(treffer):
         nonlocal gefunden, angabe
-        name = treffer.group(1).lower()
+        name = ALTE_NAMEN.get(treffer.group(1).lower(), treffer.group(1).lower())
         if (name in EINSTELLUNGEN or name in (eigene or {})) and not gefunden:
             gefunden = name
-            angabe = (treffer.group(2) or "").strip()
+            angabe = _masse_englisch((treffer.group(2) or "").strip())
             return ""
         return treffer.group(0)
 
