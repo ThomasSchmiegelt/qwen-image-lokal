@@ -148,6 +148,30 @@ def _freie_kennung(art: str, daten: list[dict]) -> str:
     return kennung
 
 
+def aliasse(wert) -> list[str]:
+    """Die Zweitnamen eines Bausteins, sauber und ohne Doppelte.
+
+    Erlaubt sind Liste oder ein Feld mit Kommas -- die Seite schickt mal so,
+    mal so. Leerzeichen werden zu Bindestrichen: der Name wird spaeter mit
+    einem Schraegstrich getippt.
+    """
+    if isinstance(wert, str):
+        roh = re.split(r"[,;]", wert)
+    else:
+        roh = list(wert or [])
+    raus = []
+    for n in roh:
+        n = re.sub(r"\s+", "-", str(n or "").strip().lstrip("/"))[:40]
+        if n and not any(n.lower() == x.lower() for x in raus):
+            raus.append(n)
+    return raus[:8]
+
+
+def namen(b: dict) -> list[str]:
+    """Der Name und alle Zweitnamen eines Bausteins."""
+    return [b.get("name") or ""] + aliasse(b.get("alias"))
+
+
 def speichern(projekt: str, baustein: dict) -> dict:
     """Legt einen Baustein an oder ersetzt einen vorhandenen."""
     art = baustein.get("art") if baustein.get("art") in ARTEN else "person"
@@ -174,6 +198,9 @@ def speichern(projekt: str, baustein: dict) -> dict:
            # damit dieselbe Person in der naechsten Geschichte als Manga
            # auftreten kann.
            "stil": (baustein.get("stil") or "").strip(),
+           # Zweitnamen: dieselbe Figur heisst in Szene drei "die Frau" und
+           # in Szene zwoelf "Nora". Beides soll denselben Baustein treffen.
+           "alias": aliasse(baustein.get("alias")),
            "variablen": vorgaben, "bild": baustein.get("bild") or ""}
 
     # Nichts verlieren, was der Aufrufer nicht mitschickt.
@@ -183,6 +210,8 @@ def speichern(projekt: str, baustein: dict) -> dict:
         for feld in ("bild", "gesicht", "kleidung", "stil"):
             if not neu[feld]:
                 neu[feld] = vorher.get(feld) or ""
+        if not neu["alias"]:
+            neu["alias"] = aliasse(vorher.get("alias"))
     rest = [b for b in daten if b.get("id") != kennung]
     rest.append(neu)
     _schreiben(projekt, rest)

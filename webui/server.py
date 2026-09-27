@@ -475,6 +475,22 @@ class Handler(BaseHTTPRequestHandler):
                 "modell": str(params.get("modell") or "") or None})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
+        if path == "/api/prosa":
+            # Der Text zu jeder Szene, als eigener Schritt vor den Bausteinen.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            if not (params.get("zeilen") or []):
+                return self._json(400, {"error": "Keine Szene"})
+            auftrag = einreihen("prosa", {
+                "zeilen": params.get("zeilen") or [],
+                "kurz": str(params.get("kurz") or ""),
+                "welt": str(params.get("welt") or ""),
+                "alter": str(params.get("alter") or ""),
+                "fiktion": params.get("fiktion"),
+                "modell": str(params.get("modell") or "") or None})
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
+
         if path == "/api/ergaenzen":
             # Fehlende Zeilen nachschreiben lassen. Die vorhandenen bleiben,
             # wie sie sind -- nachgereicht wird nur, was fehlt.
@@ -667,20 +683,46 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
                 zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
                           for z in (params.get("zeilen") or [])]
+                # Zuerst die Zweitnamen aufloesen: steht ein Alias noch als
+                # eigener Baustein da, geht er im Hauptbaustein auf. Genau
+                # dafuer traegt man ihn ein.
+                verschmolzen = []
+                liste = bausteine.liste(projekt)
+                nach_name = {n.lower(): b for b in liste
+                             for n in bausteine.namen(b) if n}
+                for haupt in liste:
+                    for zweit in bausteine.aliasse(haupt.get("alias")):
+                        doppelt = next((x for x in bausteine.liste(projekt)
+                                        if (x.get("name") or "").lower()
+                                        == zweit.lower()
+                                        and x.get("id") != haupt.get("id")), None)
+                        if not doppelt:
+                            continue
+                        erg = bausteine.zusammenfuehren(
+                            projekt, doppelt["id"], haupt["id"])
+                        if erg:
+                            verschmolzen.append(erg["alter_name"])
+
                 erklaert = {}
                 for z in zeilen:
                     for name, text in geschichte.definitionen(z)[1].items():
                         erklaert[name.lower()] = (name, text)
                 if not erklaert:
-                    return self._json(200, {"neu": [], "hinweis":
-                        "Keine Erklärung in Anführungszeichen gefunden."})
-                nach_name = {(b.get("name") or "").lower(): b
-                             for b in bausteine.liste(projekt)}
+                    return self._json(200, {"neu": [], "weg": verschmolzen,
+                        "hinweis": "Keine Erklärung in Anführungszeichen."
+                                   if not verschmolzen else ""})
+                nach_name = {n.lower(): b for b in bausteine.liste(projekt)
+                             for n in bausteine.namen(b) if n}
                 frisch = []
                 for i, (klein, (name, text)) in enumerate(erklaert.items(), 1):
                     melden(f"Baustein {i} von {len(erklaert)}: {name}",
                            i, len(erklaert))
                     da = nach_name.get(klein)
+                    # Wurde ueber einen Zweitnamen gesucht, bleibt der
+                    # Hauptname stehen -- sonst hiesse die Figur ploetzlich
+                    # anders.
+                    if da and (da.get("name") or "").lower() != klein:
+                        name = da["name"]
                     art = (da or {}).get("art") or ""
                     if not art:
                         geraten = chat.bausteine_raten([name], "\n".join(zeilen))
@@ -697,7 +739,8 @@ class Handler(BaseHTTPRequestHandler):
                         "kleidung": fertig.get("kleidung") or "",
                         "variablen": werte}))
                 melden("")
-                return self._json(200, {"neu": frisch, "hinweis": ""})
+                return self._json(200, {"neu": frisch, "weg": verschmolzen,
+                                        "hinweis": ""})
 
             if was == "vorschlagen":
                 # Alles, was die Geschichte mit /Name verlangt und noch nicht

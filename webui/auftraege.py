@@ -87,6 +87,8 @@ def _titel(art: str, params: dict) -> str:
         return "Geschichte umreissen"
     if art == "ergaenzen":
         return f"{params.get('fehlt') or 0} Szenen ergaenzen"
+    if art == "prosa":
+        return f"Prosa schreiben, {len(params.get('zeilen') or [])} Szenen"
     if art == "aufbau":
         return ("Geschichte lesen" if params.get("phase") == "rahmen"
                 else f"Szenen schreiben, {len(params.get('kapitel') or [])} Abschnitte")
@@ -238,7 +240,7 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
         if len(alle) == 1:
             laeufe = {"demo": run_demo, "prompts": run_prompts,
                       "expose": run_expose, "ergaenzen": run_ergaenzen,
-                      "aufbau": run_aufbau}
+                      "aufbau": run_aufbau, "prosa": run_prosa}
             laeufe.get(auftrag["art"], run_job)(auftrag["params"])
         else:
             # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
@@ -578,6 +580,43 @@ def run_aufbau(params: dict) -> None:
         engine.note("error", current["error"])
 
 
+def run_prosa(params: dict) -> None:
+    """Zu jeder Szene den Text schreiben. Ein eigener Schritt.
+
+    Die Prosa stand bisher als Haken am Prompt-Schreiben und lief damit nur
+    mit, wenn ohnehin Prompts entstanden. Sie gehoert aber davor: aus ihr
+    ergibt sich, was im Bild zu sehen ist und welche Bausteine es braucht.
+    """
+    try:
+        roh = params.get("zeilen") or []
+        szenen = [{"nr": i + 1, "zeile": z.get("text") or ""}
+                  for i, z in enumerate(roh) if (z.get("text") or "").strip()]
+        if not szenen:
+            raise ValueError("Keine Szene")
+
+        def weit(ist, von):
+            melden(f"Absatz {ist + 1} von {von}", ist, von)
+
+        melden("Grosses Sprachmodell wird geladen", 0, len(szenen))
+        absaetze = chat.prosa(szenen, model=params.get("modell") or None,
+                              kurz=params.get("kurz") or "",
+                              welt=params.get("welt") or "",
+                              fiktion=params.get("fiktion"),
+                              alter=params.get("alter") or "",
+                              fortschritt=weit)
+        current["expose"] = {"nur_prosa": True,
+                             "prosa": [{"nr": s["nr"], "text": t}
+                                       for s, t in zip(szenen, absaetze)]}
+        melden("")
+        engine.note("idle",
+                    f"{sum(1 for t in absaetze if t)} von {len(szenen)} Absaetzen")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        engine.note("error", current["error"])
+
+
 def run_ergaenzen(params: dict) -> None:
     """Die fehlenden Zeilen eines Inhaltsverzeichnisses nachschreiben.
 
@@ -660,7 +699,11 @@ def run_prompts(params: dict) -> None:
             szene["prosa_quelle"] = roh[i].get("prosa") or ""
         if params.get("prosa"):
             melden("Text wird geschrieben")
-            absaetze = chat.prosa(szenen, model=params.get("modell") or None)
+            absaetze = chat.prosa(szenen, model=params.get("modell") or None,
+                                  kurz=params.get("kurz") or "",
+                                  welt=params.get("welt") or "",
+                                  fiktion=params.get("fiktion"),
+                                  alter=params.get("alter") or "")
             for i, s in enumerate(szenen):
                 s["prosa"] = absaetze[i] if i < len(absaetze) else ""
         # Eine einzelne Szene ersetzt nur sich selbst. Ohne das loeschte ein

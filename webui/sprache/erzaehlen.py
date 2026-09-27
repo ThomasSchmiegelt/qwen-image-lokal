@@ -228,33 +228,99 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
 
 PROSA_SYSTEM = """Du schreibst den Text zu einer Bilderfolge.
 
-Du bekommst die Szenen als Liste. Antworte mit JSON:
-{"absaetze": ["…", "…"]} -- genau ein deutscher Absatz je Szene, zwei bis
-vier Sätze, erzählend und in der Reihenfolge der Szenen. Kein Vorspann, keine
-Überschriften, keine Nummern."""
+Du bekommst die Szenen als nummerierte Liste. Antworte mit JSON:
+
+{"absaetze": [{"nr": 1, "text": "…"}, {"nr": 2, "text": "…"}]}
+
+Zu JEDER Szene ein Eintrag, mit ihrer Nummer und einem deutschen Absatz von
+zwei bis vier Sätzen, erzählend. Überspringe keine Nummer, auch wenn zwei
+Szenen einander ähneln. Kein Vorspann, keine Überschriften, keine Nummern im
+Text selbst."""
 
 
-def prosa(szenen: list[dict], model: str | None = None) -> list[str]:
-    """Zu jeder Szene ein Absatz Prosa -- aus der Gliederung, nicht erfunden."""
+# Wie viele Szenen in einen Prosa-Aufruf gehen. Achtzehn Absaetze passten
+# nicht in eine Antwort: sie brach ab, und hinten fehlte die Prosa ganz.
+JE_PROSA = 6
+
+
+def prosa(szenen: list[dict], model: str | None = None,
+          kurz: str = "", welt: str = "", fiktion=None, alter: str = "",
+          fortschritt=None) -> list[str]:
+    """Zu jeder Szene ein Absatz Prosa -- aus der Gliederung, nicht erfunden.
+
+    In Haeppchen zu sechs Szenen, weil eine einzige Antwort fuer zwanzig
+    Absaetze abbricht. Jedes Haeppchen sieht den letzten Absatz des vorigen,
+    damit der Text nicht bei jedem Schnitt neu anfaengt.
+    """
     if not szenen:
         return []
     name = model or GROSS
-    liste = "\n".join(f"{s.get('nr', i + 1)}. {s.get('zeile') or s.get('prompt')}"
-                       for i, s in enumerate(szenen))
+    system = PROSA_SYSTEM
+    if kurz.strip():
+        system += f"\n\nWorum es geht: {kurz.strip()}"
+    if welt in WELTEN:
+        system += f"\n\n{WELTEN[welt][1]}"
+    _, satz = grad(fiktion)
+    if satz:
+        system += f"\n\n{satz}"
+    if freigabe(alter):
+        system += f"\n\n{freigabe(alter)}"
+
+    raus = []
     try:
-        roh = antwort({
-            "model": name,
-            "format": "json",
-            "keep_alive": "10m",
-            "options": {"temperature": 0.8, "num_predict": 1600},
-            "messages": [{"role": "system", "content": PROSA_SYSTEM},
-                         {"role": "user", "content": liste}],
-        }, timeout=600)
+        for anfang in range(0, len(szenen), JE_PROSA):
+            teil = szenen[anfang:anfang + JE_PROSA]
+            if fortschritt:
+                fortschritt(anfang, len(szenen))
+            frage = "\n".join(
+                f"{s.get('nr', anfang + i + 1)}. {s.get('zeile') or s.get('prompt')}"
+                for i, s in enumerate(teil))
+            if raus and raus[-1]:
+                frage = ("Der vorige Absatz endete so:\n" + raus[-1][-400:]
+                         + "\n\nSchreibe daran anschliessend:\n" + frage)
+            # Ueber die Nummer zuordnen, nicht ueber die Reihenfolge. Das
+            # Modell ueberspringt Szenen, die einander aehneln -- positionell
+            # zugeordnet verrutschte danach die ganze Folge, und Absatz zwei
+            # erzaehlte von Szene drei.
+            nummern = [int(s.get("nr") or 0) for s in teil]
+            gefunden = _absaetze(system, frage, len(teil), name)
+            fehlt = [n for n in nummern if not gefunden.get(n)]
+            if fehlt:
+                # Ein zweiter Anlauf, nur fuer die fehlenden.
+                nach = "\n".join(
+                    f"{s.get('nr')}. {s.get('zeile') or s.get('prompt')}"
+                    for s in teil if int(s.get("nr") or 0) in fehlt)
+                gefunden.update({k: v for k, v in
+                                 _absaetze(system, nach, len(fehlt), name).items()
+                                 if v})
+            raus += [gefunden.get(n, "") for n in nummern]
     finally:
         entladen(name)
-    if not isinstance(roh, dict) or not isinstance(roh.get("absaetze"), list):
-        return []
-    return [str(a or "").strip()[:900] for a in roh["absaetze"]][:len(szenen)]
+    return raus[:len(szenen)]
+
+
+def _absaetze(system: str, frage: str, wieviel: int, model: str) -> dict:
+    """Ein Aufruf, Ergebnis als {Szenennummer: Absatz}."""
+    roh = antwort({
+        "model": model,
+        "format": "json",
+        "keep_alive": "10m",
+        "options": {"temperature": 0.8, "num_predict": 300 + 260 * wieviel},
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": frage}],
+    }, timeout=900)
+    raus = {}
+    for e in (roh.get("absaetze") if isinstance(roh, dict) else None) or []:
+        if not isinstance(e, dict):
+            continue
+        try:
+            nr = int(e.get("nr") or 0)
+        except (TypeError, ValueError):
+            continue
+        text = str(e.get("text") or "").strip()[:900]
+        if nr and text:
+            raus[nr] = text
+    return raus
 
 
 

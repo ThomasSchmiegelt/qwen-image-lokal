@@ -850,6 +850,8 @@ function zeigeBausteine(liste) {
              onclick="show('${b.bild}')">` : `<span class="ohnebild">?</span>`}
         <div class="bstext"><b>${esc(b.name)}</b>
           <span class="art">${esc(label(b.art))}</span>
+          ${(b.alias || []).length
+              ? `<span class="art">= ${esc(b.alias.join(", "))}</span>` : ""}
           ${b.stil ? `<span class="art">Bild: ${esc(
               (STILLISTE.find(x => x.key === b.stil) || {}).label || b.stil)}</span>` : ""}
           <br><code>${esc(b.prompt)}</code></div>
@@ -974,6 +976,7 @@ function bausteinAusFeldern() {
   return {id: $("bsPrompt").dataset.id || "", art: $("bsArt").value,
           name: $("bsName").value, prompt: $("bsPrompt").value,
           gesicht: $("bsGesicht").value, kleidung: $("bsKleidung").value,
+          alias: $("bsAlias").value,
           stil: musterStil(), variablen: lueckenWerte("bsVariablen")};
 }
 
@@ -1084,6 +1087,7 @@ function bausteinLeeren() {
   ["bsName", "bsText", "bsPrompt", "bsGesicht", "bsKleidung"]
     .forEach(id => $(id).value = "");
   $("bsStil").value = "";
+  $("bsAlias").value = "";
   personFelder();
   $("bsPrompt").dataset.id = "";
   $("bsVariablen").innerHTML = "";
@@ -1110,6 +1114,7 @@ function bausteinLaden(id) {
   $("bsGesicht").value = b.gesicht || "";
   $("bsKleidung").value = b.kleidung || "";
   $("bsStil").value = b.stil || "";
+  $("bsAlias").value = (b.alias || []).join(", ");
   $("bsPrompt").dataset.id = b.id;
   personFelder();
   luckenFelder("bsVariablen", b.prompt, b.variablen, false);
@@ -1266,7 +1271,7 @@ async function einreihenEinfach(zusatz) {
 // Szene gilt -- und weil ein Modell, dem niemand sagt, dass Drachen erlaubt
 // sind, die Handlung so lange zurechtbiegt, bis sie alltagstauglich wird.
 let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
-let gsErgaenztZuletzt = "";
+let gsErgaenztZuletzt = "", gsProsaZuletzt = "";
 // Rahmen einer langen Vorlage: Anfangsszene, Schlussszene, Abschnitte.
 let GSRAHMEN = {anfang: "", ende: "", kapitel: []};
 
@@ -1757,10 +1762,13 @@ $("gsAktualisieren").onclick = async e => {
                + "überschrieben. Weiter?")) return;
   const g = await bausteinRuf({tu: "aktualisieren", zeilen});
   if (!g) return;
-  if (!g.neu.length) return say(g.hinweis || "Nichts zu übernehmen.", "ok");
   await bausteineHolen();
   zeigeSelbstszenen();
-  say(`Nachgezogen: ${g.neu.map(b => b.name).join(", ")}.`, "ok");
+  const teile = [];
+  if ((g.weg || []).length) teile.push(`${g.weg.join(", ")} aufgegangen`);
+  if (g.neu.length) teile.push(`nachgezogen: ${g.neu.map(b => b.name).join(", ")}`);
+  say(teile.length ? teile.join(" · ") + "."
+                   : (g.hinweis || "Nichts zu übernehmen."), "ok");
 };
 
 // Durchsehen, was noch fehlt. Kostet nichts -- kein Sprachmodell, nur
@@ -2142,7 +2150,46 @@ function zeigeRahmen() {
       k.map(x => esc(x.titel)).join(" · ")}</p>`;
 }
 
+// Die Prosa zu allen Szenen. Ein eigener Schritt vor den Bausteinen: aus
+// ihr ergibt sich, was im Bild zu sehen ist und wen es dafuer braucht.
+$("gsProsaSchreiben").onclick = async e => {
+  e.preventDefault();
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  if (!zeilen.length) return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  const res = await fetch("/api/prosa", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen, kurz: $("gsKurz").value,
+                          welt: $("gsWelt").value,
+                          alter: $("gsFreigabe").value,
+                          fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Die Prosa ließ sich nicht schreiben.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say(`Der Text zu ${zeilen.length} Szenen wird geschrieben …`);
+};
+
 function zeigeExpose(e) {
+  // Der Text zu den Szenen, aus dem eigenen Schritt.
+  if (e && e.nur_prosa) {
+    const liste = e.prosa || [];
+    if (!liste.length || gsProsaZuletzt === JSON.stringify(liste)) return;
+    gsProsaZuletzt = JSON.stringify(liste);
+    const voll = gsZeilen.filter(z => z.text.trim());
+    liste.forEach(x => {
+      const z = voll[(x.nr || 0) - 1];
+      if (z && (x.text || "").trim()) z.prosa = x.text;
+    });
+    zeigeSelbstszenen();
+    gsMerken();
+    say(`${liste.filter(x => x.text).length} Absätze geschrieben — `
+        + "in jeder Szene unter „Prosa“.", "ok");
+    return;
+  }
   // Stufe 1 bringt Rahmen und Abschnitte, aber noch keine Szenen.
   if (e && e.nur_rahmen) {
     if (e.kurz && e.kurz !== $("gsKurz").value) $("gsKurz").value = e.kurz;

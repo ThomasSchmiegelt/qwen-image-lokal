@@ -221,7 +221,9 @@ def verweise(zeile: str, teile: list[dict]) -> tuple[str, list[dict]]:
     bleibt als Wort stehen; stillschweigend verschlucken waere schlimmer als
     ihn im Text zu lassen.
     """
-    nach_name = {(b.get("name") or "").lower(): b for b in teile}
+    # Auch die Zweitnamen treffen den Baustein: dieselbe Figur heisst in
+    # Szene drei anders als in Szene zwoelf.
+    nach_name = {n.lower(): b for b in teile for n in bausteine.namen(b) if n}
     gefunden, gesehen = [], set()
 
     def ersatz(treffer):
@@ -378,7 +380,7 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
     geben soll. Das ist eine Arbeitsanweisung und gehoert sichtbar in den
     Katalog, statt stillschweigend als Wort im Prompt zu landen.
     """
-    bekannt = {(b.get("name") or "").lower() for b in teile}
+    bekannt = {n.lower() for b in teile for n in bausteine.namen(b) if n}
     offen, gesehen = [], set()
     for z in zeilen or []:
         text = z if isinstance(z, str) else (z.get("text") or "")
@@ -410,7 +412,7 @@ def pruefen(roh: list[dict], alle: list[dict],
 
     Zurueck kommt je Fund ein Eintrag mit Szenennummer, Schwere und Text.
     """
-    nach_name = {(b.get("name") or "").lower(): b for b in alle}
+    nach_name = {n.lower(): b for b in alle for n in bausteine.namen(b) if n}
     funde = []
 
     def fund(nr, schwere, text):
