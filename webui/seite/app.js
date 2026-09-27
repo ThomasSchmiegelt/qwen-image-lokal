@@ -1394,51 +1394,84 @@ function zeigeSelbstszenen() {
           e && e.key === (x.name || "").toLowerCase() ? " selected" : ""
         }>gemerkt: ${esc(x.name)}</option>`))
       .join("");
+    const drin = bausteineInZeile(z.text);
+    // Eingeklappt steht nur, was gesetzt ist. Mit zwanzig Szenen waeren
+    // zwanzig volle Menues untereinander nicht mehr zu ueberblicken, und
+    // meistens will man nur den Text lesen.
+    const kurz = [drin.map(b => b.name).join(" · "),
+                  fest ? fest.label : (e ? "\\" + e.key : ""),
+                  (z.prosa || "").trim() ? "Prosa" : "",
+                  (z.bilder || 1) > 1 ? `${z.bilder} Bilder` : ""]
+      .filter(Boolean).join(" · ") || "nichts gesetzt";
+    const p = ((GESCHICHTE && GESCHICHTE.prompts) || []).find(x => x.nr === i + 1);
     return `
     <div class="selbstszene${e ? " mitkamera" : ""}">
       <div class="szkopf"><span class="nr">${i + 1}</span>
         <textarea class="gszeile" data-i="${i}" rows="2"
           placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
-      </div>
-      <div class="szleiste">
-        ${bausteineInZeile(z.text).map(b => `
-          <select class="gsdrin" title="tauschen oder entfernen"
-            onchange="bausteinInZeile(${i}, '${esc(b.name)}',
-                      this.value === '__weg' ? '' : this.value)">
-            ${BAUSTEINE.filter(x => x.art === b.art).map(x =>
-              `<option value="${esc(x.name)}"${
-                x.id === b.id ? " selected" : ""}>/${esc(x.name)}</option>`).join("")}
-            <option value="__weg">⨯ entfernen</option>
-          </select>`).join("")}
-        <select class="gsteil" data-i="${i}" title="Baustein einsetzen">
-          <option value="">+ Baustein …</option>
-          ${BAUSTEINE.map(b =>
-            `<option value="${esc(b.name)}">/${esc(b.name)}</option>`).join("")}
-        </select>
-        <select class="gseinst" data-i="${i}" title="Kameraeinstellung">${wahl}</select>
-        ${luecke ? `<input class="gsangabe" data-i="${i}"
-            placeholder="${esc(luecke === "hoehe" ? "Höhe, z. B. fünf Meter"
-                                                  : "was sich spiegelt")}"
-            value="${esc(e.angabe)}">` : ""}
-        <span class="fuell"></span>
-        ${offeneNamen(z.text).length
-          ? `<a href="#" class="szprompt" title="${
-               esc(offeneNamen(z.text).join(", "))} anlegen"
-               onclick="bausteineDerSzene(${i});return false">+ ${
-               offeneNamen(z.text).length} anlegen</a>` : ""}
-        <a href="#" class="szprompt${veraltet(i) ? " alt" : ""}" data-i="${i}"
-           title="${veraltet(i)
-             ? "Die Zeile hat sich geändert — Prompt neu schreiben lassen"
-             : "nur für diese Szene den Bildprompt schreiben lassen"}"
-           onclick="promptFuerSzene(${i});return false">${
-             veraltet(i) ? "Prompt ↻" : "Prompt"}</a>
-        <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
-          title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
         <span class="knopf" onclick="gsSchieben(${i}, -1)" title="nach oben">▲</span>
         <span class="knopf" onclick="gsSchieben(${i}, 1)" title="nach unten">▼</span>
         <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
       </div>
-      ${vorschlagZeile(z, i)}
+      <div class="szkurz" onclick="szeneKlappen(${i})">
+        <span class="pfeil">${z.offen ? "▾" : "▸"}</span>
+        <span>${esc(kurz)}</span>
+        ${veraltet(i) ? `<span class="wink">geändert</span>` : ""}
+      </div>
+      ${!z.offen ? "" : `
+      <div class="szgruppe">
+        <h4>Prosa</h4>
+        <textarea class="gsprosa" data-i="${i}" rows="2"
+          placeholder="der Text zu dieser Szene">${esc(z.prosa || "")}</textarea>
+      </div>
+
+      <div class="szgruppe">
+        <h4>Bausteine</h4>
+        <div class="szleiste">
+          ${drin.map(b => `
+            <select class="gsdrin" title="tauschen oder entfernen"
+              onchange="bausteinInZeile(${i}, '${esc(b.name)}',
+                        this.value === '__weg' ? '' : this.value)">
+              ${BAUSTEINE.filter(x => x.art === b.art).map(x =>
+                `<option value="${esc(x.name)}"${
+                  x.id === b.id ? " selected" : ""}>/${esc(x.name)}</option>`).join("")}
+              <option value="__weg">⨯ entfernen</option>
+            </select>`).join("")}
+          <select class="gsteil" data-i="${i}" title="Baustein einsetzen">
+            <option value="">+ Baustein …</option>
+            ${BAUSTEINE.map(b =>
+              `<option value="${esc(b.name)}">/${esc(b.name)}</option>`).join("")}
+          </select>
+          <span class="fuell"></span>
+          ${offeneNamen(z.text).length
+            ? `<a href="#" class="szprompt" title="${
+                 esc(offeneNamen(z.text).join(", "))} anlegen"
+                 onclick="bausteineDerSzene(${i});return false">+ ${
+                 offeneNamen(z.text).length} anlegen</a>` : ""}
+        </div>
+        ${vorschlagZeile(z, i)}
+      </div>
+
+      <div class="szgruppe">
+        <h4>Was man sieht</h4>
+        <div class="szleiste">
+          <select class="gseinst" data-i="${i}" title="Kameraeinstellung">${wahl}</select>
+          ${luecke ? `<input class="gsangabe" data-i="${i}"
+              placeholder="${esc(luecke === "hoehe" ? "Höhe, z. B. fünf Meter"
+                                                    : "was sich spiegelt")}"
+              value="${esc(e.angabe)}">` : ""}
+          <span class="fuell"></span>
+          <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
+            title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
+          <a href="#" class="szprompt${veraltet(i) ? " alt" : ""}" data-i="${i}"
+             title="${veraltet(i)
+               ? "Die Zeile hat sich geändert — Prompt neu schreiben lassen"
+               : "nur für diese Szene den Bildprompt schreiben lassen"}"
+             onclick="promptFuerSzene(${i});return false">${
+               veraltet(i) ? "Prompt ↻" : "Prompt"}</a>
+        </div>
+        ${p && p.prompt ? `<code class="szsicht">${esc(p.prompt)}</code>` : ""}
+      </div>`}
     </div>`;
   }).join("")
     + (BAUSTEINE.length
@@ -1470,6 +1503,11 @@ function zeigeSelbstszenen() {
       gsZeilen[+el.dataset.i].bilder = Math.max(1, parseInt(el.value, 10) || 1);
       gsSumme();
     };
+  });
+  $("gsSelbst").querySelectorAll(".gsprosa").forEach(el => {
+    el.oninput = () => { gsZeilen[+el.dataset.i].prosa = el.value; mitwachsen(el); };
+    el.onchange = gsMerken;
+    mitwachsen(el);
   });
   $("gsSelbst").querySelectorAll(".gsteil").forEach(el => {
     el.onchange = () => {
@@ -1511,6 +1549,8 @@ function gsSumme() {
   const n = gsZeilen.reduce((s, z) => s + (z.bilder || 1), 0);
   $("gsSumme").textContent = `${gsZeilen.filter(z => z.text.trim()).length} Szenen, `
     + `${n} Bild(er)`;
+  $("gsKlappen").textContent = gsZeilen.some(z => z.offen)
+    ? "alle einklappen" : "alle ausklappen";
 }
 
 // Einen Baustein oder eine Kameraeinstellung in die zuletzt angeklickte
@@ -1562,6 +1602,16 @@ function vorschlagAlle(i) {
   });
   zeigeSelbstszenen();
   gsMerken();
+}
+
+function szeneKlappen(i) {
+  gsZeilen[i].offen = !gsZeilen[i].offen;
+  zeigeSelbstszenen();
+}
+
+function alleKlappen(offen) {
+  gsZeilen.forEach(z => z.offen = offen);
+  zeigeSelbstszenen();
 }
 
 // Die Reihenfolge aendern. Eine Szene an die falsche Stelle zu schreiben
@@ -2059,6 +2109,13 @@ async function zeigeGliederung(prompts) {
   }).then(r => r.json()).catch(() => null);
   if (!g) return;
   GESCHICHTE = {...g, prompts};
+  // Die Prosa gehoert zur Szene, nicht zum Prompt: dort laesst sie sich
+  // lesen und aendern, und sie ueberlebt das naechste Prompt-Schreiben.
+  prompts.forEach(p => {
+    const z = gsZeilen[(p.nr || 0) - 1];
+    if (z && (p.prosa || "").trim() && !(z.prosa || "").trim()) z.prosa = p.prosa;
+  });
+  zeigeSelbstszenen();
   gsMerken();
   const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
   $("gsSzenen").innerHTML = prompts.map((p, i) => `
