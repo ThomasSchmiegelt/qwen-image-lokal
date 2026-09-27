@@ -1110,8 +1110,8 @@ let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
 function zeigeSelbstszenen() {
   $("gsSelbst").innerHTML = gsZeilen.map((z, i) => `
     <div class="selbstszene"><span class="nr">${i + 1}</span>
-      <input class="gszeile" data-i="${i}" value="${esc(z.text)}"
-        placeholder="was in diesem Bild zu sehen ist">
+      <textarea class="gszeile" data-i="${i}" rows="2"
+        placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
       <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
         title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
       <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
@@ -1136,8 +1136,9 @@ function zeigeSelbstszenen() {
           ).join(" · ") + `</p>`
         : "");
   $("gsSelbst").querySelectorAll(".gszeile").forEach(el => {
-    el.oninput = () => gsZeilen[+el.dataset.i].text = el.value;
+    el.oninput = () => { gsZeilen[+el.dataset.i].text = el.value; mitwachsen(el); };
     el.onfocus = () => gsLetzteNr = +el.dataset.i;
+    mitwachsen(el);
   });
   $("gsSelbst").querySelectorAll(".gsbilder").forEach(el => {
     el.oninput = () => {
@@ -1147,6 +1148,16 @@ function zeigeSelbstszenen() {
   });
   gsSumme();
   gsMerken();
+}
+
+// Ein Feld waechst mit dem Text, schrumpft aber nie unter das, was man ihm
+// von Hand gegeben hat: wer es groesser gezogen hat, will es so behalten.
+function mitwachsen(el) {
+  // Die jetzige Hoehe zuerst merken: hat der Benutzer das Feld von Hand
+  // groesser gezogen, soll das Tippen es nicht wieder zusammenziehen.
+  const jetzt = el.offsetHeight;
+  el.style.height = "auto";
+  el.style.height = Math.max(el.scrollHeight, jetzt, 46) + "px";
 }
 
 function gsSumme() {
@@ -1241,10 +1252,31 @@ function gsStand() {
 function gsMerken() {
   if (!GSAKTUELL) return;
   clearTimeout(gsSpeicherUhr);
-  gsSpeicherUhr = setTimeout(() => {
-    gsRuf({tu: "speichern", schluessel: GSAKTUELL, stand: gsStand()});
-  }, 1200);
+  $("gsStand").textContent = "· ungespeichert";
+  gsSpeicherUhr = setTimeout(gsJetztSpeichern, 1200);
 }
+
+// Von Hand speichern. Die Nebenbei-Sicherung laeuft weiter -- aber wer eine
+// Stunde an einem Inhaltsverzeichnis sitzt, will einmal selbst den Knopf
+// druecken und schwarz auf weiss lesen, dass es liegt.
+async function gsJetztSpeichern() {
+  if (!GSAKTUELL) {
+    say("Erst eine Geschichte anlegen.", "err");
+    return false;
+  }
+  clearTimeout(gsSpeicherUhr);
+  const g = await gsRuf({tu: "speichern", schluessel: GSAKTUELL, stand: gsStand()});
+  if (!g) { $("gsStand").textContent = "· nicht gespeichert"; return false; }
+  const uhr = new Date().toLocaleTimeString("de-DE",
+    {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+  $("gsStand").textContent = `· gespeichert ${uhr}`;
+  return true;
+}
+
+$("gsSpeichern").onclick = async e => {
+  e.preventDefault();
+  if (await gsJetztSpeichern()) say("Geschichte gespeichert.", "ok");
+};
 
 async function gsListe(waehle) {
   const g = await gsRuf({tu: "liste"});
@@ -1999,6 +2031,56 @@ async function programmBeenden() {
     + "<code>./start.sh</code> starten.</p></section></main>";
   window.close();
 }
+
+
+// ---------- Splitter zwischen den beiden Spalten ----------
+// Die Breite steckt in --links auf <main> und bleibt im Browser stehen.
+// Sie gehoert dem Bildschirm, nicht dem Projekt, deshalb localStorage und
+// nicht der Server.
+const SPLIT_STD = 430, SPLIT_MIN = 320;
+
+function splitSetzen(px) {
+  const platz = document.querySelector("main").clientWidth;
+  // Rechts muessen mindestens 300 px bleiben, sonst ist die Galerie ein
+  // Streifen und man kommt nicht mehr zurueck.
+  const max = Math.max(SPLIT_MIN, platz - 320);
+  const breit = Math.round(Math.min(Math.max(px, SPLIT_MIN), max));
+  document.querySelector("main").style.setProperty("--links", breit + "px");
+  try { localStorage.setItem("splitter", breit); } catch (e) { /* egal */ }
+}
+
+(function splitterAufbauen() {
+  const griff = $("splitter");
+  if (!griff) return;
+  try {
+    const gemerkt = parseInt(localStorage.getItem("splitter"), 10);
+    if (gemerkt > 0) splitSetzen(gemerkt);
+  } catch (e) { /* ohne Speicher eben die Vorgabe */ }
+
+  let zieht = false;
+  griff.addEventListener("pointerdown", e => {
+    zieht = true;
+    griff.setPointerCapture(e.pointerId);
+    griff.classList.add("zieht");
+    document.body.classList.add("zieht");
+    e.preventDefault();
+  });
+  griff.addEventListener("pointermove", e => {
+    if (!zieht) return;
+    const links = document.querySelector("main").getBoundingClientRect().left;
+    splitSetzen(e.clientX - links);
+  });
+  const fertig = e => {
+    if (!zieht) return;
+    zieht = false;
+    try { griff.releasePointerCapture(e.pointerId); } catch (err) { /* egal */ }
+    griff.classList.remove("zieht");
+    document.body.classList.remove("zieht");
+  };
+  griff.addEventListener("pointerup", fertig);
+  griff.addEventListener("pointercancel", fertig);
+  griff.addEventListener("dblclick", () => splitSetzen(SPLIT_STD));
+})();
 
 
 fetch("/api/status").then(r => r.json()).then(s => {

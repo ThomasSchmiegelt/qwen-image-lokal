@@ -154,7 +154,9 @@
       <p class="hint">
         <a href="#" id="gsNeu">+ neue Geschichte</a> ·
         <a href="#" id="gsBandNeu">+ Band</a> ·
-        <a href="#" id="gsWeg">löschen</a><br>
+        <a href="#" id="gsSpeichern"><b>jetzt speichern</b></a> ·
+        <a href="#" id="gsWeg">löschen</a>
+        <span id="gsStand"></span><br>
         Die Vorgaben — Stil, Welt, Wirklichkeitsgrad — gehören der Geschichte
         und gelten für alle Bände. Ein neuer Band kennt die Kurzfassungen der
         vorigen und knüpft daran an.</p>
@@ -164,7 +166,7 @@
         sagt, ob es in der Wirklichkeit oder einer erfundenen Welt spielt —
         das muss es wissen, sonst biegt es Drachen weg.</p>
       <label for="gsIdee">Idee</label>
-      <textarea id="gsIdee" style="min-height:52px"
+      <textarea id="gsIdee" rows="4" style="min-height:92px"
         placeholder="Ein Drache bewacht eine Bibliothek und ein Mädchen will ein Buch ausleihen"></textarea>
       <label for="gsFiktion">Wirklichkeitsgrad</label>
       <div class="regler">
@@ -180,7 +182,7 @@
       <p class="hint"><a href="#" id="gsUmreissen">Umreißen lassen</a>
         — füllt Kurzfassung, Stil, Welt und einen Vorschlag fürs
         Inhaltsverzeichnis.</p>
-      <textarea id="gsKurz" style="min-height:52px"
+      <textarea id="gsKurz" rows="6" style="min-height:130px"
         placeholder="Kurzfassung — entsteht beim Umreißen, änderbar"></textarea>
 
       <div class="axis">
@@ -548,6 +550,8 @@
       den Reiter. Nur dieser Knopf beendet das Programm — den Reiter einfach
       zuzumachen lässt den Server weiterlaufen, damit nichts verlorengeht.</p>
   </section>
+
+  <div id="splitter" title="Breite ziehen — Doppelklick setzt zurück"></div>
 
   <section class="panel">
     <div class="stage" id="stage"><p>Noch kein Bild erzeugt.</p></div>

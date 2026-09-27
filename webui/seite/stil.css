@@ -31,8 +31,28 @@
   header span { color: var(--muted); font-size: 12px; }
   /* Die linke Spalte traegt inzwischen acht Reiter samt Bausteinliste und
      Lueckenfeldern -- 370px waren dafuer zu eng. */
-  main { display: grid; grid-template-columns: 430px 1fr; gap: 16px; padding: 16px; align-items: start; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* Die Breite der linken Spalte steht in --links und laesst sich am
+     Splitter ziehen. Der Splitter ist eine eigene Spalte, damit das Ziehen
+     nichts verschiebt: die Spalten sind links, Griff, rechts. */
+  main {
+    display: grid; grid-template-columns: var(--links, 430px) 10px 1fr;
+    gap: 6px; padding: 16px; align-items: start;
+  }
+  #splitter {
+    position: sticky; top: 16px; height: calc(100vh - 100px);
+    border-radius: 5px; cursor: col-resize; background: transparent;
+  }
+  #splitter::before {
+    content: ""; display: block; width: 2px; height: 100%; margin: 0 auto;
+    background: var(--line); border-radius: 1px; transition: background .12s;
+  }
+  #splitter:hover::before, #splitter.zieht::before { background: var(--accent); }
+  /* Beim Ziehen darf der Zeiger nicht im Text haengenbleiben. */
+  body.zieht { cursor: col-resize; user-select: none; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    #splitter { display: none; }
+  }
 
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .chatbar { display: flex; gap: 6px; align-items: stretch; }
@@ -304,9 +324,26 @@
 .noten .nr { color: var(--muted); font-size: 12px; }
 
 /* Szenen von Hand: eine Zeile je Bild, mit Nummer und Kreuz. */
-.selbstszene { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em; }
-.selbstszene input { flex: 1; }
+/* Wann zuletzt gespeichert wurde, steht neben den Knoepfen -- leise, aber
+   sichtbar. Ohne das weiss man bei einer Sicherung nebenbei nie, ob sie lief. */
+#gsStand { color: var(--muted); font-size: 11.5px; margin-left: 8px; }
+
+.selbstszene { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 5px; }
+.selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em;
+                   padding-top: 8px; }
+/* Die Szenenzeile ist ein Textfeld, kein einzeiliges Eingabefeld: eine Szene
+   mit zwei Bausteinen und einer Kameraeinstellung passt sonst nicht hinein,
+   ohne dass man im Feld hin- und herscrollt. Es waechst mit und laesst sich
+   am unteren Rand groesser ziehen. */
+.selbstszene textarea {
+  flex: 1; min-height: 46px; resize: vertical; line-height: 1.45;
+  padding: 6px 8px; overflow: hidden;
+}
+.selbstszene .gsbilder { width: 4.4em; flex: none; }
+.selbstszene .knopf {
+  cursor: pointer; color: var(--muted); padding: 8px 4px 0; user-select: none;
+}
+.selbstszene .knopf:hover { color: #e7eaf0; }
 
 /* Gespraechsverlauf der Freitexteingabe: was gesagt wurde und was daraus
    wurde -- damit ein Nachsatz nachvollziehbar bleibt. */
