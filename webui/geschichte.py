@@ -114,7 +114,8 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     return ", ".join([sauber[0]] + [bausteine._klein(t) for t in sauber[1:]])
 
 
-def zu_bloecken(szenen: list[dict], teile: list[dict]) -> list[dict]:
+def zu_bloecken(szenen: list[dict], teile: list[dict],
+                eigene: dict | None = None) -> list[dict]:
     """Die Szenen als Bloecke, wie der Ablauf-Reiter sie erwartet.
 
     Ein Block je Stil: aufeinanderfolgende Szenen im selben Stil teilen sich
@@ -131,7 +132,7 @@ def zu_bloecken(szenen: list[dict], teile: list[dict]) -> list[dict]:
         # Die Kameraeinstellung steht hinter der Szene: erst was zu sehen
         # ist, dann von wo aus. Ein Paar ergibt zwei Bilder.
         fassungen = mit_einstellung(text, szene.get("einstellung") or "",
-                                    szene.get("spiegelung") or "")
+                                    szene.get("spiegelung") or "", eigene)
         stil = szene.get("stil") or ""
         name = STYLES[stil][0] if stil in STYLES else "Szene"
         if bloecke and bloecke[-1]["stil"] == stil:
@@ -356,11 +357,15 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
 # \name, dahinter in Klammern, was sich spiegeln soll:
 #   \augen(das brennende Schiff)
 EINSTELLUNG = re.compile(
-    r"\\([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,29})(?:\(([^)]{1,120})\))?")
+    r"\\([A-Za-zÄÖÜäöüß0-9][\wÄÖÜäöüß-]{0,29})(?:\(([^)]{1,120})\))?")
 
 
-def einstellung_von(zeile: str) -> tuple[str, str, str]:
+def einstellung_von(zeile: str, eigene: dict | None = None) -> tuple[str, str, str]:
     r"""Trennt \Name von der Zeile. Zurueck kommt (Text ohne, Schluessel).
+
+    `eigene` sind die gemerkten Prompts des Projekts, unter Name und Nummer:
+    \augen-makro oder \7 holt einen davon. Die festen Einstellungen gehen
+    vor -- sie heissen schon so, seit es die gemerkten noch nicht gab.
 
     Ein unbekannter Name bleibt stehen -- wie bei den Bausteinen soll nichts
     stillschweigend verschwinden.
@@ -370,7 +375,7 @@ def einstellung_von(zeile: str) -> tuple[str, str, str]:
     def ersatz(treffer):
         nonlocal gefunden, angabe
         name = treffer.group(1).lower()
-        if name in EINSTELLUNGEN and not gefunden:
+        if (name in EINSTELLUNGEN or name in (eigene or {})) and not gefunden:
             gefunden = name
             angabe = (treffer.group(2) or "").strip()
             return ""
@@ -380,7 +385,8 @@ def einstellung_von(zeile: str) -> tuple[str, str, str]:
     return re.sub(r"\s{2,}", " ", text).strip(), gefunden, angabe
 
 
-def zeilen_lesen(roh: list[dict], alle: list[dict]) -> list[dict]:
+def zeilen_lesen(roh: list[dict], alle: list[dict],
+                 eigene: dict | None = None) -> list[dict]:
     r"""Das Inhaltsverzeichnis, wie es die Seite schickt, in fertige Zeilen.
 
     Die Seite fuehrt je Zeile nur den getippten Text und die Bildzahl. Alles
@@ -392,7 +398,7 @@ def zeilen_lesen(roh: list[dict], alle: list[dict]) -> list[dict]:
     for z in roh:
         # Erst die Kameraeinstellung heraus, dann die Bausteine: das
         # Sprachmodell soll die Anordnung nicht auch noch beschreiben.
-        roh_text, einst, spieg = einstellung_von(str(z.get("text") or ""))
+        roh_text, einst, spieg = einstellung_von(str(z.get("text") or ""), eigene)
         text, teile = verweise(roh_text, alle)
         if not text:
             continue
@@ -412,17 +418,31 @@ VORRANG = ("The framing of this picture is fixed by the shot described above "
            "even if that means the full figure is not visible.")
 
 
-def mit_einstellung(text: str, schluessel: str, angabe: str = "") -> list[str]:
-    """Die Szene mit der Einstellung. Ein Paar ergibt zwei Fassungen.
+def mit_einstellung(text: str, schluessel: str, angabe: str = "",
+                    eigene: dict | None = None) -> list[str]:
+    r"""Die Szene mit der Einstellung. Ein Paar ergibt zwei Fassungen.
 
     `angabe` fuellt die Luecke der Einstellung -- bei einem Blick in die
     Augen also das, was sich darin spiegelt. Ohne Angabe gilt die Vorgabe.
+
+    Steht hinter dem \ ein gemerkter Prompt statt einer festen Einstellung,
+    tritt der an dessen Stelle: ein Prompt, der sich einmal bewaehrt hat,
+    soll sich genauso aufrufen lassen wie "augen" oder "spiegel".
     """
     e = EINSTELLUNGEN.get(schluessel)
+    if not e and schluessel in (eigene or {}):
+        e = {"text": eigene[schluessel]}
     if not e:
         return [text]
     werte = dict(e.get("vorgabe") or {})
-    if angabe and werte:
+    # Ein gemerkter Prompt bringt keine Vorgaben mit. Hat er trotzdem eine
+    # Luecke, fuellt die Angabe sie -- so laesst sich ein guter Prompt mit
+    # wechselndem Inhalt wiederverwenden.
+    if not werte and angabe:
+        offen = re.findall(r"\{(\w+)\}", e["text"])
+        if offen:
+            werte = {offen[0]: angabe}
+    elif angabe and werte:
         werte[next(iter(werte))] = angabe
 
     def bauen(anordnung):

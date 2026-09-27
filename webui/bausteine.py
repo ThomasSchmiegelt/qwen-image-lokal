@@ -232,6 +232,34 @@ def zusammensetzen(teile: list[dict], werte: dict | None = None) -> str:
     return ", ".join([stuecke[0]] + [_klein(s) for s in stuecke[1:]]) if stuecke else ""
 
 
+# Das Bild zu einem Baustein ist ein Musterbild, keine Szene: es zeigt, wen
+# oder was man spaeter einsetzt. Deshalb ganz und vor nichts -- ein Baustein,
+# der halb hinter einem Tisch steht, taugt weder zum Wiedererkennen noch als
+# Vorlage fuer ein Folgebild.
+FREISTELLEN = {
+    "person": ("full body from head to toe, the whole figure inside the frame "
+               "with room above and below, standing upright and facing the "
+               "camera, on a plain seamless neutral grey background, even "
+               "studio lighting, no room, no furniture, no scenery, no props"),
+    "gegenstand": ("the entire object inside the frame, seen at a slight "
+                   "angle, on a plain seamless neutral grey background, even "
+                   "studio lighting, no surroundings, no hands, no props"),
+}
+
+
+def freigestellt(prompt: str, art: str) -> str:
+    """Den Prompt eines Musterbildes vor einen neutralen Hintergrund stellen.
+
+    Nur Personen und Gegenstaende. Ein Ort *ist* der Hintergrund -- ihn
+    freizustellen ergibt ein leeres Bild.
+    """
+    zusatz = FREISTELLEN.get(art)
+    prompt = (prompt or "").strip().rstrip(".")
+    if not zusatz or not prompt:
+        return prompt
+    return f"{prompt}, {zusatz}"
+
+
 # --- Katalog ueber alle Projekte -----------------------------------------
 def katalog() -> list[dict]:
     """Alle Bausteine aller Projekte, jeder mit seiner Herkunft.

@@ -32,6 +32,7 @@ from auftraege import (  # noqa: E402
 )
 import projekte  # noqa: E402
 import bausteine  # noqa: E402
+import bewertung  # noqa: E402
 import baender  # noqa: E402
 import geschichte  # noqa: E402
 import sprache as chat  # noqa: E402
@@ -136,6 +137,15 @@ class Handler(BaseHTTPRequestHandler):
         puffer = io.BytesIO()
         roh.convert("RGB").save(puffer, format="PNG")
         return puffer.getvalue()
+
+    @staticmethod
+    def _prompt_im_bild(pfad: str) -> str:
+        """Der Prompt aus dem PNG. Jedes erzeugte Bild traegt ihn bei sich."""
+        try:
+            with Image.open(pfad) as im:
+                return str(im.text.get("qwen_prompt") or "")
+        except (OSError, ValueError):
+            return ""
 
     def _body(self):
         """Der JSON-Rumpf der Anfrage, oder None wenn er nicht lesbar ist."""
@@ -251,6 +261,12 @@ class Handler(BaseHTTPRequestHandler):
                  "bloecke": v["bauen"]("auto", None)}
                 for k, v in ablauf.ABLAEUFE.items()]
             return self._json(200, info)
+
+        if path == "/api/bewertung":
+            # Die Noten des Projekts, dazu die daraus gemerkten Prompts.
+            projekt = projekte.aktiv()
+            return self._json(200, {**bewertung.lesen(projekt),
+                                    "gemerkte": bewertung.gemerkte(projekt)})
 
         if path == "/api/gallery":
             files = sorted(
@@ -401,7 +417,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "ungueltiges JSON"})
             projekt = projekte.aktiv()
             alle = bausteine.liste(projekt)
-            zeilen = geschichte.zeilen_lesen(params.get("zeilen") or [], alle)
+            zeilen = geschichte.zeilen_lesen(params.get("zeilen") or [], alle,
+                                             bewertung.nach_namen(projekt))
             if not zeilen:
                 return self._json(400, {"error": "Keine Szene im Inhaltsverzeichnis"})
             auftrag = einreihen("prompts", {
@@ -430,15 +447,16 @@ class Handler(BaseHTTPRequestHandler):
             # Dieselbe Zerlegung wie beim Prompt-Schreiben. Frueher stand hier
             # eine eigene, die auf Felder wartete, die die Seite gar nicht
             # schickt -- die Kameraeinstellung fiel damit still unter den Tisch.
+            gemerkt = bewertung.nach_namen(projekt)
             zeilen = geschichte.zeilen_lesen(params.get("zeilen") or [],
-                                             list(alle.values()))
+                                             list(alle.values()), gemerkt)
             stil = str(params.get("stil") or "")
             szenen = geschichte.gliederung_zu_szenen(
                 zeilen, params.get("prompts") or [], list(alle.values()), stil)
             benutzt = [alle[k] for k in {s["person"] for s in szenen} | \
                        {s["ort"] for s in szenen} | {s["gegenstand"] for s in szenen}
                        if k in alle]
-            bloecke = geschichte.zu_bloecken(szenen, benutzt)
+            bloecke = geschichte.zu_bloecken(szenen, benutzt, gemerkt)
             je_szene = [int(z.get("bilder") or 1)
                         for z in (params.get("zeilen") or [])]
             if any(n > 1 for n in je_szene):
@@ -546,8 +564,14 @@ class Handler(BaseHTTPRequestHandler):
             if was == "zusammensetzen":
                 alle = {b["id"]: b for b in bausteine.liste(projekt)}
                 teile = [alle[k] for k in (params.get("ids") or []) if k in alle]
+                fertig = bausteine.zusammensetzen(teile, params.get("werte") or {})
+                # Das Musterbild eines einzelnen Bausteins zeigt ihn ganz und
+                # vor nichts. Sobald mehrere zusammenkommen, ist es eine Szene
+                # und kein Muster mehr.
+                if params.get("freistellen") and len(teile) == 1:
+                    fertig = bausteine.freigestellt(fertig, teile[0].get("art"))
                 return self._json(200, {
-                    "prompt": bausteine.zusammensetzen(teile, params.get("werte") or {}),
+                    "prompt": fertig,
                     # Dieselbe Mischung mit offenen Luecken -- so wird sie als
                     # Szene gespeichert und bleibt wiederverwendbar.
                     "vorlage": bausteine.vorlage(teile)})
@@ -621,7 +645,33 @@ class Handler(BaseHTTPRequestHandler):
                 os.remove(ziel)
             except OSError as exc:
                 return self._json(500, {"error": f"liess sich nicht loeschen: {exc}"})
-            return self._json(200, {"ok": True, "file": os.path.basename(ziel)})
+            # Die Note gehoert zum Bild. Ein gemerkter Prompt ueberlebt es
+            # aber -- der steckt dann in bewertung.json und nicht mehr im PNG.
+            name = os.path.basename(ziel)
+            if not bewertung.lesen(projekte.aktiv())["bilder"].get(name, {}).get("name"):
+                bewertung.loeschen(projekte.aktiv(), name)
+            return self._json(200, {"ok": True, "file": name})
+
+        if path == "/api/bewertung":
+            # Note, Notiz und Name eines Bildes. Der Prompt wird aus dem PNG
+            # mitgenommen: das Bild darf spaeter weg, der gute Prompt bleibt.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            projekt = projekte.aktiv()
+            if params.get("tu") == "verbessern":
+                return self._json(200, bewertung.verbessern(
+                    projekt, params.get("was") or "", params.get("text") or ""))
+            datei = os.path.basename(str(params.get("file") or ""))
+            if not self._output_path(datei):
+                return self._json(404, {"error": "Bild nicht gefunden"})
+            prompt = str(params.get("prompt") or "")
+            if not prompt and params.get("name"):
+                prompt = self._prompt_im_bild(self._output_path(datei))
+            return self._json(200, bewertung.setzen(
+                projekt, datei, note=params.get("note"),
+                notiz=params.get("notiz"), name=params.get("name"),
+                prompt=prompt))
 
         if path == "/api/shutdown":
             if not self._nur_hier():

@@ -284,6 +284,25 @@
 }
 .grid.waehlen img { cursor: copy; }
 
+/* Noten: auf der Kachel nur so viele Sterne, wie vergeben sind -- eine Reihe
+   leerer Sterne auf jedem Bild waere Rauschen. Gross und anklickbar sind sie
+   erst unter dem angezeigten Bild. */
+.kachel .note {
+  position: absolute; left: 2px; bottom: 4px; font-size: 10px;
+  color: #ffd166; text-shadow: 0 0 3px #000; letter-spacing: -1px;
+}
+.noten { display: flex; align-items: center; gap: 8px; margin-top: 8px;
+         flex-wrap: wrap; }
+.sterne { display: flex; gap: 1px; font-size: 19px; line-height: 1; }
+.sterne span { cursor: pointer; color: var(--line); }
+.sterne span.voll { color: #ffd166; }
+.sterne:hover span { color: #ffd166; }
+.sterne span:hover ~ span { color: var(--line); }
+.noten input { padding: 4px 6px; font-size: 12px; }
+.noten input.name { width: 11em; }
+.noten input.notiz { flex: 1; min-width: 12em; }
+.noten .nr { color: var(--muted); font-size: 12px; }
+
 /* Szenen von Hand: eine Zeile je Bild, mit Nummer und Kreuz. */
 .selbstszene { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em; }

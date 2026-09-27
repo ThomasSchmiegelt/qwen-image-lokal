@@ -910,7 +910,8 @@ $("bsBild").onclick = async e => {
   await bausteineHolen();
   // Mit den Vorgaben gefuellt -- das Bild soll den Baustein zeigen, wie er
   // gemeint ist, nicht mit offenen Luecken.
-  const g = await bausteinRuf({tu: "zusammensetzen", ids: [b.id], werte: b.variablen});
+  const g = await bausteinRuf({tu: "zusammensetzen", ids: [b.id],
+                               werte: b.variablen, freistellen: true});
   if (!g) return;
   await einreihenEinfach({prompt: g.prompt, baustein: b.id, aspect: "3:4"});
   // Aufraeumen nicht vergessen: bleibt die Kennung stehen, ueberschreibt der
@@ -1791,7 +1792,8 @@ async function show(file) {
     + (hasGimp ? ` · <a href="#" onclick="openInGimp('${file}');return false">In GIMP öffnen</a>` : "")
     + `</div>`
     + (tags ? `<div class="tags">${tags}</div>` : "")
-    + (m.prompt ? `<div style="margin-top:7px"><code>${esc(m.prompt)}</code></div>` : "");
+    + (m.prompt ? `<div style="margin-top:7px"><code>${esc(m.prompt)}</code></div>` : "")
+    + sterneZeigen(file);
 }
 
 // Öffnet das Bild in GIMP auf dem Rechner, auf dem der Server läuft.
@@ -1870,12 +1872,83 @@ $("filmBauen").onclick = async e => {
 async function loadGallery() {
   const antwort = await fetch("/api/gallery").then(r => r.json()).catch(() => null);
   if (!antwort) return;
-  $("gallery").innerHTML = antwort.files.map(f =>
-    `<figure class="kachel" data-f="${f}"><img src="/outputs/${f}" title="${f}"
+  await notenHolen();
+  $("gallery").innerHTML = antwort.files.map(f => {
+    const n = (NOTEN[f] || {}).note || 0;
+    return `<figure class="kachel" data-f="${f}"><img src="/outputs/${f}" title="${f}"
        alt="${f}" onclick="${filmModus ? `filmWaehlen('${f}')` : `show('${f}')`}">`
-    + (filmModus ? "" : `<b onclick="loeschen('${f}')" title="Löschen">×</b>`)
-    + `</figure>`).join("");
+      + (filmModus ? "" : `<b onclick="loeschen('${f}')" title="Löschen">×</b>`)
+      + (n ? `<span class="note">${"★".repeat(n)}</span>` : "")
+      + `</figure>`;
+  }).join("");
   if (filmModus) filmZeigen();
+}
+
+// ---------- Noten ----------
+// Bewertet wird, damit gute Prompts wiederkommen: ein Bild mit Namen laesst
+// sich in einer Szene mit \Name wieder aufrufen. Alles liegt im Projekt in
+// bewertung.json -- lesbar, zum Weiterreichen.
+let NOTEN = {}, GEMERKTE = [];
+
+async function notenHolen() {
+  const b = await fetch("/api/bewertung").then(r => r.json()).catch(() => null);
+  if (!b) return;
+  NOTEN = b.bilder || {};
+  GEMERKTE = b.gemerkte || [];
+}
+
+function sterneZeigen(datei) {
+  const e = NOTEN[datei] || {};
+  const n = e.note || 0;
+  return `<div class="noten">
+    <div class="sterne">${[1, 2, 3, 4, 5].map(i =>
+      `<span class="${i <= n ? "voll" : ""}" title="${i} von 5"
+         onclick="benoten('${datei}', ${i === n ? 0 : i})">★</span>`).join("")}</div>
+    <input class="name" placeholder="Prompt merken als …"
+      value="${esc(e.name || "")}" onchange="merken('${datei}', this.value)">
+    ${e.nr ? `<span class="nr">\\${esc(e.name)} oder \\${e.nr}</span>` : ""}
+    <input class="notiz" placeholder="Was daran gut oder schlecht ist"
+      value="${esc(e.notiz || "")}" onchange="notieren('${datei}', this.value)">
+  </div>`;
+}
+
+async function notenRuf(daten) {
+  const res = await fetch("/api/bewertung", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(daten)
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    say(err.error || "Die Bewertung ließ sich nicht speichern.", "err");
+    return null;
+  }
+  return res.json();
+}
+
+async function benoten(datei, note) {
+  const e = await notenRuf({file: datei, note});
+  if (e === null) return;
+  NOTEN[datei] = e;
+  if ($("stage").dataset.file === datei) show(datei);
+  loadGallery();
+}
+
+async function merken(datei, name) {
+  const e = await notenRuf({file: datei, name});
+  if (e === null) return;
+  NOTEN[datei] = e;
+  await notenHolen();
+  if (e.name) {
+    say(`Gemerkt. In einer Szene mit \\${e.name} oder \\${e.nr} aufrufbar.`, "ok");
+  } else {
+    say("Der Name ist weg, der Prompt damit auch.", "ok");
+  }
+  if ($("stage").dataset.file === datei) show(datei);
+}
+
+async function notieren(datei, notiz) {
+  const e = await notenRuf({file: datei, notiz});
+  if (e !== null) NOTEN[datei] = e;
 }
 
 // Endgueltig, ohne Papierkorb -- deshalb die Rueckfrage.
