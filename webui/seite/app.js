@@ -551,6 +551,43 @@ async function starteDemo() {
 // ---------- Start ----------
 function say(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
 
+// ---------- Puls ----------
+// Ein Sprachmodell braucht fuer einen Prompt fuenf bis dreissig Sekunden.
+// Stille vor einem Knopf sieht in dieser Zeit aus wie ein Fehler. Also sagt
+// die Zeile mit, was der Server gerade tut, und zaehlt die Sekunden mit --
+// auch fuer die Aufrufe, die nicht durch die Warteschlange gehen.
+let pulsUhr = null, pulsSeit = 0, pulsText = "";
+
+function pulsAn(text) {
+  pulsAus();
+  pulsText = text;
+  pulsSeit = Date.now();
+  $("fill").parentElement.classList.add("puls");
+  const schlag = async () => {
+    const s = Math.round((Date.now() - pulsSeit) / 1000);
+    let was = pulsText;
+    // Was der Server von sich aus meldet, geht vor: "Baustein 2 von 5" sagt
+    // mehr als "wird geschrieben".
+    const st = await fetch("/api/status").then(r => r.json()).catch(() => null);
+    if (st && st.stage) {
+      was = st.stage;
+      const f = st.fortschritt || {};
+      if (f.von) $("fill").style.width = (100 * f.ist / f.von) + "%";
+    }
+    if (pulsUhr) say(`${was} · ${s} s`);
+  };
+  schlag();
+  pulsUhr = setInterval(schlag, 1000);
+}
+
+function pulsAus() {
+  if (!pulsUhr) return;
+  clearInterval(pulsUhr);
+  pulsUhr = null;
+  $("fill").parentElement.classList.remove("puls");
+  $("fill").style.width = "0";
+}
+
 // Der Knopf zeigt den Zustand mit: gelb waehrend der Berechnung, kurz gruen
 // wenn fertig, danach wieder normal.
 function buttonState(state) {
@@ -811,6 +848,8 @@ function zeigeBausteine(liste) {
           <span class="art">${esc(label(b.art))}</span><br>
           <code>${esc(b.prompt)}</code></div>
         <span class="knopf" onclick="bausteinLaden('${b.id}')" title="bearbeiten">✎</span>
+        ${b.bild ? "" : `<span class="knopf" onclick="bausteinBild('${b.id}')"
+            title="Musterbild dazu erzeugen">▣</span>`}
         <span class="knopf" onclick="bausteinWeg('${b.id}')" title="löschen">×</span>
       </div>`).join("")
     : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
@@ -841,11 +880,24 @@ function lueckenWerte(wohin) {
   return werte;
 }
 
+// Diese Aufrufe gehen ans Sprachmodell und dauern. Die uebrigen -- speichern,
+// loeschen, zusammensetzen -- sind sofort da und brauchen keinen Puls.
+const LANGSAM = {
+  prompt: "Der Prompt wird geschrieben",
+  teilprompt: "Der Prompt wird geschrieben",
+  luecken: "Vorschläge werden gesucht",
+  empfehlen: "Die Gliederung wird gelesen",
+  vorschlagen: "Die Bausteine werden geschrieben",
+};
+
 async function bausteinRuf(rumpf) {
+  const puls = LANGSAM[rumpf.tu];
+  if (puls) pulsAn(puls);
   const res = await fetch("/api/baustein", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify(rumpf)
   }).catch(() => null);
+  if (puls) pulsAus();
   if (!res || !res.ok) {
     const err = res ? await res.json().catch(() => ({})) : {};
     say(err.error || "Das hat nicht geklappt.", "err");
@@ -944,6 +996,18 @@ $("bsBild").onclick = async e => {
   bausteinLeeren();
   say(`„${b.name}“ gespeichert, Bild dazu eingereiht.`, "ok");
 };
+
+// Bausteine entstehen zuerst ohne Bild -- erst der Text, dann sieht man, ob
+// er taugt. Das Musterbild kommt hinterher, je Baustein einzeln.
+async function bausteinBild(id) {
+  const b = BAUSTEINE.find(x => x.id === id);
+  if (!b) return;
+  const g = await bausteinRuf({tu: "zusammensetzen", ids: [id],
+                               werte: b.variablen, freistellen: true});
+  if (!g) return;
+  await einreihenEinfach({prompt: g.prompt, baustein: id, aspect: "3:4"});
+  say(`Bild zu „${b.name}“ eingereiht.`, "ok");
+}
 
 $("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
 
@@ -1954,9 +2018,16 @@ function poll() {
       // Was der Torwaechter gestrichen hat, soll man sehen.
       $("torNote").textContent = (s.tor || []).length
         ? "Aus dem Prompt gestrichen: " + s.tor.join(" · ") : "";
-      const perImage = s.total ? s.step / s.total : 0;
-      $("fill").style.width =
-        (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
+      const f = s.fortschritt || {};
+      if (f.von && !done) {
+        // Ein Auftrag ohne Bilder -- Prompts schreiben, umreissen. Der Balken
+        // zaehlt dann die Szenen, sonst staende er die ganze Zeit auf null.
+        $("fill").style.width = (100 * f.ist / f.von) + "%";
+      } else {
+        const perImage = s.total ? s.step / s.total : 0;
+        $("fill").style.width =
+          (100 * (done + (s.busy ? perImage : 0)) / Math.max(s.count, 1)) + "%";
+      }
       paintSeries(s.results || [], s.count, s.image);
       zeigeWarteschlange(s);
       zeigeExpose(s.expose);

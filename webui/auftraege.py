@@ -53,7 +53,22 @@ def ziel() -> str:
 engine = Engine()
 # Ergebnisse des laufenden bzw. zuletzt gelaufenen Auftrags.
 current = {"files": [], "error": None, "translated": {}, "stage": "",
-           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": [], "gliederung": [], "expose": {}}
+           "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": [],
+           "gliederung": [], "expose": {},
+           # Zaehlstand fuer den Balken, wenn keine Bilder entstehen: das
+           # Sprachmodell schreibt Prompt 3 von 8, und das soll man sehen.
+           "fortschritt": {"ist": 0, "von": 0}}
+
+
+def melden(text: str, ist: int = 0, von: int = 0) -> None:
+    """Sagen, woran gerade gearbeitet wird.
+
+    Auch die Aufrufe, die nicht in der Warteschlange laufen, schreiben
+    hierher -- eine halbe Minute Stille vor einem Knopf sieht aus wie ein
+    Fehler, auch wenn alles in Ordnung ist.
+    """
+    current["stage"] = text
+    current["fortschritt"] = {"ist": ist, "von": von}
 
 # Die Warteschlange. Wartende Auftraege halten ihre Referenzbilder als
 # Datenzeilen im Speicher -- bei einer Handvoll sind das ein paar Megabyte,
@@ -211,7 +226,9 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
         titel = (auftrag["titel"] if len(alle) == 1
                  else f"{len(alle)} Auftraege zusammen")
         current.update(files=[], error=None, translated={}, video=None,
-                       gelesen={}, tor=[], gliederung=[], expose={}, stage="wird vorbereitet",
+                       gelesen={}, tor=[], gliederung=[], expose={},
+                       stage="wird vorbereitet",
+                       fortschritt={"ist": 0, "von": 0},
                        nummer=auftrag["nummer"], titel=titel)
         if len(alle) == 1:
             laeufe = {"demo": run_demo, "prompts": run_prompts,
@@ -453,14 +470,14 @@ def run_expose(params: dict) -> None:
     jede Szene.
     """
     try:
-        current["stage"] = "Grosses Sprachmodell wird geladen"
+        melden("Grosses Sprachmodell wird geladen")
         erg = chat.expose(params.get("idee") or "",
                           fiktion=params.get("fiktion"),
                           vorher=params.get("vorher") or "",
                           model=params.get("modell") or None,
                           anzahl=params.get("anzahl") or 0)
         current["expose"] = erg
-        current["stage"] = ""
+        melden("")
         engine.note("idle", "Geschichte umrissen" if erg["kurz"]
                     else "Das Sprachmodell hat nichts geliefert")
     except Exception:
@@ -504,14 +521,14 @@ def run_prompts(params: dict) -> None:
                           if (z.get(feld) or "").strip()})
         englisch = {}
         if angaben:
-            current["stage"] = "Angaben werden übersetzt"
+            melden("Angaben werden übersetzt")
             fertig = chat.translate({f"a{i}": t for i, t in enumerate(angaben)})
             englisch = {t: fertig.get(f"a{i}") or t
                         for i, t in enumerate(angaben)}
-        current["stage"] = "Grosses Sprachmodell wird geladen"
+        melden("Grosses Sprachmodell wird geladen")
 
         def fortschritt(nr, gesamt):
-            current["stage"] = f"Prompt {nr} von {gesamt}"
+            melden(f"Prompt {nr} von {gesamt}", nr - 1, gesamt)
 
         hinweise = [{"erwartung": z.get("erwartung") or "",
                      "ausschluss": z.get("ausschluss") or ""} for z in roh]
@@ -534,7 +551,7 @@ def run_prompts(params: dict) -> None:
                 if quelle:
                     szene[feld] = englisch.get(quelle, quelle)
         if params.get("prosa"):
-            current["stage"] = "Text wird geschrieben"
+            melden("Text wird geschrieben")
             absaetze = chat.prosa(szenen, model=params.get("modell") or None)
             for i, s in enumerate(szenen):
                 s["prosa"] = absaetze[i] if i < len(absaetze) else ""
@@ -554,7 +571,7 @@ def run_prompts(params: dict) -> None:
             baender.speichern(_projekt_des_laufs, str(schluessel),
                               {"band": int(params.get("band") or 1),
                                "prompts": szenen})
-        current["stage"] = ""
+        melden("")
         if nur:
             engine.note("idle", f"Prompt fuer Szene {nur} geschrieben")
         else:
@@ -730,10 +747,10 @@ def run_demo(params: dict) -> None:
                             gesamtdauer=float(params.get("duration") or 20.0))
             current["video"] = os.path.basename(video_ziel)
 
-        current["stage"] = ""
+        melden("")
         engine.note("idle", f"Ablauf fertig: {len(reihenfolge)} Bilder im Video")
     except Abgebrochen:
-        current["stage"] = ""
+        melden("")
         engine.note("idle", f"abgebrochen nach {len(current['files'])} Bild(ern)")
     except Exception:
         err = traceback.format_exc()

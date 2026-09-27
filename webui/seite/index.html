@@ -57,7 +57,9 @@
       <legend>Bausteine</legend>
       <p class="hint">Personen, Orte und Gegenstände zum Wiederverwenden.
         Was sich ändern darf, steht in geschweiften Klammern —
-        <code>{kleidung}</code> — und wird beim Benutzen gefüllt.</p>
+        <code>{kleidung}</code> — und wird beim Benutzen gefüllt.
+        Ein Baustein entsteht erst als Text; das Musterbild holst du mit
+        <b>▣</b> nach, wenn der Prompt steht.</p>
 
       <div id="bausteinListe"></div>
 
@@ -175,7 +177,7 @@
       <div class="axis">
         <div>
           <label for="gsAnzahl">Wie viele Szenen</label>
-          <input type="number" id="gsAnzahl" min="0" max="24" value="0"
+          <input type="number" id="gsAnzahl" min="0" max="60" value="0"
             title="0 überlässt die Zahl dem Sprachmodell">
         </div>
         <div>

@@ -15,7 +15,10 @@ from kataloge import GEZEICHNET, MIMIK, STYLES  # noqa: E402
 
 from .ollama import GROSS, MODEL, antwort, entladen  # noqa: E402
 
-MAX_SZENEN = 24
+# Wie viele Szenen eine Gliederung hoechstens hat. 24 war zu wenig: wer 30
+# will, soll 30 bekommen. Die Zahl begrenzt nur, damit ein verirrtes Modell
+# nicht tausend Zeilen schreibt.
+MAX_SZENEN = 60
 
 
 def _system(teile: list[dict], anzahl: int) -> str:
@@ -377,7 +380,12 @@ def expose(idee: str, fiktion=None, vorher: str = "",
     try:
         roh = antwort({
             "model": name, "format": "json", "keep_alive": "10m",
-            "options": {"temperature": 0.8, "num_predict": 900},
+            # Der Platz muss mit der Zahl der Szenen wachsen. Mit festen 900
+            # Tokens brach die Antwort bei etwa 22 Zeilen ab -- gemessen an
+            # einer Bitte um 30. Abgeschnittenes JSON ergibt weniger Szenen,
+            # ohne dass jemand es merkt.
+            "options": {"temperature": 0.8,
+                        "num_predict": min(4000, 900 + 60 * wunsch)},
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": idee}],
         }, timeout=600)

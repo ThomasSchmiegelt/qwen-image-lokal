@@ -503,6 +503,9 @@ def bausteine_empfehlen(zeilen: list[str], vorhanden: list[dict],
             art = str(t.get("art") or "").strip().lower()
             # Ein Name mit Leerzeichen liesse sich nicht mit /Name tippen.
             name = re.sub(r"\s+", "-", name)
+            # Gross geschrieben, wie deutsche Hauptwoerter: das Modell liefert
+            # mal so, mal so, und in der Liste sieht Gemischtes unordentlich aus.
+            name = name[:1].upper() + name[1:]
             if not name or art not in ("person", "ort", "gegenstand"):
                 continue
             if name.lower() in gesehen:

@@ -27,7 +27,7 @@ from engine import (  # noqa: E402
 )
 # Die eigentliche Arbeit steht in auftraege.py -- hier nur Routen und Start.
 from auftraege import (  # noqa: E402
-    current, decode, einreihen, engine, entfernen, leeren, uebersicht,
+    current, decode, einreihen, engine, entfernen, leeren, melden, uebersicht,
     verschieben,
 )
 import projekte  # noqa: E402
@@ -207,6 +207,7 @@ class Handler(BaseHTTPRequestHandler):
             status["error"] = current["error"]
             status["translated"] = dict(current["translated"])
             status["stage"] = current["stage"]
+            status["fortschritt"] = dict(current["fortschritt"])
             status["video"] = current["video"]
             status["gelesen"] = dict(current["gelesen"])
             status["tor"] = list(current["tor"])
@@ -520,7 +521,9 @@ class Handler(BaseHTTPRequestHandler):
                 text = (params.get("text") or "").strip()
                 if not text:
                     return self._json(400, {"error": "Keine Beschreibung"})
+                melden("Der Prompt wird geschrieben")
                 erg = chat.baustein_prompt(text, str(params.get("art") or "person"))
+                melden("")
                 erg["prompt"], erg["variablen"] = bausteine.ohne_leere_luecken(
                     erg["prompt"], erg["variablen"])
                 if not erg["prompt"]:
@@ -539,7 +542,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(400, {"error": "Keine Szene"})
                 da = bausteine.liste(projekt)
                 bekannt = {(b.get("name") or "").lower() for b in da}
+                melden("Die Gliederung wird gelesen")
                 erg = chat.bausteine_empfehlen(zeilen, da)
+                melden("")
                 for e in erg:
                     for t in e["teile"]:
                         t["da"] = t["name"].lower() in bekannt
@@ -566,9 +571,12 @@ class Handler(BaseHTTPRequestHandler):
                 for z in zeilen:
                     for name, text in geschichte.definitionen(z)[1].items():
                         erklaert[name.lower()] = text
+                melden(f"{len(offen)} Bausteine werden eingeordnet", 0, len(offen) + 1)
                 geraten = chat.bausteine_raten(offen, "\n".join(zeilen))
                 neu = []
-                for e in geraten:
+                for i, e in enumerate(geraten, 1):
+                    melden(f"Baustein {i} von {len(geraten)}: {e['name']}",
+                           i, len(geraten) + 1)
                     e["beschreibung"] = (erklaert.get(e["name"].lower())
                                          or e["beschreibung"])
                     fertig = chat.baustein_prompt(e["beschreibung"] or e["name"],
@@ -585,6 +593,7 @@ class Handler(BaseHTTPRequestHandler):
                         "gesicht": fertig.get("gesicht") or "",
                         "kleidung": fertig.get("kleidung") or "",
                         "variablen": werte}))
+                melden("")
                 return self._json(200, {"neu": neu, "hinweis": ""})
 
             if was == "teilprompt":
@@ -596,8 +605,10 @@ class Handler(BaseHTTPRequestHandler):
                 text = (params.get("text") or "").strip()
                 if not text:
                     return self._json(400, {"error": "Keine Beschreibung"})
+                melden(f"Der Prompt für {feld} wird geschrieben")
                 fertig = chat.teil_prompt(feld, text,
                                           str(params.get("person") or ""))
+                melden("")
                 if not fertig:
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
