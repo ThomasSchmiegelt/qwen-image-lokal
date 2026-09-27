@@ -166,7 +166,6 @@ class Engine:
         # den laufenden Durchgang und wird von jedem run_series zurueckgesetzt --
         # eine mehrstufige Vorfuehrung liefe damit einfach weiter.
         self.aborted = False
-        self._active_pipe = None
 
     # -- Status -----------------------------------------------------------
     def _set(self, **kw) -> None:
@@ -186,11 +185,15 @@ class Engine:
         return s
 
     def cancel(self) -> None:
+        """Abbrechen -- aber erst nach dem laufenden Bild.
+
+        Frueher wurde die Pipeline mitten im Entrauschen unterbrochen. Das
+        kostete die halbe Minute Rechenzeit, die schon in dem Bild steckte,
+        und lieferte nichts dafuer. Ein Bild dauert bei 24 Schritten keine
+        halbe Minute; so lange darf ein Abbruch warten.
+        """
         self._cancel = True
         self.aborted = True
-        pipe = self._active_pipe
-        if pipe is not None:
-            pipe._interrupt = True
 
     # -- Laden ------------------------------------------------------------
     def _load(self, **skip):
@@ -446,7 +449,6 @@ class Engine:
         # --- Phase 2: entrauschen und dekodieren --------------------------
         self._set(state="loading", message="Transformer + VAE werden geladen")
         pipe = self._load(text_encoder=None)
-        self._active_pipe = pipe
         results = []
 
         try:
@@ -460,7 +462,6 @@ class Engine:
                     return kwargs
 
                 pos = job["embeds"]
-                pipe._interrupt = False
                 pipe._pad_masks = [pos[2]] + ([negative[2]] if negative else [])
                 self._set(state="denoising", image=index, step=0,
                           message=f"Bild {index}/{len(jobs)} startet")
@@ -479,9 +480,9 @@ class Engine:
                     generator=torch.Generator(DEVICE).manual_seed(job["seed"]),
                     callback_on_step_end=on_step,
                 )
-                if self._cancel:
-                    break
-
+                # Kein Abbruch hier: das Bild ist fertig gerechnet, also
+                # wird es auch abgelegt. Gestoppt wird danach, am Kopf der
+                # naechsten Runde.
                 image_out = out.images[0]
                 # Alles aus dem Auftrag ausser den Einbettungen. Eine zweite
                 # Schluesselliste hier waere eine Falle: eine neue Achse landete
@@ -495,7 +496,6 @@ class Engine:
                     on_image(meta, image_out)
                 job["embeds"] = None
         finally:
-            self._active_pipe = None
             del pipe
             _free()
 

@@ -45,12 +45,19 @@ def _mimik(schluessel: str) -> str:
 
 
 def _ohne_namen(text: str, teile) -> str:
-    """Streicht die Namen der Bausteine aus der Handlung.
+    """Streicht die Personennamen aus der Handlung.
 
     Danach bleibt ein Satz wie "smiles happily holding a basket" -- wer das
-    tut, sagt der Baustein davor.
+    tut, sagt der Baustein davor. Und "Anna" im Prompt bringt das Modell sonst
+    dazu, den Namen ins Bild zu schreiben.
+
+    Nur Personen. Orte und Gegenstaende heissen gern wie das, was sie sind --
+    ein Ort "Deck" machte aus "runs across the deck" ein "runs across the".
+    Dass der Ort zweimal im Prompt steht, stoert dagegen kein Bild.
     """
     for b in teile:
+        if b.get("art") != "person":
+            continue
         name = (b.get("name") or "").strip()
         if len(name) < 3:
             continue
@@ -65,11 +72,18 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     Stil. Das Modell haengt die Bildkomposition am Anfang auf, deshalb steht
     die Person vorn und der Stil zum Schluss.
     """
+    # Verlangt die Einstellung eine Grossaufnahme, zaehlt allein das Gesicht:
+    # eine Hose im Prompt zieht die Kamera wieder zurueck. Der Ort faellt aus
+    # demselben Grund weg.
+    e = EINSTELLUNGEN.get(szene.get("einstellung") or "") or {}
+    nur_gesicht = bool(e.get("nur_gesicht"))
+
     stuecke = []
     person = nach_kennung.get(szene.get("person"))
     if person:
-        stuecke.append(bausteine.einsetzen(person.get("prompt") or "",
-                                           person.get("variablen") or {}))
+        stuecke.append(bausteine.person_text(
+            person, person.get("variablen") or {}, nur_gesicht=nur_gesicht,
+            kleidung=szene.get("kleidung") or ""))
     ausdruck = _mimik(szene.get("mimik") or "")
     if ausdruck:
         stuecke.append(ausdruck)
@@ -83,11 +97,11 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
         stuecke.append(handlung)
 
     gegenstand = nach_kennung.get(szene.get("gegenstand"))
-    if gegenstand:
+    if gegenstand and not nur_gesicht:
         stuecke.append(bausteine.einsetzen(gegenstand.get("prompt") or "",
                                            gegenstand.get("variablen") or {}))
     ort = nach_kennung.get(szene.get("ort"))
-    if ort:
+    if ort and not nur_gesicht:
         stuecke.append(bausteine.einsetzen(ort.get("prompt") or "",
                                            ort.get("variablen") or {}))
     stil = _stil(szene.get("stil") or "")
@@ -116,7 +130,8 @@ def zu_bloecken(szenen: list[dict], teile: list[dict]) -> list[dict]:
             continue
         # Die Kameraeinstellung steht hinter der Szene: erst was zu sehen
         # ist, dann von wo aus. Ein Paar ergibt zwei Bilder.
-        fassungen = mit_einstellung(text, szene.get("einstellung") or "")
+        fassungen = mit_einstellung(text, szene.get("einstellung") or "",
+                                    szene.get("spiegelung") or "")
         stil = szene.get("stil") or ""
         name = STYLES[stil][0] if stil in STYLES else "Szene"
         if bloecke and bloecke[-1]["stil"] == stil:
@@ -204,6 +219,7 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             return next((k for k, b in benutzt.items() if b.get("art") == art), "")
         szenen.append({
             "einstellung": zeile.get("einstellung") or "",
+            "spiegelung": zeile.get("spiegelung") or "",
             "titel": (zeile.get("text") or "")[:60] or f"Bild {i}",
             "person": erster("person"),
             "ort": zeile.get("ort") or erster("ort"),
@@ -217,8 +233,13 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
 
 
 # --- Mehrere Bilder je Szene --------------------------------------------
-# Gewuerfelt wird nur der Blick auf den Augenblick: Objektiv oder Standpunkt.
-# Und davon genau eines je Bild.
+# Gewuerfelt wird der Blick auf den Augenblick: Objektiv, Standpunkt oder
+# eine der Szenen-Einstellungen. Und davon genau eines je Bild.
+#
+# Die Einstellungen sind ausdruecklich dabei -- auf Wunsch. Sie aendern mehr
+# als den Blick: eine gewuerfelte Grossaufnahme oder ein Zellengitter macht
+# aus dem Augenblick einen anderen. Wer breit streuen will, nimmt das in
+# Kauf; wer es nicht will, setzt die Bildzahl je Szene auf eins.
 #
 # Nicht gewuerfelt werden Stil, Ort, Farbstimmung und Kleidung -- die gehoeren
 # der Geschichte, nicht dem Zufall. Ausdruecklich auch nicht die Kameraart:
@@ -331,35 +352,83 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
 # --- Kameraeinstellung je Szene -----------------------------------------
 # Mit einem Rueckwaertsschraegstrich und Namen setzt eine Zeile die Anordnung
 # von Kamera und Figuren, so wie der Schraegstrich einen Baustein holt. Zwei Zeichen, zwei Bedeutungen: wer und wie.
-EINSTELLUNG = re.compile(r"\\([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,29})")
+# \name, dahinter in Klammern, was sich spiegeln soll:
+#   \augen(das brennende Schiff)
+EINSTELLUNG = re.compile(
+    r"\\([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,29})(?:\(([^)]{1,120})\))?")
 
 
-def einstellung_von(zeile: str) -> tuple[str, str]:
+def einstellung_von(zeile: str) -> tuple[str, str, str]:
     r"""Trennt \Name von der Zeile. Zurueck kommt (Text ohne, Schluessel).
 
     Ein unbekannter Name bleibt stehen -- wie bei den Bausteinen soll nichts
     stillschweigend verschwinden.
     """
-    gefunden = ""
+    gefunden, angabe = "", ""
 
     def ersatz(treffer):
-        nonlocal gefunden
+        nonlocal gefunden, angabe
         name = treffer.group(1).lower()
         if name in EINSTELLUNGEN and not gefunden:
             gefunden = name
+            angabe = (treffer.group(2) or "").strip()
             return ""
         return treffer.group(0)
 
     text = EINSTELLUNG.sub(ersatz, zeile or "")
-    return re.sub(r"\s{2,}", " ", text).strip(), gefunden
+    return re.sub(r"\s{2,}", " ", text).strip(), gefunden, angabe
 
 
-def mit_einstellung(text: str, schluessel: str) -> list[str]:
-    """Die Szene mit der Einstellung. Ein Paar ergibt zwei Fassungen."""
+def zeilen_lesen(roh: list[dict], alle: list[dict]) -> list[dict]:
+    r"""Das Inhaltsverzeichnis, wie es die Seite schickt, in fertige Zeilen.
+
+    Die Seite fuehrt je Zeile nur den getippten Text und die Bildzahl. Alles
+    Weitere -- die Einstellung hinter dem \, die Bausteine hinter dem / --
+    liest der Server heraus. Beide Endpunkte tun das gleich, sonst kaeme in
+    den Prompts eine Einstellung vor, die in den Bildern fehlt.
+    """
+    zeilen = []
+    for z in roh:
+        # Erst die Kameraeinstellung heraus, dann die Bausteine: das
+        # Sprachmodell soll die Anordnung nicht auch noch beschreiben.
+        roh_text, einst, spieg = einstellung_von(str(z.get("text") or ""))
+        text, teile = verweise(roh_text, alle)
+        if not text:
+            continue
+        zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
+                       "einstellung": einst, "spiegelung": spieg,
+                       "teile": teile})
+    return zeilen
+
+
+# Die Einstellung muss vor die Szene, nicht dahinter, und sie muss dem
+# Startbild widersprechen duerfen. Gemessen: hinten angehaengt kam von fuenf
+# Einstellungen nur eine durch -- das Startbild ist eine Ganzkoerperaufnahme,
+# und die Vorlage bewahrt sie so hartnaeckig, dass "extreme close-up"
+# wirkungslos blieb.
+VORRANG = ("The framing of this picture is fixed by the shot described above "
+           "and overrides the reference image: show only what this shot sees, "
+           "even if that means the full figure is not visible.")
+
+
+def mit_einstellung(text: str, schluessel: str, angabe: str = "") -> list[str]:
+    """Die Szene mit der Einstellung. Ein Paar ergibt zwei Fassungen.
+
+    `angabe` fuellt die Luecke der Einstellung -- bei einem Blick in die
+    Augen also das, was sich darin spiegelt. Ohne Angabe gilt die Vorgabe.
+    """
     e = EINSTELLUNGEN.get(schluessel)
     if not e:
         return [text]
-    erste = f"{text}, {e['text']}"
+    werte = dict(e.get("vorgabe") or {})
+    if angabe and werte:
+        werte[next(iter(werte))] = angabe
+
+    def bauen(anordnung):
+        for name, wert in werte.items():
+            anordnung = anordnung.replace("{" + name + "}", wert)
+        return f"{anordnung}. {text}. {VORRANG}"
+
     if "gegentext" in e:
-        return [erste, f"{text}, {e['gegentext']}"]
-    return [erste]
+        return [bauen(e["text"]), bauen(e["gegentext"])]
+    return [bauen(e["text"])]

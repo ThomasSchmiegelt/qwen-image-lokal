@@ -161,13 +161,22 @@ def speichern(projekt: str, baustein: dict) -> dict:
     roh = baustein.get("variablen") or {}
     vorgaben = {k: str(roh.get(k) or "").strip() for k in offen}
 
+    # Bei einer Person drei getrennte Prompts: wer sie ist, wie ihr Gesicht
+    # aussieht, was sie traegt. Eine Grossaufnahme braucht das Gesicht ohne
+    # Kleiderbeschreibung, und eine Szene darf die Kleidung austauschen, ohne
+    # die Person anzufassen.
     neu = {"id": kennung, "art": art, "name": name, "prompt": prompt,
+           "gesicht": (baustein.get("gesicht") or "").strip(),
+           "kleidung": (baustein.get("kleidung") or "").strip(),
            "variablen": vorgaben, "bild": baustein.get("bild") or ""}
 
-    # Ein vorhandenes Bild nicht verlieren, wenn der Aufrufer keines mitschickt.
+    # Nichts verlieren, was der Aufrufer nicht mitschickt.
     for vorher in daten:
-        if vorher.get("id") == kennung and not neu["bild"]:
-            neu["bild"] = vorher.get("bild") or ""
+        if vorher.get("id") != kennung:
+            continue
+        for feld in ("bild", "gesicht", "kleidung"):
+            if not neu[feld]:
+                neu[feld] = vorher.get(feld) or ""
     rest = [b for b in daten if b.get("id") != kennung]
     rest.append(neu)
     _schreiben(projekt, rest)
@@ -266,3 +275,22 @@ def kopieren(von: str, nach: str, kennung: str) -> dict | None:
     return speichern(nach, {"art": quelle.get("art"), "name": quelle.get("name"),
                             "prompt": quelle.get("prompt"),
                             "variablen": quelle.get("variablen"), "bild": bild})
+
+
+
+def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
+                kleidung: str = "") -> str:
+    """Die Beschreibung einer Person fuer einen Prompt.
+
+    `nur_gesicht` nimmt die Gesichtsbeschreibung allein -- eine Makro-
+    Grossaufnahme braucht keine Hose. `kleidung` ersetzt die bevorzugte
+    Kleidung, wenn die Szene eine andere verlangt.
+    """
+    if nur_gesicht and (b.get("gesicht") or "").strip():
+        return einsetzen(b["gesicht"], werte)
+    stuecke = [einsetzen(b.get("prompt") or "", werte)]
+    if not nur_gesicht:
+        was = (kleidung or b.get("kleidung") or "").strip()
+        if was:
+            stuecke.append(einsetzen(was, werte))
+    return ", ".join(t for t in stuecke if t)

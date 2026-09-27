@@ -4,6 +4,8 @@ Die Bezeichnungen sind deutsch, die Textbausteine englisch -- das Modell folgt
 englischen Bildbeschreibungen deutlich zuverlaessiger.
 """
 
+import re
+
 STYLES = {
     "foto": ("Fotorealistisch", "photorealistic, sharp focus, natural colors, high detail"),
     "zeichentrick": ("Zeichentrick", "classic hand-drawn cartoon style, bold outlines, flat bright colors, playful"),
@@ -177,33 +179,90 @@ NICHT_FOTO = ("This is a drawn illustration, not a photograph: no camera "
 EINSTELLUNGEN = {
     "augen": {
         "label": "Blick in die Augen",
-        "text": "an extreme close-up from the first person's point of view, "
-                "looking straight into the other person's eyes, their face "
-                "filling the frame, and the viewer's own silhouette mirrored "
-                "in the wet surface of their irises",
+        # Vierte Fassung. Die ersten drei erklaerten die Anordnung und ergaben
+        # Ganzkoerper, dann eine Zweiereinstellung, dann ein gewoehnliches
+        # Portraet. Was wirkt, ist ein Makro mit Entfernungsangabe und der
+        # ausdruecklichen Ansage, dass die Augen fast das ganze Bild fuellen --
+        # nach einem Muster, das sich beim Benutzer bewaehrt hat.
+        "text": "extreme macro close-up of a face, the camera about 20 "
+                "centimetres in front of the eyes. The eyes fill almost the "
+                "entire frame, glossy irises with visible texture, a direct "
+                "gaze into the camera, individual eyelashes sharp, realistic "
+                "skin texture. Nothing but the face is in frame. Mirrored in "
+                "the eyes: {spiegelung}",
+        "vorgabe": {"spiegelung": "the silhouette of the person facing them"},
+        "nur_gesicht": True,
     },
     "spiegel": {
         "label": "Blick in den Spiegel",
         "text": "the camera stands behind the figures, who face a large "
                 "mirror: their backs fill the foreground, their reflected "
-                "faces look back out of the mirror, both in the same frame",
+                "faces look back out of the mirror, both in the same frame. "
+                "Also visible in the mirror: {spiegelung}",
+        "vorgabe": {"spiegelung": "the room behind them"},
     },
-    "zelle": {
-        "label": "Rein und raus (zwei Bilder)",
-        "text": "a point-of-view shot from inside a cell, looking out between "
-                "the bars at a person standing outside, the bars close to the "
-                "camera and out of focus",
-        "gegentext": "an over-the-shoulder shot from behind the person "
-                     "standing outside the cell, looking past their shoulder "
-                     "and between the bars at the figure inside",
+    "raus": {
+        "label": "Von drinnen nach draussen",
+        # Kein Gitter: die urspruengliche Fassung sprach von Zellenstaeben und
+        # malte sie prompt ins Bild. Gemeint war die Blickrichtung, nicht das
+        # Gefaengnis.
+        "text": "a point-of-view shot from inside an enclosed space looking "
+                "out through its opening at a person standing outside, the "
+                "dark inner walls framing the edges of the picture, the "
+                "person outside lit and sharp",
+        "gegentext": "an over-the-shoulder shot from behind a person standing "
+                     "outside an enclosed space, looking past their shoulder "
+                     "through the opening at the figure inside, the figure "
+                     "inside small and lit, the shoulder dark in the "
+                     "foreground",
+        "paar_label": ("von drinnen heraus", "von draussen hinein"),
     },
     "scheibe": {
-        "label": "Durch die Glasscheibe",
-        "text": "a point-of-view shot through a pane of glass: what lies "
-                "beyond is sharp, and a face is reflected on the glass "
-                "surface, the two overlapping in the same frame",
+        "label": "Durch die halbdurchsichtige Scheibe",
+        "text": "a shot through a semi-transparent pane of glass: what lies "
+                "beyond shows through the glass, dimmed and slightly hazy, "
+                "and at the same time reflected on the glass surface: "
+                "{spiegelung}. Both layers overlap in the same frame",
+        "vorgabe": {"spiegelung": "the face of the onlooker"},
+    },
+    "decke": {
+        "label": "Von der Decke",
+        "text": "the camera hangs from the ceiling and looks straight down, "
+                "from a height of {hoehe}, the figures seen from directly "
+                "above, their shadows short on the floor",
+        "vorgabe": {"hoehe": "three metres"},
+    },
+    "bettlage": {
+        "label": "Bettlage (von unten senkrecht hoch)",
+        "text": "the camera lies flat on the ground directly below, looking "
+                "straight up, the figure standing over it and leaning into "
+                "the frame from above, the ceiling behind them",
     },
 }
+
+
+# Dieselben Anordnungen sollen auch dort waehlbar sein, wo man sonst die
+# Kameraperspektive einstellt -- in Varianten, beim Bearbeiten, ueberall.
+# Das Paar zerfaellt dabei in seine beiden Haelften: eine Achse liefert ein
+# Bild, kein Paar.
+def _ohne_luecken(text: str) -> str:
+    """Die Vorgaben eingesetzt -- eine Achse kann keine Luecke fuellen."""
+    return re.sub(r"\{(\w+)\}", lambda m: _VORGABEN.get(m.group(1), ""), text)
+
+
+_VORGABEN = {k: v for e in EINSTELLUNGEN.values()
+             for k, v in (e.get("vorgabe") or {}).items()}
+
+CAMERAS.update({
+    "e_augen":      ("In die Augen", _ohne_luecken(EINSTELLUNGEN["augen"]["text"])),
+    "e_spiegel":    ("In den Spiegel", _ohne_luecken(EINSTELLUNGEN["spiegel"]["text"])),
+    "e_scheibe":    ("Durch die halbdurchsichtige Scheibe",
+                     _ohne_luecken(EINSTELLUNGEN["scheibe"]["text"])),
+    "e_raus":       ("Von drinnen nach draussen", EINSTELLUNGEN["raus"]["text"]),
+    "e_rein":       ("Von draussen nach drinnen", EINSTELLUNGEN["raus"]["gegentext"]),
+    "e_decke":      ("Von der Decke", _ohne_luecken(EINSTELLUNGEN["decke"]["text"])),
+    "e_bettlage":   ("Bettlage, von unten hoch", EINSTELLUNGEN["bettlage"]["text"]),
+})
 
 
 # Gesichtsausdruck. Fuer Geschichten: die Mimik soll aus der Handlung kommen,

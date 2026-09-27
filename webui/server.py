@@ -397,16 +397,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "ungueltiges JSON"})
             projekt = projekte.aktiv()
             alle = bausteine.liste(projekt)
-            roh = params.get("zeilen") or []
-            zeilen = []
-            for z in roh:
-                # Erst die Kameraeinstellung heraus, dann die Bausteine: das
-                # Sprachmodell soll die Anordnung nicht auch noch beschreiben.
-                roh_text, einst = geschichte.einstellung_von(str(z.get("text") or ""))
-                text, teile = geschichte.verweise(roh_text, alle)
-                if text:
-                    zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
-                                   "einstellung": einst, "teile": teile})
+            zeilen = geschichte.zeilen_lesen(params.get("zeilen") or [], alle)
             if not zeilen:
                 return self._json(400, {"error": "Keine Szene im Inhaltsverzeichnis"})
             auftrag = einreihen("prompts", {
@@ -421,6 +412,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"],
                                     "zeilen": [{"text": z["text"], "ort": z["ort"],
                                                 "einstellung": z["einstellung"],
+                                                "spiegelung": z["spiegelung"],
                                                 "teile": [t["name"] for t in z["teile"]]}
                                                for z in zeilen]})
 
@@ -431,12 +423,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "ungueltiges JSON"})
             projekt = projekte.aktiv()
             alle = {b["id"]: b for b in bausteine.liste(projekt)}
-            zeilen = []
-            for z in (params.get("zeilen") or []):
-                teile = [alle[k] for k in (z.get("ids") or []) if k in alle]
-                zeilen.append({"text": z.get("text") or "", "ort": z.get("ort") or "",
-                               "einstellung": z.get("einstellung") or "",
-                               "teile": teile})
+            # Dieselbe Zerlegung wie beim Prompt-Schreiben. Frueher stand hier
+            # eine eigene, die auf Felder wartete, die die Seite gar nicht
+            # schickt -- die Kameraeinstellung fiel damit still unter den Tisch.
+            zeilen = geschichte.zeilen_lesen(params.get("zeilen") or [],
+                                             list(alle.values()))
             stil = str(params.get("stil") or "")
             szenen = geschichte.gliederung_zu_szenen(
                 zeilen, params.get("prompts") or [], list(alle.values()), stil)
