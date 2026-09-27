@@ -1286,6 +1286,42 @@ function offeneNamen(text) {
   return raus;
 }
 
+// Welche Bausteine in dieser Zeile stehen, in der Reihenfolge des Textes.
+// Nur die angelegten: ein Name ohne Baustein laesst sich nicht tauschen.
+function bausteineInZeile(text) {
+  const raus = [];
+  for (const m of String(text || "").matchAll(VERWEIS_MUSTER)) {
+    const b = BAUSTEINE.find(x => (x.name || "").toLowerCase() === m[1].toLowerCase());
+    if (b && !raus.includes(b)) raus.push(b);
+  }
+  return raus;
+}
+
+// Einen Baustein aus einer Zeile nehmen oder gegen einen anderen tauschen.
+// Beides ueber dasselbe Feld: es zeigt, was drinsteht, und was daraus
+// werden kann.
+const VORWORT = "durch|in|an|auf|zu|zum|zur|bei|mit|über|unter|vor|hinter"
+              + "|neben|aus|nach|von|gegen|um|ohne|entlang";
+const ARTIKEL = "der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines"
+              + "|sein|seine|ihr|ihre|ihren|seinen";
+
+function bausteinInZeile(i, alt, neu) {
+  const z = gsZeilen[i];
+  const roh = alt.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+  if (neu) {
+    z.text = z.text.replace(new RegExp("/" + roh + "\\b", "gi"), "/" + neu);
+  } else {
+    // Beim Entfernen faellt der Artikel davor mit, und ein Vorwort davor
+    // auch: aus "rennt durch die /Halle" bliebe sonst "rennt durch die".
+    z.text = z.text.replace(
+      new RegExp(`(?:\\b(?:${VORWORT})\\s+)?(?:\\b(?:${ARTIKEL})\\s+)?/${roh}\\b`,
+                 "gi"), "");
+  }
+  z.text = z.text.replace(/\s{2,}/g, " ").replace(/\s+([,.;!?])/g, "$1").trim();
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
 function einstellungBekannt(name) {
   const klein = (name || "").toLowerCase();
   return EINSTELLUNGEN.some(x => x.key === klein)
@@ -1340,6 +1376,15 @@ function zeigeSelbstszenen() {
           placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
       </div>
       <div class="szleiste">
+        ${bausteineInZeile(z.text).map(b => `
+          <select class="gsdrin" title="tauschen oder entfernen"
+            onchange="bausteinInZeile(${i}, '${esc(b.name)}',
+                      this.value === '__weg' ? '' : this.value)">
+            ${BAUSTEINE.filter(x => x.art === b.art).map(x =>
+              `<option value="${esc(x.name)}"${
+                x.id === b.id ? " selected" : ""}>/${esc(x.name)}</option>`).join("")}
+            <option value="__weg">⨯ entfernen</option>
+          </select>`).join("")}
         <select class="gsteil" data-i="${i}" title="Baustein einsetzen">
           <option value="">+ Baustein …</option>
           ${BAUSTEINE.map(b =>

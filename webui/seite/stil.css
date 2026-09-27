@@ -355,7 +355,13 @@
 .szleiste select, .szleiste input {
   font-size: 11.5px; padding: 3px 5px; height: 26px;
 }
-.szleiste .gsteil { width: 9.5em; flex: none; }
+/* Was in der Zeile steht, als eigenes Feld -- damit sieht man es, kann es
+   tauschen und wieder herausnehmen, ohne im Text zu suchen. */
+.szleiste .gsdrin {
+  width: 8.5em; flex: none; color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.szleiste .gsteil { width: 8.5em; flex: none; color: var(--muted); }
 .szleiste .gseinst { width: 12em; flex: none; }
 .szleiste .szprompt { font-size: 11.5px; white-space: nowrap; }
 .szleiste .gsangabe { flex: 1; min-width: 6em; }
