@@ -87,6 +87,9 @@ def _titel(art: str, params: dict) -> str:
         return "Geschichte umreissen"
     if art == "ergaenzen":
         return f"{params.get('fehlt') or 0} Szenen ergaenzen"
+    if art == "aufbau":
+        return ("Geschichte lesen" if params.get("phase") == "rahmen"
+                else f"Szenen schreiben, {len(params.get('kapitel') or [])} Abschnitte")
     if art == "prompts":
         return f"Prompts schreiben, {len(params.get('zeilen') or [])} Szenen"
     if art == "demo":
@@ -234,7 +237,8 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
                        nummer=auftrag["nummer"], titel=titel)
         if len(alle) == 1:
             laeufe = {"demo": run_demo, "prompts": run_prompts,
-                      "expose": run_expose, "ergaenzen": run_ergaenzen}
+                      "expose": run_expose, "ergaenzen": run_ergaenzen,
+                      "aufbau": run_aufbau}
             laeufe.get(auftrag["art"], run_job)(auftrag["params"])
         else:
             # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
@@ -477,7 +481,8 @@ def run_expose(params: dict) -> None:
                           fiktion=params.get("fiktion"),
                           vorher=params.get("vorher") or "",
                           model=params.get("modell") or None,
-                          anzahl=params.get("anzahl") or 0)
+                          anzahl=params.get("anzahl") or 0,
+                          alter=params.get("alter") or "")
         current["expose"] = erg
         melden("")
         engine.note("idle", "Geschichte umrissen" if erg["kurz"]
@@ -504,6 +509,73 @@ def _eingefuegt(neue: list[dict], schluessel, band: int) -> list[dict]:
     ersetzt = {p["nr"] for p in neue}
     zusammen = [p for p in vorher if p.get("nr") not in ersetzt] + list(neue)
     return sorted(zusammen, key=lambda p: p.get("nr") or 0)
+
+
+def run_aufbau(params: dict) -> None:
+    """Eine ganze Geschichte in eine Gliederung verwandeln, in zwei Stufen.
+
+    "rahmen" holt Titel, Kurzfassung, Anfangs- und Schlussszene und teilt den
+    Text in Abschnitte mit Ueberschriften. "szenen" schreibt die Szenen je
+    Abschnitt. Getrennt, weil man nach dem Rahmen gegenlesen will -- und weil
+    das Ende feststehen muss, bevor die Mitte entsteht.
+    """
+    try:
+        text = (params.get("text") or "").strip()
+        modell = params.get("modell") or None
+        phase = params.get("phase") or "rahmen"
+        wieviel = max(2, min(int(params.get("anzahl") or 12), 60))
+
+        if phase == "rahmen":
+            melden("Die Geschichte wird gelesen", 0, 2)
+            erg = chat.rahmen(text, kurz=params.get("kurz") or "",
+                              welt=params.get("welt") or "",
+                              fiktion=params.get("fiktion"),
+                              stil=params.get("stil") or "", model=modell,
+                              alter=params.get("alter") or "")
+            # Ein Abschnitt je vier bis sechs Szenen, hoechstens zehn.
+            k = max(1, min(round(wieviel / 5), 10))
+            stuecke = chat.abschnitte(text, k)
+            melden("Die Abschnitte bekommen Überschriften", 1, 2)
+            titel = chat.kapitel(stuecke, model=modell)
+            current["expose"] = {**erg, "nur_rahmen": True,
+                                 "kapitel": [{"titel": t, "text": st}
+                                             for t, st in zip(titel, stuecke)]}
+            melden("")
+            engine.note("idle", f"Rahmen steht, {len(stuecke)} Abschnitte")
+            return
+
+        kapitel = params.get("kapitel") or []
+        if not kapitel:
+            raise ValueError("Keine Abschnitte -- erst den Rahmen holen.")
+        anfang = (params.get("anfang") or "").strip()
+        ende = (params.get("ende") or "").strip()
+        # Anfang und Ende zaehlen mit: sie sind schon geschrieben.
+        offen = max(1, wieviel - (1 if anfang else 0) - (1 if ende else 0))
+        # Der Anteil je Abschnitt richtet sich nach seiner Laenge, damit ein
+        # langer Abschnitt nicht in zwei Bildern abgehandelt wird.
+        laengen = [max(1, len(k.get("text") or "")) for k in kapitel]
+        gesamt = sum(laengen)
+        anteile = [max(1, round(offen * n / gesamt)) for n in laengen]
+        zeilen = [anfang] if anfang else []
+        for i, (kap, wie) in enumerate(zip(kapitel, anteile), 1):
+            melden(f"Abschnitt {i} von {len(kapitel)}: {kap.get('titel') or ''}",
+                   i - 1, len(kapitel))
+            zeilen += [z for z in chat.szenen_aus_abschnitt(
+                kap.get("text") or "", wie, kapitel_titel=kap.get("titel") or "",
+                kurz=params.get("kurz") or "", welt=params.get("welt") or "",
+                fiktion=params.get("fiktion"), stil=params.get("stil") or "",
+                alter=params.get("alter") or "", bisher="\n".join(zeilen[-8:]),
+                schluss=ende if i == len(kapitel) else "",
+                model=modell) if z]
+        chat.entladen(modell or chat.GROSS)
+        current["expose"] = {"szenen": zeilen, "nur_szenen": True}
+        melden("")
+        engine.note("idle", f"{len(zeilen)} Szenen aus {len(kapitel)} Abschnitten")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        engine.note("error", current["error"])
 
 
 def run_ergaenzen(params: dict) -> None:
@@ -562,8 +634,10 @@ def run_prompts(params: dict) -> None:
             melden(f"Prompt {nr} von {gesamt}", nr - 1, gesamt)
 
         hinweise = [{"erwartung": z.get("erwartung") or "",
-                     "ausschluss": z.get("ausschluss") or ""} for z in roh]
+                     "ausschluss": z.get("ausschluss") or "",
+                     "prosa": z.get("prosa") or ""} for z in roh]
         szenen = chat.gliederung(zeilen, hinweise=hinweise,
+                                 alter=params.get("alter") or "",
                                  stil=params.get("stil") or "",
                                  welt=params.get("welt") or "",
                                  kurz=params.get("kurz") or "",
@@ -581,6 +655,9 @@ def run_prompts(params: dict) -> None:
                 quelle = (roh[i].get(feld) or "").strip()
                 if quelle:
                     szene[feld] = englisch.get(quelle, quelle)
+            # Festhalten, welche Prosa dieser Prompt gesehen hat. Aendert sie
+            # sich, ist er von gestern -- genau wie bei der Stichzeile.
+            szene["prosa_quelle"] = roh[i].get("prosa") or ""
         if params.get("prosa"):
             melden("Text wird geschrieben")
             absaetze = chat.prosa(szenen, model=params.get("modell") or None)

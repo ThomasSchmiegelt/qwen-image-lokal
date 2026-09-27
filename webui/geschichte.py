@@ -619,6 +619,9 @@ def zeilen_lesen(roh: list[dict], alle: list[dict],
         zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
                        "einstellung": einst, "spiegelung": spieg,
                        "erwartung": will, "ausschluss": nicht,
+                       # Die Prosa sagt oft mehr ueber das Bild als die
+                       # Stichzeile. Sie geht deshalb mit ans Sprachmodell.
+                       "prosa": str(z.get("prosa") or ""),
                        "definitionen": erklaert, "teile": teile})
     return zeilen
 

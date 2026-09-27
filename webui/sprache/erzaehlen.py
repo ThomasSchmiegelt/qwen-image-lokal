@@ -144,7 +144,8 @@ denn, die Zeile verlangt einen Bruch."""
 
 def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
                kurz: str = "", fiktion=None, model: str | None = None,
-               fortschritt=None, hinweise: list[dict] | None = None) -> list[dict]:
+               fortschritt=None, hinweise: list[dict] | None = None,
+               alter: str = "") -> list[dict]:
     """Aus den Zeilen einer Gliederung die Bildprompts, der Reihe nach.
 
     Je Zeile ein Aufruf, damit das Modell die vorigen Bilder kennt. Das
@@ -162,6 +163,8 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
     _, satz = grad(fiktion)
     if satz:
         system += f"\n\n{satz}"
+    if freigabe(alter):
+        system += f"\n\n{freigabe(alter)}"
     if stil in STYLES:
         system += f"\n\nDie ganze Folge ist im Stil: {STYLES[stil][1]}"
         if stil in GEZEICHNET:
@@ -181,6 +184,12 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
             # die naechste Szene nicht faerben.
             h = (hinweise or [{}] * len(zeilen))[nr - 1] if nr <= len(hinweise or []) else {}
             frage = f"Szene {nr} von {len(zeilen)}: {text}"
+            if (h.get("prosa") or "").strip():
+                # Der Text der Szene steht vor der Erwartung: er sagt am
+                # genauesten, was zu sehen ist.
+                frage += ("\nDer Text dieser Szene:\n" + h["prosa"].strip()[:1200]
+                          + "\nNimm daraus, was im Bild sichtbar ist -- kein "
+                            "Gedanke, kein Gespräch, nur was man sieht.")
             if (h.get("erwartung") or "").strip():
                 frage += ("\nDas muss in diesem Bild zu sehen sein: "
                           + h["erwartung"].strip())
@@ -296,6 +305,36 @@ GRADE = (
 )
 
 
+# Altersfreigabe. Kein Schutzmechanismus -- ein Sprachmodell laesst sich
+# nicht mit einer Zahl sperren -- sondern ein Regler wie der
+# Wirklichkeitsgrad: er sagt einmal, was gezeigt werden darf, statt dass man
+# es in jede Szene schreibt. Bei hoher Fiktion driftet das Modell sonst von
+# allein ins Drastische.
+FREIGABEN = {
+    "alle": ("Für alle",
+             "Die Bilder sind für kleine Kinder gedacht: nichts Bedrohliches, "
+             "keine Gewalt, keine Verletzungen, keine Waffen, kein Blut, "
+             "keine Angstbilder, keine Nacktheit."),
+    "ab6": ("Ab 6",
+            "Spannung ja, Schrecken nein: keine Gewalt, keine Verletzungen, "
+            "kein Blut, keine bedrohlichen Fratzen, keine Nacktheit."),
+    "ab12": ("Ab 12",
+             "Gefahr und Konflikt dürfen vorkommen, auch Waffen und Kämpfe, "
+             "aber nicht ausgemalt: kein Blut, keine Wunden, keine Leichen, "
+             "keine Nacktheit."),
+    "ab16": ("Ab 16",
+             "Gewalt und ihre Folgen dürfen gezeigt werden, ohne darin zu "
+             "schwelgen. Keine Nacktheit, nichts Sexuelles."),
+    "ab18": ("Ab 18", ""),
+}
+
+
+def freigabe(schluessel) -> str:
+    """Der Satz zur Altersfreigabe fuers Sprachmodell, oder leer."""
+    eintrag = FREIGABEN.get(str(schluessel or ""))
+    return eintrag[1] if eintrag else ""
+
+
 def grad(fiktion) -> tuple[list[str], str]:
     """Aus dem Regler die erlaubten Welten und den Satz fuer das Modell.
 
@@ -397,7 +436,7 @@ def szenen_ergaenzen(zeilen: list[str], fehlt: int, kurz: str = "",
 
 
 def expose(idee: str, fiktion=None, vorher: str = "",
-           model: str | None = None, anzahl: int = 0) -> dict:
+           model: str | None = None, anzahl: int = 0, alter: str = "") -> dict:
     """Aus einer Idee die Kurzbeschreibung samt Stil und Weltzuordnung.
 
     `fiktion` ist der Regler des Benutzers, 0 bis 10, und schlaegt das
@@ -420,6 +459,8 @@ def expose(idee: str, fiktion=None, vorher: str = "",
                 if wunsch else "fünf bis zehn Stück"))
     if satz:
         system += f"\n\nDer Benutzer hat den Wirklichkeitsgrad vorgegeben: {satz}"
+    if freigabe(alter):
+        system += f"\n\n{freigabe(alter)}"
     # Je unwirklicher, desto eher gezeichnet. Ein Foto muss glaubhaft sein --
     # eine fliegende Stadt im Fotostil sieht nach Montage aus, dieselbe Stadt
     # als Anime nach Absicht.

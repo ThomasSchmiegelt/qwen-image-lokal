@@ -243,6 +243,8 @@ class Handler(BaseHTTPRequestHandler):
                                      for k, v in bausteine.ARTEN.items()]
             info["mimik"] = [{"key": k, "label": v[0]} for k, v in MIMIK.items()]
             info["gross"] = chat.GROSS
+            info["freigaben"] = [{"key": k, "label": v[0]}
+                                 for k, v in chat.FREIGABEN.items()]
             # Welche Stile gezeichnet sind, entscheidet der Katalog. Die Seite
             # rechnet sonst mit einer zweiten Liste, die auseinanderlaeuft.
             info["gezeichnet"] = sorted(GEZEICHNET)
@@ -411,6 +413,7 @@ class Handler(BaseHTTPRequestHandler):
                 "idee": str(params["idee"]), "fiktion": fiktion,
                 "vorher": vorher,
                 "anzahl": int(params.get("anzahl") or 0),
+                "alter": str(params.get("alter") or ""),
                 "modell": str(params.get("modell") or "") or None})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
@@ -436,6 +439,7 @@ class Handler(BaseHTTPRequestHandler):
                 "welt": str(params.get("welt") or ""),
                 "kurz": str(params.get("kurz") or ""),
                 "fiktion": params.get("fiktion"),
+                "alter": str(params.get("alter") or ""),
                 "schluessel": str(params.get("schluessel") or "") or None,
                 "band": int(params.get("band") or 1),
                 "modell": str(params.get("modell") or "") or None,
@@ -446,6 +450,30 @@ class Handler(BaseHTTPRequestHandler):
                                                 "spiegelung": z["spiegelung"],
                                                 "teile": [t["name"] for t in z["teile"]]}
                                                for z in zeilen]})
+
+        if path == "/api/aufbau":
+            # Eine ganze Geschichte in eine Gliederung verwandeln. Zwei
+            # Stufen: erst Rahmen und Abschnitte, dann die Szenen.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            phase = str(params.get("phase") or "rahmen")
+            if phase == "rahmen" and not str(params.get("text") or "").strip():
+                return self._json(400, {"error": "Keine Geschichte und keine Idee"})
+            auftrag = einreihen("aufbau", {
+                "phase": phase,
+                "text": str(params.get("text") or ""),
+                "kurz": str(params.get("kurz") or ""),
+                "welt": str(params.get("welt") or ""),
+                "stil": str(params.get("stil") or ""),
+                "fiktion": params.get("fiktion"),
+                "alter": str(params.get("alter") or ""),
+                "anzahl": int(params.get("anzahl") or 12),
+                "anfang": str(params.get("anfang") or ""),
+                "ende": str(params.get("ende") or ""),
+                "kapitel": params.get("kapitel") or [],
+                "modell": str(params.get("modell") or "") or None})
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
         if path == "/api/ergaenzen":
             # Fehlende Zeilen nachschreiben lassen. Die vorhandenen bleiben,

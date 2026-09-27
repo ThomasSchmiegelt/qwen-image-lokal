@@ -81,6 +81,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
   EINSTELLUNGEN = info.einstellungen || [];
   STILLISTE = info.styles || [];
   fill("gsStil", info.styles);
+  fill("gsFreigabe", info.freigaben);
   $("bsStil").innerHTML = `<option value="">— Stil der Geschichte —</option>`
     + (info.styles || []).map(x =>
         `<option value="${x.key}">${esc(x.label)}</option>`).join("");
@@ -1266,6 +1267,8 @@ async function einreihenEinfach(zusatz) {
 // sind, die Handlung so lange zurechtbiegt, bis sie alltagstauglich wird.
 let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
 let gsErgaenztZuletzt = "";
+// Rahmen einer langen Vorlage: Anfangsszene, Schlussszene, Abschnitte.
+let GSRAHMEN = {anfang: "", ende: "", kapitel: []};
 
 // Die Kameraeinstellung steht als \Name in der Zeile -- aber niemand soll
 // sie dort suchen muessen. Jede Szene traegt deshalb ein Auswahlfeld, das
@@ -1296,11 +1299,13 @@ function geschriebeneZeile(nr) {
 }
 
 function veraltet(i) {
-  const war = geschriebeneZeile(i + 1);
-  if (war === null) return false;
-  // Verglichen wird, was das Sprachmodell zu sehen bekam: ohne #, ohne \ und
-  // ohne die Erklaerungen in Anfuehrungszeichen.
-  return blankZeile(gsZeilen[i].text) !== blankZeile(war);
+  const p = ((GESCHICHTE && GESCHICHTE.prompts) || []).find(x => x.nr === i + 1);
+  if (!p) return false;
+  // Verglichen wird, was das Sprachmodell zu sehen bekam: die Stichzeile ohne
+  // #, ohne \ und ohne die Erklaerungen in Anfuehrungszeichen -- und die
+  // Prosa, denn auch sie bestimmt, was man sieht.
+  return blankZeile(gsZeilen[i].text) !== blankZeile(p.zeile || "")
+      || (gsZeilen[i].prosa || "").trim() !== (p.prosa_quelle || "").trim();
 }
 
 function blankZeile(text) {
@@ -1670,6 +1675,7 @@ async function promptFuerSzene(i) {
     body: JSON.stringify({zeilen: [z], nummern: [i + 1],
                           stil: $("gsStil").value, welt: $("gsWelt").value,
                           kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
+                          alter: $("gsFreigabe").value,
                           modell: $("gsModell").value,
                           schluessel: GSAKTUELL, band: gsBandNr})
   }).catch(() => null);
@@ -1727,6 +1733,7 @@ $("gsEinpflegen").onclick = async e => {
                           nummern: offen.map(i => i + 1),
                           stil: $("gsStil").value, welt: $("gsWelt").value,
                           kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
+                          alter: $("gsFreigabe").value,
                           modell: $("gsModell").value,
                           schluessel: GSAKTUELL, band: gsBandNr})
   }).catch(() => null);
@@ -1912,8 +1919,11 @@ async function gsRuf(rumpf) {
 
 function gsStand() {
   return {band: gsBandNr,
+          anfang: GSRAHMEN.anfang, ende: GSRAHMEN.ende,
+          kapitel: GSRAHMEN.kapitel,
           stil: $("gsStil").value, welt: $("gsWelt").value,
-          fiktion: +$("gsFiktion").value, modell: $("gsModell").value,
+          fiktion: +$("gsFiktion").value, alter: $("gsFreigabe").value,
+          modell: $("gsModell").value,
           idee: $("gsIdee").value, kurz: $("gsKurz").value,
           zeilen: gsZeilen,
           prompts: (GESCHICHTE && GESCHICHTE.prompts) || []};
@@ -1974,6 +1984,7 @@ async function gsOeffnen(schluessel, nr) {
   if (g.welt) $("gsWelt").value = g.welt;
   if (g.modell) $("gsModell").value = g.modell;
   if (g.fiktion !== null && g.fiktion !== undefined) $("gsFiktion").value = g.fiktion;
+  if (g.alter) $("gsFreigabe").value = g.alter;
   zeigeGrad();
   // Inhalt des Bandes
   const band = baende.find(x => x.nr === gsBandNr) || {};
@@ -1981,6 +1992,9 @@ async function gsOeffnen(schluessel, nr) {
   $("gsKurz").value = band.kurz || "";
   gsZeilen = (band.zeilen && band.zeilen.length)
     ? band.zeilen : [{text: "", bilder: 1}];
+  GSRAHMEN = {anfang: band.anfang || "", ende: band.ende || "",
+              kapitel: band.kapitel || []};
+  zeigeRahmen();
   zeigeSelbstszenen();
   GESCHICHTE = null;
   $("gsSzenen").innerHTML = "";
@@ -2049,6 +2063,7 @@ $("gsUmreissen").onclick = async e => {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({idee, fiktion: +$("gsFiktion").value,
                           anzahl: parseInt($("gsAnzahl").value, 10) || 0,
+                          alter: $("gsFreigabe").value,
                           modell: $("gsModell").value,
                           schluessel: GSAKTUELL, band: gsBandNr})
   }).catch(() => null);
@@ -2061,7 +2076,95 @@ $("gsUmreissen").onclick = async e => {
   say("Die Geschichte wird umrissen …");
 };
 
+// Stufe 1: die Geschichte lesen. Titel, Kurzfassung, erste und letzte
+// Szene, und der Text in Abschnitte geteilt. Das Ende steht damit fest,
+// bevor die Mitte geschrieben wird -- vorher lief eine lange Vorlage aus,
+// ohne je anzukommen.
+$("gsLesen").onclick = async e => {
+  e.preventDefault();
+  const text = $("gsIdee").value.trim();
+  if (!text) return say("Erst die Geschichte oder die Idee eintippen.", "err");
+  if (!$("gsStil").value || !$("gsWelt").value) {
+    return say("Erst Stil und Welt wählen — danach wird die Idee unter "
+               + "diesen Vorgaben gelesen.", "err");
+  }
+  const res = await fetch("/api/aufbau", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({phase: "rahmen", text, kurz: $("gsKurz").value,
+                          welt: $("gsWelt").value, stil: $("gsStil").value,
+                          fiktion: +$("gsFiktion").value,
+                          alter: $("gsFreigabe").value,
+                          anzahl: parseInt($("gsAnzahl").value, 10) || 12,
+                          modell: $("gsModell").value})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Das ließ sich nicht lesen.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say("Die Geschichte wird gelesen …");
+};
+
+// Stufe 2: die Szenen je Abschnitt, mit dem Ende als letzter Zeile.
+$("gsSzenenSchreiben").onclick = async e => {
+  e.preventDefault();
+  if (!GSRAHMEN.kapitel.length) {
+    return say("Erst „Geschichte lesen“ — dann stehen die Abschnitte fest.",
+               "err");
+  }
+  const res = await fetch("/api/aufbau", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({phase: "szenen", kurz: $("gsKurz").value,
+                          welt: $("gsWelt").value, stil: $("gsStil").value,
+                          fiktion: +$("gsFiktion").value,
+                          anzahl: parseInt($("gsAnzahl").value, 10) || 12,
+                          alter: $("gsFreigabe").value,
+                          anfang: GSRAHMEN.anfang, ende: GSRAHMEN.ende,
+                          kapitel: GSRAHMEN.kapitel,
+                          modell: $("gsModell").value})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Die Szenen ließen sich nicht schreiben.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say(`Die Szenen werden geschrieben, ${GSRAHMEN.kapitel.length} Abschnitte …`);
+};
+
+function zeigeRahmen() {
+  const k = GSRAHMEN.kapitel || [];
+  $("gsRahmen").innerHTML = !k.length ? "" : `
+    <div class="fund gut"><b>Anfang</b> ${esc(GSRAHMEN.anfang)}</div>
+    <div class="fund gut"><b>Ende</b> ${esc(GSRAHMEN.ende)}</div>
+    <p class="hint">${k.length} Abschnitte: ${
+      k.map(x => esc(x.titel)).join(" · ")}</p>`;
+}
+
 function zeigeExpose(e) {
+  // Stufe 1 bringt Rahmen und Abschnitte, aber noch keine Szenen.
+  if (e && e.nur_rahmen) {
+    if (e.kurz && e.kurz !== $("gsKurz").value) $("gsKurz").value = e.kurz;
+    GSRAHMEN = {anfang: e.anfang || "", ende: e.ende || "",
+                kapitel: e.kapitel || []};
+    zeigeRahmen();
+    gsMerken();
+    say(`„${e.titel || "Geschichte"}“ gelesen: Anfang und Ende stehen, `
+        + `${GSRAHMEN.kapitel.length} Abschnitte. Jetzt „Szenen schreiben“.`,
+        "ok");
+    return;
+  }
+  if (e && e.nur_szenen) {
+    const neu = (e.szenen || []).filter(t => (t || "").trim());
+    if (!neu.length || gsErgaenztZuletzt === JSON.stringify(neu)) return;
+    gsErgaenztZuletzt = JSON.stringify(neu);
+    gsZeilen = neu.map(t => ({text: t, bilder: 1}));
+    zeigeSelbstszenen();
+    gsMerken();
+    say(`${neu.length} Szenen geschrieben — die letzte ist das Ende.`, "ok");
+    return;
+  }
   // Eine Ergaenzung bringt keine Kurzfassung mit, nur neue Zeilen. Sie
   // werden angehaengt, nicht eingesetzt -- das Vorhandene bleibt stehen.
   if (e && e.nur_ergaenzung) {

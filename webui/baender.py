@@ -20,9 +20,12 @@ import time
 import projekte
 
 # Was zur Geschichte gehoert und fuer jeden Band gilt.
-GLOBAL = ("stil", "welt", "fiktion", "modell")
+GLOBAL = ("stil", "welt", "fiktion", "alter", "modell")
 # Was je Band eigen ist.
-BAND = ("idee", "kurz", "titel", "zeilen", "prompts")
+BAND = ("idee", "kurz", "titel", "zeilen", "prompts",
+        # Anfang und Ende stehen fest, bevor die Mitte entsteht; die
+        # Abschnitte sind die Stuecke der Vorlage samt Ueberschrift.
+        "anfang", "ende", "kapitel")
 
 
 def _ordner(projekt: str) -> str:

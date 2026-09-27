@@ -179,43 +179,11 @@
         und gelten für alle Bände. Ein neuer Band kennt die Kurzfassungen der
         vorigen und knüpft daran an.</p>
 
-      <p class="hint" style="margin-top:14px"><b>1. Umreißen.</b> Eine Idee genügt. Das Sprachmodell
-        schreibt die Kurzfassung, schlägt den Stil für die ganze Folge vor und
-        sagt, ob es in der Wirklichkeit oder einer erfundenen Welt spielt —
-        das muss es wissen, sonst biegt es Drachen weg.</p>
-      <label for="gsIdee">Idee</label>
-      <textarea id="gsIdee" rows="4" style="min-height:92px"
-        placeholder="Ein Drache bewacht eine Bibliothek und ein Mädchen will ein Buch ausleihen"></textarea>
-      <div class="axis">
-        <div>
-          <label for="gsAnzahl">Wie viele Szenen</label>
-          <input type="number" id="gsAnzahl" min="0" max="60" value="0"
-            title="0 überlässt die Zahl dem Sprachmodell">
-        </div>
-        <div>
-          <p class="hint" style="margin-top:26px">0 heißt: das Sprachmodell
-            entscheidet, meist fünf bis zehn. Sonst kommen genau so viele
-            Zeilen — fehlende bleiben leer zum Selberschreiben.</p>
-        </div>
-      </div>
-
-      <label for="gsFiktion">Wirklichkeitsgrad</label>
-      <div class="regler">
-        <span>wirklich</span>
-        <input type="range" id="gsFiktion" min="0" max="10" step="1" value="0">
-        <span>Fiktion</span>
-      </div>
-      <p class="hint" id="gsFiktionText"></p>
-      <p class="hint">Die Angabe bindet das Sprachmodell — auch für jede
-        einzelne Szene, nicht nur fürs Umreißen. Dazwischen liegt das
-        Interessante: eine Welt wie unsere, in der eine Sache nicht stimmt
-        und niemand sich daran stört.</p>
-      <p class="hint"><a href="#" id="gsUmreissen">Umreißen lassen</a>
-        — füllt Kurzfassung, Stil, Welt und einen Vorschlag fürs
-        Inhaltsverzeichnis.</p>
-      <textarea id="gsKurz" rows="6" style="min-height:130px"
-        placeholder="Kurzfassung — entsteht beim Umreißen, änderbar"></textarea>
-
+      <p class="hint" style="margin-top:14px"><b>1. Rahmen.</b> Zuerst Stil,
+        Welt und Wirklichkeitsgrad — darunter liest das Sprachmodell alles
+        Weitere. Ohne diese Angaben biegt es eine Fantasiehandlung so lange
+        zurecht, bis sie alltagstauglich ist, und wählt einen Stil, der nicht
+        passt.</p>
       <div class="axis">
         <div>
           <label for="gsStil">Stil für die ganze Folge</label>
@@ -227,8 +195,55 @@
           <select id="gsWelt"></select>
         </div>
       </div>
+      <label for="gsFiktion">Wirklichkeitsgrad</label>
+      <div class="regler">
+        <span>wirklich</span>
+        <input type="range" id="gsFiktion" min="0" max="10" step="1" value="0">
+        <span>Fiktion</span>
+      </div>
+      <p class="hint" id="gsFiktionText"></p>
+      <p class="hint">Die Angabe bindet das Sprachmodell — auch für jede
+        einzelne Szene, nicht nur fürs Lesen. Dazwischen liegt das
+        Interessante: eine Welt wie unsere, in der eine Sache nicht stimmt
+        und niemand sich daran stört.</p>
+      <div class="axis">
+        <div>
+          <label for="gsFreigabe">Altersfreigabe</label>
+          <select id="gsFreigabe"></select>
+        </div>
+        <div>
+          <label for="gsAnzahl">Wie viele Szenen</label>
+          <input type="number" id="gsAnzahl" min="0" max="60" value="0"
+            title="0 überlässt die Zahl dem Sprachmodell">
+        </div>
+      </div>
+      <p class="hint">Die Freigabe sagt dem Sprachmodell, was gezeigt werden
+        darf — sie steht in jedem Auftrag, nicht nur im ersten. 0 Szenen
+        heißt: das Sprachmodell entscheidet, meist fünf bis zehn.</p>
 
-      <p class="hint" style="margin-top:14px"><b>2. Inhaltsverzeichnis.</b>
+      <p class="hint" style="margin-top:14px"><b>2. Idee oder ganze
+        Geschichte.</b> Was hier steht, wird unter den Vorgaben von oben
+        gelesen.</p>
+      <label for="gsIdee">Idee oder Geschichte</label>
+      <textarea id="gsIdee" rows="5" style="min-height:110px"
+        placeholder="Ein Drache bewacht eine Bibliothek und ein Mädchen will ein Buch ausleihen — oder gleich die ganze Geschichte, eine Seite oder mehr"></textarea>
+      <p class="hint"><a href="#" id="gsUmreissen">Umreißen lassen</a>
+        — für eine kurze Idee: füllt Kurzfassung, Stil, Welt und einen
+        Vorschlag fürs Inhaltsverzeichnis in einem Zug.</p>
+      <p class="hint">Für eine <b>ganze Geschichte</b> — eine Seite oder mehr
+        — geht es in zwei Stufen:
+        <a href="#" id="gsLesen"><b>Geschichte lesen</b></a> holt Titel,
+        Kurzfassung, <b>Anfangs- und Schlussszene</b> und teilt den Text in
+        Abschnitte. Danach schreibt
+        <a href="#" id="gsSzenenSchreiben"><b>Szenen schreiben</b></a> die
+        Szenen Abschnitt für Abschnitt — jeder kommt dran, und die letzte
+        Zeile ist die Schlussszene. In einem Zug lief eine lange Vorlage
+        vorher aus, ohne je anzukommen.</p>
+      <div id="gsRahmen"></div>
+      <textarea id="gsKurz" rows="6" style="min-height:130px"
+        placeholder="Kurzfassung — entsteht beim Lesen, änderbar"></textarea>
+
+      <p class="hint" style="margin-top:14px"><b>3. Inhaltsverzeichnis.</b>
         Je Zeile eine Szene. Mit <code>/</code> und dem Namen holst du einen
         Baustein herein — <code>/Anna rennt durch die /Markthalle</code>.
         Rechts steht, wie viele Bilder aus dieser Szene entstehen; mehrere
@@ -296,14 +311,14 @@
           </label>
         </div>
       </div>
-      <p class="hint"><b>3.</b>
+      <p class="hint"><b>4.</b>
         <a href="#" id="gsErzeugen">Prompts schreiben lassen</a>
         — rund eine halbe Minute zum Laden, dann etwa sieben Sekunden je
         Szene. Bilder entstehen dabei noch keine.</p>
 
       <div id="gsSzenen"></div>
       <p class="hint" id="gsHinweis"></p>
-      <p class="hint" id="gsKnoepfe" style="display:none"><b>4.</b>
+      <p class="hint" id="gsKnoepfe" style="display:none"><b>5.</b>
         <a href="#" id="gsUebernehmen">In den Ablauf übernehmen</a>
         — dort gegenlesen und starten · oder
         <a href="#" id="gsSofort">Bilder und Video jetzt erzeugen</a></p>
