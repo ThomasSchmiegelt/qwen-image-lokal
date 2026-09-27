@@ -1204,6 +1204,7 @@ function zeigeSelbstszenen() {
         <span class="knopf" onclick="gsSchieben(${i}, 1)" title="nach unten">▼</span>
         <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
       </div>
+      ${vorschlagZeile(z, i)}
     </div>`;
   }).join("")
     + (BAUSTEINE.length
@@ -1281,6 +1282,48 @@ function gsEinfuegen(zeichen, name) {
   gsMerken();
 }
 
+// Die Vorschlaege einer Szene: anklicken schreibt /Name in die Zeile. Was
+// schon drinsteht, ist abgehakt. Sie haengen an der Szene selbst, ziehen
+// also beim Umsortieren mit und stehen nach dem Speichern wieder da.
+function vorschlagZeile(z, i) {
+  const liste = z.vorschlag || [];
+  if (!liste.length) return "";
+  const drin = n => new RegExp("/" + n.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                               + "\\b", "i").test(z.text);
+  const offen = liste.filter(t => !drin(t.name));
+  return `<div class="szvorschlag">
+    ${liste.map(t => `<span class="chip ${t.da ? "hat" : "neu"}${
+        drin(t.name) ? " drin" : ""}" title="${
+        t.art}${t.da ? ", gibt es schon" : ", noch anzulegen"}"
+      onclick="vorschlagNehmen(${i}, '${esc(t.name)}')">${
+        drin(t.name) ? "✓ " : ""}${esc(t.name)}</span>`).join("")}
+    ${offen.length > 1
+      ? `<a href="#" onclick="vorschlagAlle(${i});return false">alle</a>` : ""}
+  </div>`;
+}
+
+function vorschlagNehmen(i, name) {
+  const z = gsZeilen[i];
+  const muster = new RegExp("/" + name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                            + "\\b", "i");
+  if (muster.test(z.text)) return;            // steht schon drin
+  z.text = (z.text.trim() + " /" + name).trim();
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
+function vorschlagAlle(i) {
+  (gsZeilen[i].vorschlag || []).forEach(t => {
+    const muster = new RegExp("/" + t.name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                              + "\\b", "i");
+    if (!muster.test(gsZeilen[i].text)) {
+      gsZeilen[i].text = (gsZeilen[i].text.trim() + " /" + t.name).trim();
+    }
+  });
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
 // Die Reihenfolge aendern. Eine Szene an die falsche Stelle zu schreiben
 // passiert staendig; sie dafuer zweimal abzutippen ist zu viel verlangt.
 function gsSchieben(i, wohin) {
@@ -1298,6 +1341,29 @@ function gsZeileWeg(i) {
   if (!gsZeilen.length) gsZeilen = [{text: "", bilder: 1}];
   zeigeSelbstszenen();
 }
+
+// Je Szene vorschlagen, welche Bausteine sie braucht. Zwei Schritte statt
+// einem: erst sehen, was gemeint ist, dann entscheiden, was hineinkommt.
+$("gsEmpfehlen").onclick = async e => {
+  e.preventDefault();
+  if (!gsZeilen.some(z => z.text.trim()))
+    return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  say("Die Bausteine werden vorgeschlagen …");
+  const g = await bausteinRuf({tu: "empfehlen", zeilen: gsZeilen});
+  if (!g) return;
+  gsZeilen.forEach(z => delete z.vorschlag);
+  let n = 0;
+  (g.empfehlungen || []).forEach(e2 => {
+    const z = gsZeilen[e2.nr - 1];
+    if (!z || !e2.teile.length) return;
+    z.vorschlag = e2.teile;
+    n += e2.teile.length;
+  });
+  zeigeSelbstszenen();
+  gsMerken();
+  say(n ? `${n} Vorschläge — anklicken übernimmt sie in die Szene.`
+        : "Keine Bausteine erkannt.", n ? "ok" : "err");
+};
 
 // Alles, was die Geschichte mit /Name verlangt und noch nicht gibt, gleich
 // anlegen -- mit geratener Art und geschriebenem Prompt. Ein Vorschlag zum
@@ -1514,6 +1580,7 @@ $("gsUmreissen").onclick = async e => {
   const res = await fetch("/api/expose", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({idee, fiktion: +$("gsFiktion").value,
+                          anzahl: parseInt($("gsAnzahl").value, 10) || 0,
                           modell: $("gsModell").value,
                           schluessel: GSAKTUELL, band: gsBandNr})
   }).catch(() => null);

@@ -348,6 +348,19 @@
 .szleiste .gsangabe { flex: 1; min-width: 6em; }
 .selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em;
                    padding-top: 8px; }
+/* Die Vorschlaege unter einer Szene. Zwei Farben, ein Unterschied: gibt es
+   schon, oder muss noch angelegt werden. */
+.szvorschlag { display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+               margin: 5px 0 1px; padding-left: 1.9em; font-size: 11.5px; }
+.szvorschlag a { font-size: 11.5px; }
+.chip {
+  display: inline-block; padding: 2px 7px; border-radius: 10px;
+  border: 1px solid var(--line); cursor: pointer; user-select: none;
+}
+.chip.hat { color: var(--text); background: #232833; }
+.chip.neu { color: var(--accent); border-color: var(--accent); }
+.chip:hover { border-color: #b9caff; }
+.chip.drin { opacity: .5; cursor: default; }
 /* Die Szenenzeile ist ein Textfeld, kein einzeiliges Eingabefeld: eine Szene
    mit zwei Bausteinen und einer Kameraeinstellung passt sonst nicht hinein,
    ohne dass man im Feld hin- und herscrollt. Es waechst mit und laesst sich

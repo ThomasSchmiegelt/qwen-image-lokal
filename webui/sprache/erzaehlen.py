@@ -318,25 +318,32 @@ diesen Schlüsseln:
           ALLE Bilder gelten soll: {stile}
 "titel"   Zwei bis vier Wörter, deutsch.
 "szenen"  Vorschlag für die Gliederung: eine Liste deutscher Zeilen, je eine
-          Szene, fünf bis zehn Stück. Eine Zeile sagt, was in diesem einen
+          Szene, {anzahl}. Eine Zeile sagt, was in diesem einen
           Bild zu sehen ist."""
 
 
 def expose(idee: str, fiktion=None, vorher: str = "",
-           model: str | None = None) -> dict:
+           model: str | None = None, anzahl: int = 0) -> dict:
     """Aus einer Idee die Kurzbeschreibung samt Stil und Weltzuordnung.
 
     `fiktion` ist der Regler des Benutzers, 0 bis 10, und schlaegt das
-    Urteil des Modells. None laesst es selbst entscheiden.
+    Urteil des Modells. None laesst es selbst entscheiden. `anzahl` ist die
+    gewuenschte Zahl der Szenen; 0 laesst das Modell entscheiden.
     """
     leer = {"kurz": "", "welt": "wirklich", "stil": "", "titel": "", "szenen": []}
     if not (idee or "").strip():
         return leer
     name = model or GROSS
     erlaubt, satz = grad(fiktion)
+    try:
+        wunsch = max(0, min(int(anzahl or 0), MAX_SZENEN))
+    except (TypeError, ValueError):
+        wunsch = 0
     system = EXPOSE_SYSTEM.format(
         welten=", ".join(f'"{k}" ({WELTEN[k][0]})' for k in erlaubt),
-        stile=", ".join(STYLES))
+        stile=", ".join(STYLES),
+        anzahl=(f"GENAU {wunsch} Stück -- nicht mehr und nicht weniger"
+                if wunsch else "fünf bis zehn Stück"))
     if satz:
         system += f"\n\nDer Benutzer hat den Wirklichkeitsgrad vorgegeben: {satz}"
     # Je unwirklicher, desto eher gezeichnet. Ein Foto muss glaubhaft sein --
@@ -373,6 +380,11 @@ def expose(idee: str, fiktion=None, vorher: str = "",
     stil = str(roh.get("stil") or "").strip()
     szenen = [str(z or "").strip()[:200] for z in (roh.get("szenen") or [])
               if str(z or "").strip()]
+    # Ein kleines Modell trifft die Zahl nicht immer. Zu viele werden
+    # abgeschnitten, zu wenige mit leeren Zeilen aufgefuellt -- lieber eine
+    # leere Zeile zum Selberschreiben als eine fehlende Szene.
+    if wunsch:
+        szenen = szenen[:wunsch] + [""] * max(0, wunsch - len(szenen))
     return {
         "kurz": str(roh.get("kurz") or "").strip()[:900],
         "welt": welt,

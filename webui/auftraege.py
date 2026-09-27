@@ -504,7 +504,8 @@ def run_expose(params: dict) -> None:
         erg = chat.expose(params.get("idee") or "",
                           fiktion=params.get("fiktion"),
                           vorher=params.get("vorher") or "",
-                          model=params.get("modell") or None)
+                          model=params.get("modell") or None,
+                          anzahl=params.get("anzahl") or 0)
         current["expose"] = erg
         current["stage"] = ""
         engine.note("idle", "Geschichte umrissen" if erg["kurz"]

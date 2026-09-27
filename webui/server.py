@@ -409,6 +409,7 @@ class Handler(BaseHTTPRequestHandler):
             auftrag = einreihen("expose", {
                 "idee": str(params["idee"]), "fiktion": fiktion,
                 "vorher": vorher,
+                "anzahl": int(params.get("anzahl") or 0),
                 "modell": str(params.get("modell") or "") or None})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
@@ -523,6 +524,24 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "empfehlen":
+                # Je Szene sagen, welche Bausteine sie braucht. Was es schon
+                # gibt, wird beim Namen genannt; der Rest ist ein Vorschlag,
+                # den der Benutzer abaendert, bevor er ihn anlegen laesst.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
+                          for z in (params.get("zeilen") or [])]
+                if not any(z.strip() for z in zeilen):
+                    return self._json(400, {"error": "Keine Szene"})
+                da = bausteine.liste(projekt)
+                bekannt = {(b.get("name") or "").lower() for b in da}
+                erg = chat.bausteine_empfehlen(zeilen, da)
+                for e in erg:
+                    for t in e["teile"]:
+                        t["da"] = t["name"].lower() in bekannt
+                return self._json(200, {"empfehlungen": erg})
+
             if was == "vorschlagen":
                 # Alles, was die Geschichte mit /Name verlangt und noch nicht
                 # gibt, gleich anlegen -- mit einem geschriebenen Prompt, den

@@ -172,6 +172,19 @@
       <label for="gsIdee">Idee</label>
       <textarea id="gsIdee" rows="4" style="min-height:92px"
         placeholder="Ein Drache bewacht eine Bibliothek und ein Mädchen will ein Buch ausleihen"></textarea>
+      <div class="axis">
+        <div>
+          <label for="gsAnzahl">Wie viele Szenen</label>
+          <input type="number" id="gsAnzahl" min="0" max="24" value="0"
+            title="0 überlässt die Zahl dem Sprachmodell">
+        </div>
+        <div>
+          <p class="hint" style="margin-top:26px">0 heißt: das Sprachmodell
+            entscheidet, meist fünf bis zehn. Sonst kommen genau so viele
+            Zeilen — fehlende bleiben leer zum Selberschreiben.</p>
+        </div>
+      </div>
+
       <label for="gsFiktion">Wirklichkeitsgrad</label>
       <div class="regler">
         <span>wirklich</span>
@@ -215,11 +228,16 @@
         <code>\augen-makro</code> oder <code>\7</code>.</p>
       <div id="gsSelbst"></div>
       <p class="hint"><a href="#" id="gsPlus">+ Szene</a> ·
+        <a href="#" id="gsEmpfehlen">Bausteine je Szene vorschlagen</a> ·
         <a href="#" id="gsFehlend">fehlende Bausteine anlegen</a> ·
         <span id="gsSumme"></span></p>
-      <p class="hint">Was du mit <code>/Name</code> erwähnst und noch nicht
-        gibt, wird damit angelegt — mit geratener Art und geschriebenem
-        Prompt. Das ist ein Vorschlag zum Abändern, kein Ergebnis.</p>
+      <p class="hint">Der erste Verweis sagt je Szene, wer und was darin
+        vorkommt; die Vorschläge stehen dann unter der Szene und wandern mit
+        einem Klick hinein. <span class="chip hat">so</span> gibt es schon,
+        <span class="chip neu">so</span> noch nicht. Der zweite Verweis legt
+        alles an, was mit <code>/Name</code> in den Zeilen steht und fehlt —
+        mit geratener Art und geschriebenem Prompt, als Vorschlag zum
+        Abändern.</p>
 
       <div class="axis">
         <div>

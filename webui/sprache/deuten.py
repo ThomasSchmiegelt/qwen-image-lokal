@@ -373,6 +373,8 @@ def teil_prompt(feld: str, text: str, person: str = "",
     return fertig[:1].lower() + fertig[1:] if fertig else ""
 
 
+MAX_ZEILEN = 24
+
 RATEN_SYSTEM = """Du ordnest Namen aus einer Geschichte ein.
 
 Du bekommst das Inhaltsverzeichnis einer Bilderfolge und eine Liste von
@@ -430,6 +432,78 @@ def bausteine_raten(namen: list[str], umfeld: str = "",
         e = nach_name.get(n.lower()) or {}
         raus.append({"name": n, "art": e.get("art") or "person",
                      "beschreibung": e.get("beschreibung") or ""})
+    return raus
+
+
+EMPFEHLEN_SYSTEM = """Du sagst, welche Bausteine eine Bilderfolge braucht.
+
+Du bekommst ein Inhaltsverzeichnis, Zeile für Zeile eine Szene, und eine
+Liste der Bausteine, die es schon gibt. Für jede Szene nennst du, wer darin
+vorkommt, wo sie spielt und welcher Gegenstand darin wichtig ist.
+
+Antworte ausschließlich mit JSON: {"szenen": [ … ]}. Ein Eintrag je Szene:
+
+"nr"    Die Nummer der Szene, bei 1 beginnend.
+"teile" Eine Liste. Jeder Eintrag hat "name" und "art"
+        ("person", "ort" oder "gegenstand").
+
+Regeln:
+- Gibt es einen passenden Baustein schon, nimm seinen Namen BUCHSTABENGETREU.
+  Dieselbe Figur soll nicht zweimal unter zwei Namen entstehen.
+- Sonst ein kurzer, sprechender Name, deutsch, ein Wort oder zwei ohne
+  Leerzeichen dazwischen -- er wird später mit einem Schrägstrich getippt.
+- Höchstens ein Ort und höchstens ein Gegenstand je Szene, Personen bis zu
+  drei. Was im Bild nicht zu sehen ist, gehört nicht dazu.
+- Eine Szene ohne erkennbaren Baustein bekommt eine leere Liste."""
+
+
+def bausteine_empfehlen(zeilen: list[str], vorhanden: list[dict],
+                        model: str | None = None) -> list[dict]:
+    """Je Szene vorschlagen, welche Bausteine gebraucht werden.
+
+    Ein Aufruf fuer die ganze Gliederung: nur so kann das Modell dieselbe
+    Person in Szene eins und Szene sieben wiedererkennen.
+    """
+    zeilen = [(z or "").strip() for z in zeilen][:MAX_ZEILEN]
+    if not any(zeilen):
+        return []
+    liste = "\n".join(f'  {b.get("name")} ({b.get("art")})'
+                       for b in vorhanden if b.get("name")) or "  (keine)"
+    inhalt = "\n".join(f"{i}. {z}" for i, z in enumerate(zeilen, 1) if z)
+    frage = f"Vorhandene Bausteine:\n{liste}\n\nInhaltsverzeichnis:\n{inhalt}"
+    roh = antwort({
+        "model": model or MODEL,
+        "format": "json",
+        "options": {"temperature": 0.3, "num_predict": 1200},
+        "messages": [{"role": "system", "content": EMPFEHLEN_SYSTEM},
+                     {"role": "user", "content": frage}],
+    }, timeout=300)
+    gegeben = roh.get("szenen") if isinstance(roh, dict) else None
+    raus = []
+    for e in gegeben or []:
+        if not isinstance(e, dict):
+            continue
+        try:
+            nr = int(e.get("nr") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= nr <= len(zeilen):
+            continue
+        teile, gesehen = [], set()
+        for t in (e.get("teile") or [])[:5]:
+            if not isinstance(t, dict):
+                continue
+            name = str(t.get("name") or "").strip()[:40]
+            art = str(t.get("art") or "").strip().lower()
+            # Ein Name mit Leerzeichen liesse sich nicht mit /Name tippen.
+            name = re.sub(r"\s+", "-", name)
+            if not name or art not in ("person", "ort", "gegenstand"):
+                continue
+            if name.lower() in gesehen:
+                continue
+            gesehen.add(name.lower())
+            teile.append({"name": name, "art": art})
+        raus.append({"nr": nr, "teile": teile})
     return raus
 
 
