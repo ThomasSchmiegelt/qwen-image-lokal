@@ -14,6 +14,7 @@ aendern.
 
 import json
 import os
+import re
 import time
 
 import projekte
@@ -124,6 +125,33 @@ def loeschen(projekt: str, schluessel: str) -> bool:
         return True
     except OSError:
         return False
+
+
+def verweis_umbenennen(projekt: str, alt: str, neu: str) -> int:
+    """`/Alt` in allen Geschichten des Projekts durch `/Neu` ersetzen.
+
+    Gehoert zum Zusammenfuehren zweier Bausteine: sonst zeigte jede Szene,
+    die den alten Namen nennt, ins Leere -- und stuende danach als "noch
+    anzulegen" im Katalog.
+    """
+    if not alt or not neu or alt.lower() == neu.lower():
+        return 0
+    muster = re.compile(r"/" + re.escape(alt) + r"\b", re.I)
+    geaendert = 0
+    for eintrag in liste(projekt):
+        g = lesen(projekt, eintrag["schluessel"])
+        beruehrt = False
+        for band in g.get("baende") or []:
+            for z in band.get("zeilen") or []:
+                text = str(z.get("text") or "")
+                ersetzt = muster.sub("/" + neu, text)
+                if ersetzt != text:
+                    z["text"] = ersetzt
+                    geaendert += 1
+                    beruehrt = True
+        if beruehrt:
+            _schreiben(projekt, g)
+    return geaendert
 
 
 def vorgeschichte(g: dict, bis_nr: int) -> str:

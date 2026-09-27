@@ -189,6 +189,34 @@ def speichern(projekt: str, baustein: dict) -> dict:
     return neu
 
 
+def zusammenfuehren(projekt: str, von: str, nach: str) -> dict:
+    """Zwei Bausteine zu einem machen. `von` geht auf, `nach` bleibt.
+
+    Passiert oefter als gedacht: das Sprachmodell schlaegt "Frau" vor, spaeter
+    heisst dieselbe Figur "Nora", und nun stehen zwei Personen im Katalog, die
+    eine Person sind. Leere Felder des bleibenden Bausteins werden aus dem
+    aufgehenden gefuellt -- sonst ginge beim Verschmelzen etwas verloren.
+    """
+    daten = liste(projekt)
+    a = next((b for b in daten if b.get("id") == von), None)
+    b = next((x for x in daten if x.get("id") == nach), None)
+    if not a or not b or von == nach:
+        return {}
+    ziel = dict(b)
+    for feld in ("prompt", "gesicht", "kleidung", "bild", "stil"):
+        if not (ziel.get(feld) or "").strip():
+            ziel[feld] = a.get(feld) or ""
+    # Vorgaben zu Luecken, die der bleibende Prompt hat, aber nicht kennt.
+    werte = dict(a.get("variablen") or {})
+    werte.update({k: v for k, v in (ziel.get("variablen") or {}).items() if v})
+    ziel["variablen"] = werte
+    rest = [x for x in daten if x.get("id") not in (von, nach)]
+    rest.append(ziel)
+    _schreiben(projekt, rest)
+    return {"ziel": ziel, "alter_name": a.get("name") or "",
+            "neuer_name": ziel.get("name") or ""}
+
+
 def loeschen(projekt: str, kennung: str) -> bool:
     daten = liste(projekt)
     rest = [b for b in daten if b.get("id") != kennung]

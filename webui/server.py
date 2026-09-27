@@ -548,6 +548,20 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "zusammenfuehren":
+                # Zwei Bausteine, eine Figur. Der eine geht im anderen auf,
+                # und alle Geschichten des Projekts nennen ab jetzt den
+                # bleibenden Namen.
+                erg = bausteine.zusammenfuehren(projekt,
+                                                str(params.get("von") or ""),
+                                                str(params.get("nach") or ""))
+                if not erg:
+                    return self._json(404, {"error": "Baustein nicht gefunden"})
+                zeilen = baender.verweis_umbenennen(projekt, erg["alter_name"],
+                                                    erg["neuer_name"])
+                return self._json(200, {"ziel": erg["ziel"], "zeilen": zeilen,
+                                        "alter_name": erg["alter_name"]})
+
             if was == "auffrischen":
                 # Personen aus der Zeit vor der Trennung: Gesicht und Kleidung
                 # standen damals im allgemeinen Prompt oder in einer Luecke.

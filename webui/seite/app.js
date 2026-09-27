@@ -852,6 +852,13 @@ function zeigeBausteine(liste) {
           ${b.stil ? `<span class="art">Bild: ${esc(
               (STILLISTE.find(x => x.key === b.stil) || {}).label || b.stil)}</span>` : ""}
           <br><code>${esc(b.prompt)}</code></div>
+        ${liste.filter(x => x.id !== b.id && x.art === b.art).length
+          ? `<select class="verschmelzen"
+               onchange="bausteineVerschmelzen('${b.id}', this)">
+              <option value="">↦ aufgehen in …</option>
+              ${liste.filter(x => x.id !== b.id && x.art === b.art).map(x =>
+                `<option value="${x.id}">${esc(x.name)}</option>`).join("")}
+            </select>` : ""}
         <span class="knopf" onclick="bausteinLaden('${b.id}')" title="bearbeiten">✎</span>
         <span class="knopf" onclick="bausteinBild('${b.id}')"
           title="${b.bild ? "Musterbild neu erzeugen und ersetzen"
@@ -1011,6 +1018,27 @@ $("bsBild").onclick = async e => {
   bausteinLeeren();
   say(`„${b.name}“ gespeichert, Bild dazu eingereiht.`, "ok");
 };
+
+// Zwei Bausteine, eine Figur. Passiert, wenn das Sprachmodell erst "Frau"
+// vorschlaegt und die Figur spaeter "Nora" heisst. Der eine geht im anderen
+// auf, und alle Geschichten nennen danach den bleibenden Namen.
+async function bausteineVerschmelzen(von, feld) {
+  const nach = feld.value;
+  feld.value = "";
+  if (!nach) return;
+  const a = BAUSTEINE.find(x => x.id === von);
+  const b = BAUSTEINE.find(x => x.id === nach);
+  if (!a || !b) return;
+  if (!confirm(`„${a.name}“ in „${b.name}“ aufgehen lassen? `
+               + `„${a.name}“ verschwindet, und alle Szenen sagen danach `
+               + `/${b.name}.`)) return;
+  const g = await bausteinRuf({tu: "zusammenfuehren", von, nach});
+  if (!g) return;
+  await bausteineHolen();
+  await gsListe(GSAKTUELL);            // die Geschichte kann sich geaendert haben
+  say(`„${g.alter_name}“ ist in „${g.ziel.name}“ aufgegangen`
+      + (g.zeilen ? `, ${g.zeilen} Szenenzeile(n) umbenannt.` : "."), "ok");
+}
 
 // Bausteine entstehen zuerst ohne Bild -- erst der Text, dann sieht man, ob
 // er taugt. Das Musterbild kommt hinterher, je Baustein einzeln.
@@ -1567,6 +1595,41 @@ $("gsPruefen").onclick = async e => {
   say(funde.length ? `${funde.length} Anmerkung(en) — siehe unten.`
                    : "Die Gliederung ist vollständig.",
       funde.length ? "" : "ok");
+};
+
+// Der ganze Weg in einem Zug: vorschlagen, in die Szenen uebernehmen,
+// anlegen. Wer eine Gliederung fertig hat, will nicht dreimal klicken --
+// und was dabei entsteht, laesst sich danach genauso aendern.
+$("gsAllesAnlegen").onclick = async e => {
+  e.preventDefault();
+  if (!gsZeilen.some(z => z.text.trim()))
+    return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  const g = await bausteinRuf({tu: "empfehlen", zeilen: gsZeilen});
+  if (!g) return;
+  let genommen = 0;
+  (g.empfehlungen || []).forEach(e2 => {
+    const z = gsZeilen[e2.nr - 1];
+    if (!z) return;
+    z.vorschlag = e2.teile;
+    e2.teile.forEach(t => {
+      const muster = new RegExp("/" + t.name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                                + "\\b", "i");
+      if (!muster.test(z.text)) {
+        z.text = (z.text.trim() + " /" + t.name).trim();
+        genommen++;
+      }
+    });
+  });
+  zeigeSelbstszenen();
+  gsMerken();
+  const h = await bausteinRuf({tu: "vorschlagen", zeilen: gsZeilen});
+  if (!h) return;
+  await bausteineHolen();
+  zeigeSelbstszenen();
+  say(`${genommen} Verweise in die Szenen geschrieben, `
+      + `${h.neu.length} Baustein(e) angelegt`
+      + (h.neu.length ? `: ${h.neu.map(b => b.name).join(", ")}` : "")
+      + " — im Reiter Bausteine gegenlesen.", "ok");
 };
 
 // Je Szene vorschlagen, welche Bausteine sie braucht. Zwei Schritte statt

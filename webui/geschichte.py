@@ -416,13 +416,20 @@ def pruefen(roh: list[dict], alle: list[dict],
         ohne_def, _ = definitionen(ohne_raute)
         text, einst, _ = einstellung_von(ohne_def, eigene)
         namen = VERWEIS.findall(text)
-        fehlend = [n for n in namen if n.lower() not in nach_name]
+        fehlend = [n for n in dict.fromkeys(namen) if n.lower() not in nach_name]
         teile = [nach_name[n.lower()] for n in namen if n.lower() in nach_name]
         benutzt |= {b["id"] for b in teile}
 
         if not namen:
             fund(i, "warnung", "Kein Baustein genannt — das Bild erfindet sich "
                                "Person und Ort selbst.")
+        # Nach einem Zusammenfuehren kann "/Frau trifft /Nora" zu "/Nora
+        # trifft /Nora" geworden sein. Der Baustein zaehlt dann einmal, der
+        # Satz aber sagt zwei Personen.
+        for name in dict.fromkeys(namen):
+            if sum(1 for n in namen if n.lower() == name.lower()) > 1:
+                fund(i, "warnung", f"/{name} steht zweimal in der Zeile — "
+                                   "das Bild zeigt die Figur sonst doppelt.")
         for n in fehlend:
             fund(i, "fehler", f"/{n} ist nicht angelegt.")
         # Solange ein Name fehlt, sind Person und Ort noch nicht entschieden:
