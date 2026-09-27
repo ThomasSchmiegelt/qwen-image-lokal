@@ -589,7 +589,11 @@ def run_prosa(params: dict) -> None:
     """
     try:
         roh = params.get("zeilen") or []
-        szenen = [{"nr": i + 1, "zeile": z.get("text") or ""}
+        # "nummern" sagt, welche Szenen der Geschichte das sind. Ohne die
+        # Angabe ist es die ganze Gliederung, eins bis n.
+        nummern = [int(n) for n in (params.get("nummern") or [])]
+        szenen = [{"nr": (nummern[i] if i < len(nummern) else i + 1),
+                   "zeile": z.get("text") or ""}
                   for i, z in enumerate(roh) if (z.get("text") or "").strip()]
         if not szenen:
             raise ValueError("Keine Szene")

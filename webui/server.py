@@ -484,6 +484,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "Keine Szene"})
             auftrag = einreihen("prosa", {
                 "zeilen": params.get("zeilen") or [],
+                "nummern": [int(n) for n in (params.get("nummern") or [])
+                            if str(n).isdigit()],
                 "kurz": str(params.get("kurz") or ""),
                 "welt": str(params.get("welt") or ""),
                 "alter": str(params.get("alter") or ""),

@@ -1424,20 +1424,28 @@ function zeigeSelbstszenen() {
         <span class="knopf" onclick="gsSchieben(${i}, 1)" title="nach unten">▼</span>
         <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
       </div>
-      <div class="szkurz" onclick="szeneKlappen(${i})">
-        <span class="pfeil">${z.offen ? "▾" : "▸"}</span>
-        <span>${esc(kurz)}</span>
+      <div class="szkurz">
+        <span class="pfeil" onclick="szeneKlappen(${i})">${
+          z.offen ? "▾" : "▸"}</span>
+        <span onclick="szeneKlappen(${i})" style="flex:1">${esc(kurz)}</span>
         ${veraltet(i) ? `<span class="wink">geändert</span>` : ""}
+        <a href="#" class="szprompt"
+           title="Diese Szene ganz nachziehen: Bausteine und Bildprompt"
+           onclick="szeneAktualisieren(${i});return false">aktualisieren</a>
       </div>
       ${!z.offen ? "" : `
       <div class="szgruppe">
-        <h4>Prosa</h4>
+        <h4>Prosa <a href="#" class="szprompt"
+          onclick="prosaFuerSzene(${i});return false">${
+            (z.prosa || "").trim() ? "neu schreiben" : "schreiben"}</a></h4>
         <textarea class="gsprosa" data-i="${i}" rows="2"
           placeholder="der Text zu dieser Szene">${esc(z.prosa || "")}</textarea>
       </div>
 
       <div class="szgruppe">
-        <h4>Bausteine</h4>
+        <h4>Bausteine <a href="#" class="szprompt"
+          title="Erklärungen in Anführungszeichen übernehmen und Fehlende anlegen"
+          onclick="bausteineAktualisierenSzene(${i});return false">aktualisieren</a></h4>
         <div class="szleiste">
           ${drin.map(b => `
             <select class="gsdrin" title="tauschen oder entfernen"
@@ -2172,6 +2180,52 @@ $("gsProsaSchreiben").onclick = async e => {
   poll();
   say(`Der Text zu ${zeilen.length} Szenen wird geschrieben …`);
 };
+
+// Dieselben drei Schritte, aber nur fuer eine Szene: Text, Bausteine, Bild.
+// Wer eine Zeile geaendert hat, will nicht die ganze Geschichte neu rechnen.
+async function prosaFuerSzene(i) {
+  const z = gsZeilen[i];
+  if (!z || !z.text.trim()) return say("Die Szene ist leer.", "err");
+  const res = await fetch("/api/prosa", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen: [z], nummern: [i + 1],
+                          kurz: $("gsKurz").value, welt: $("gsWelt").value,
+                          alter: $("gsFreigabe").value,
+                          fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Die Prosa ließ sich nicht schreiben.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say(`Der Text zu Szene ${i + 1} wird geschrieben …`);
+}
+
+async function bausteineAktualisierenSzene(i) {
+  const z = gsZeilen[i];
+  if (!z || !z.text.trim()) return;
+  const g = await bausteinRuf({tu: "aktualisieren", zeilen: [z]});
+  if (!g) return;
+  const h = offeneNamen(z.text).length
+    ? await bausteinRuf({tu: "vorschlagen", zeilen: [z]}) : {neu: []};
+  if (!h) return;
+  await bausteineHolen();
+  zeigeSelbstszenen();
+  const teile = [];
+  if ((g.weg || []).length) teile.push(`${g.weg.join(", ")} aufgegangen`);
+  if (g.neu.length) teile.push(`nachgezogen: ${g.neu.map(b => b.name).join(", ")}`);
+  if (h.neu.length) teile.push(`angelegt: ${h.neu.map(b => b.name).join(", ")}`);
+  say(teile.length ? teile.join(" · ") + "."
+                   : `Szene ${i + 1}: nichts zu übernehmen.`, "ok");
+}
+
+// Alles fuer diese eine Szene: erst die Bausteine, dann das Bild.
+async function szeneAktualisieren(i) {
+  await bausteineAktualisierenSzene(i);
+  await promptFuerSzene(i);
+}
 
 function zeigeExpose(e) {
   // Der Text zu den Szenen, aus dem eigenen Schritt.
