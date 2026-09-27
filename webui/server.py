@@ -630,6 +630,47 @@ class Handler(BaseHTTPRequestHandler):
                         t["da"] = t["name"].lower() in bekannt
                 return self._json(200, {"empfehlungen": erg})
 
+            if was == "aktualisieren":
+                # Was in den Anfuehrungszeichen hinter einem /Namen steht,
+                # wird zur Beschreibung des Bausteins -- auch wenn es ihn
+                # schon gibt. Der Benutzer hat es gerade hingeschrieben, also
+                # gilt es und nicht der alte Prompt.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
+                          for z in (params.get("zeilen") or [])]
+                erklaert = {}
+                for z in zeilen:
+                    for name, text in geschichte.definitionen(z)[1].items():
+                        erklaert[name.lower()] = (name, text)
+                if not erklaert:
+                    return self._json(200, {"neu": [], "hinweis":
+                        "Keine Erklärung in Anführungszeichen gefunden."})
+                nach_name = {(b.get("name") or "").lower(): b
+                             for b in bausteine.liste(projekt)}
+                frisch = []
+                for i, (klein, (name, text)) in enumerate(erklaert.items(), 1):
+                    melden(f"Baustein {i} von {len(erklaert)}: {name}",
+                           i, len(erklaert))
+                    da = nach_name.get(klein)
+                    art = (da or {}).get("art") or ""
+                    if not art:
+                        geraten = chat.bausteine_raten([name], "\n".join(zeilen))
+                        art = (geraten[0]["art"] if geraten else "person")
+                    fertig = chat.baustein_prompt(text, art)
+                    if not fertig.get("prompt"):
+                        continue
+                    sauber, werte = bausteine.ohne_leere_luecken(
+                        fertig["prompt"], fertig.get("variablen") or {})
+                    frisch.append(bausteine.speichern(projekt, {
+                        **(da or {}), "art": art, "name": name,
+                        "prompt": sauber,
+                        "gesicht": fertig.get("gesicht") or "",
+                        "kleidung": fertig.get("kleidung") or "",
+                        "variablen": werte}))
+                melden("")
+                return self._json(200, {"neu": frisch, "hinweis": ""})
+
             if was == "vorschlagen":
                 # Alles, was die Geschichte mit /Name verlangt und noch nicht
                 # gibt, gleich anlegen -- mit einem geschriebenen Prompt, den

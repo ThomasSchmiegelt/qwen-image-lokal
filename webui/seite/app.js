@@ -896,6 +896,7 @@ function lueckenWerte(wohin) {
 // Diese Aufrufe gehen ans Sprachmodell und dauern. Die uebrigen -- speichern,
 // loeschen, zusammensetzen -- sind sofort da und brauchen keinen Puls.
 const LANGSAM = {
+  aktualisieren: "Die Bausteine werden nachgezogen",
   auffrischen: "Die Personen werden aufgeteilt",
   prompt: "Der Prompt wird geschrieben",
   teilprompt: "Der Prompt wird geschrieben",
@@ -1557,7 +1558,8 @@ function gsSumme() {
 // Zeile schreiben. `zeichen` ist / oder der Rueckwaertsschraegstrich.
 function gsEinfuegen(zeichen, name) {
   const i = Math.min(gsLetzteNr, gsZeilen.length - 1);
-  gsZeilen[i].text = (gsZeilen[i].text + " " + zeichen + name).trim();
+  const dazu = zeichen === "/" ? verweisText(name) : zeichen + name;
+  gsZeilen[i].text = (gsZeilen[i].text + " " + dazu).trim();
   zeigeSelbstszenen();
   gsMerken();
 }
@@ -1582,22 +1584,31 @@ function vorschlagZeile(z, i) {
   </div>`;
 }
 
+// Ein uebernommener Baustein bekommt gleich die leeren Anfuehrungszeichen
+// mit: was man dort hineinschreibt, wird beim Aktualisieren zu seiner
+// Beschreibung. Ohne das Angebot faellt niemandem ein, dass es geht.
+function verweisText(name) {
+  return `/${name} ""`;
+}
+
+function stehtDrin(text, name) {
+  return new RegExp("/" + name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                    + "\\b", "i").test(text);
+}
+
 function vorschlagNehmen(i, name) {
   const z = gsZeilen[i];
-  const muster = new RegExp("/" + name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
-                            + "\\b", "i");
-  if (muster.test(z.text)) return;            // steht schon drin
-  z.text = (z.text.trim() + " /" + name).trim();
+  if (stehtDrin(z.text, name)) return;        // steht schon drin
+  z.text = (z.text.trim() + " " + verweisText(name)).trim();
   zeigeSelbstszenen();
   gsMerken();
 }
 
 function vorschlagAlle(i) {
   (gsZeilen[i].vorschlag || []).forEach(t => {
-    const muster = new RegExp("/" + t.name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
-                              + "\\b", "i");
-    if (!muster.test(gsZeilen[i].text)) {
-      gsZeilen[i].text = (gsZeilen[i].text.trim() + " /" + t.name).trim();
+    if (!stehtDrin(gsZeilen[i].text, t.name)) {
+      gsZeilen[i].text = (gsZeilen[i].text.trim() + " "
+                          + verweisText(t.name)).trim();
     }
   });
   zeigeSelbstszenen();
@@ -1728,6 +1739,23 @@ $("gsEinpflegen").onclick = async e => {
   say(`${offen.length} geänderte Szene(n) werden neu geschrieben …`);
 };
 
+// Was in den Anfuehrungszeichen steht, in die Bausteine uebernehmen. Gilt
+// auch fuer vorhandene: wer es gerade hingeschrieben hat, meint es so.
+$("gsAktualisieren").onclick = async e => {
+  e.preventDefault();
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  if (!zeilen.length) return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  if (!confirm("Was zwischen den Anführungszeichen steht, wird zur "
+               + "Beschreibung des Bausteins. Vorhandene Prompts werden dabei "
+               + "überschrieben. Weiter?")) return;
+  const g = await bausteinRuf({tu: "aktualisieren", zeilen});
+  if (!g) return;
+  if (!g.neu.length) return say(g.hinweis || "Nichts zu übernehmen.", "ok");
+  await bausteineHolen();
+  zeigeSelbstszenen();
+  say(`Nachgezogen: ${g.neu.map(b => b.name).join(", ")}.`, "ok");
+};
+
 // Durchsehen, was noch fehlt. Kostet nichts -- kein Sprachmodell, nur
 // Nachsehen -- und sagt vor dem teuren Teil, was schiefgehen wird.
 $("gsPruefen").onclick = async e => {
@@ -1764,10 +1792,8 @@ $("gsAllesAnlegen").onclick = async e => {
     if (!z) return;
     z.vorschlag = e2.teile;
     e2.teile.forEach(t => {
-      const muster = new RegExp("/" + t.name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
-                                + "\\b", "i");
-      if (!muster.test(z.text)) {
-        z.text = (z.text.trim() + " /" + t.name).trim();
+      if (!stehtDrin(z.text, t.name)) {
+        z.text = (z.text.trim() + " " + verweisText(t.name)).trim();
         genommen++;
       }
     });

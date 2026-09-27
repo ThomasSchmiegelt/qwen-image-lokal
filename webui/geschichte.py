@@ -190,7 +190,7 @@ VERWEIS = re.compile(r"/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})")
 # gehoert nicht in den Bildprompt -- sie wird deshalb herausgeschnitten.
 DEFINITION = re.compile(
     r"/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})\s*"
-    r"""(?:"([^"]{1,200})"|„([^“]{1,200})“|»([^«]{1,200})«|'([^']{1,200})')""")
+    r"""(?:"([^"]{0,200})"|„([^“]{0,200})“|»([^«]{0,200})«|'([^']{0,200})')""")
 
 
 def definitionen(zeile: str) -> tuple[str, dict]:
@@ -202,6 +202,8 @@ def definitionen(zeile: str) -> tuple[str, dict]:
     gefunden = {}
 
     def ersatz(treffer):
+        # Leere Anfuehrungszeichen sind das Angebot, etwas hineinzuschreiben.
+        # Sie gehoeren so wenig in den Prompt wie eine gefuellte Erklaerung.
         text = next((g for g in treffer.groups()[1:] if g), "").strip()
         if text:
             gefunden[treffer.group(1)] = text
