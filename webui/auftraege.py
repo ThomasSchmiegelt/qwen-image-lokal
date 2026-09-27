@@ -489,15 +489,20 @@ def run_expose(params: dict) -> None:
         engine.note("error", current["error"])
 
 
-def _eingefuegt(szene: dict, schluessel, band: int) -> list[dict]:
-    """Eine neu geschriebene Szene in die vorhandenen Prompts einsortieren."""
+def _eingefuegt(neue: list[dict], schluessel, band: int) -> list[dict]:
+    """Neu geschriebene Szenen in die vorhandenen Prompts einsortieren.
+
+    Nur die genannten Nummern werden ersetzt. Ohne das loeschte ein
+    Nachbessern an Szene drei die anderen sieben Prompts.
+    """
     vorher = []
     if schluessel:
         g = baender.lesen(_projekt_des_laufs, str(schluessel))
         for b in g.get("baende") or []:
             if b.get("nr") == band:
                 vorher = list(b.get("prompts") or [])
-    zusammen = [p for p in vorher if p.get("nr") != szene["nr"]] + [szene]
+    ersetzt = {p["nr"] for p in neue}
+    zusammen = [p for p in vorher if p.get("nr") not in ersetzt] + list(neue)
     return sorted(zusammen, key=lambda p: p.get("nr") or 0)
 
 
@@ -583,11 +588,15 @@ def run_prompts(params: dict) -> None:
                 s["prosa"] = absaetze[i] if i < len(absaetze) else ""
         # Eine einzelne Szene ersetzt nur sich selbst. Ohne das loeschte ein
         # Nachbessern an Szene drei die anderen sieben Prompts.
-        nur = int(params.get("nur") or 0)
+        # "nummern" sagt, welche Szenen der Geschichte hier neu geschrieben
+        # wurden. Steht nichts da, ist es die ganze Gliederung.
+        nummern = [int(n) for n in (params.get("nummern") or []) if int(n or 0) > 0]
         schluessel = params.get("schluessel")
-        if nur and szenen:
-            szenen[0]["nr"] = nur
-            szenen = _eingefuegt(szenen[0], schluessel,
+        if nummern and szenen:
+            for k, szene in enumerate(szenen):
+                if k < len(nummern):
+                    szene["nr"] = nummern[k]
+            szenen = _eingefuegt(szenen, schluessel,
                                  int(params.get("band") or 1))
         current["gliederung"] = szenen
         # Sofort in die Geschichte schreiben, nicht erst wenn die Seite es
@@ -598,8 +607,9 @@ def run_prompts(params: dict) -> None:
                               {"band": int(params.get("band") or 1),
                                "prompts": szenen})
         melden("")
-        if nur:
-            engine.note("idle", f"Prompt fuer Szene {nur} geschrieben")
+        if nummern:
+            engine.note("idle", "Prompt fuer Szene "
+                        + ", ".join(str(n) for n in nummern) + " geschrieben")
         else:
             geschrieben = sum(1 for s in szenen if s.get("prompt"))
             engine.note("idle", f"{geschrieben} von {len(zeilen)} Prompts geschrieben")

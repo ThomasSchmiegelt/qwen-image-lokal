@@ -234,8 +234,11 @@ verwendet werden soll.
 Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
 "prompt"     Die ganze Person auf ENGLISCH, ein Satz: ungefähres Alter,
-             Statur, Gesicht, Haarfarbe und Frisur. OHNE Kleidung -- die
-             steht für sich. Nennt die Beschreibung einen Charakterzug --
+             Statur, Gesicht, Haarfarbe und Frisur. OHNE Kleidung: kein
+             Kleidungsstück, kein Schuh, kein Hut, keine Uniform. Nicht
+             "a young woman with short hair and a work jacket", sondern
+             "a young woman with short hair" -- die Jacke gehört in
+             "kleidung" und käme sonst zweimal ins Bild. Nennt die Beschreibung einen Charakterzug --
              schüchtern, streng, herzlich, misstrauisch --, setze ihn als
              sichtbares Merkmal um: Haltung, Blick, Zug um den Mund. "streng"
              wird zu "an upright bearing and a level, unsmiling gaze", nicht
@@ -245,7 +248,12 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
              nichts von der Kleidung -- dieser Text steht allein im Bild,
              wenn die Kamera dicht an die Augen geht.
 "kleidung"   Was die Person üblicherweise trägt, auf ENGLISCH, ein kurzer
-             Satz mit Schuhen. Eine Szene darf ihn überschreiben.
+             Satz mit Schuhen. HIER gehört die Kleidung hin, und hier muss
+             etwas stehen: benenne wirkliche Kleidungsstücke. Sagt die
+             Anfrage nichts dazu, wähle etwas Schlichtes, das zu der Person
+             passt. Niemals "none", "no clothing" oder Ähnliches -- das
+             stünde sonst als Text im Bild. Eine Szene darf ihn
+             überschreiben.
 "variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
              als einzelner Text, nicht als Liste. Fällt dir zu einer
              Lücke keine Vorgabe ein, mach dort keine Lücke.
@@ -269,11 +277,15 @@ verwendet werden soll.
 
 Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
-"prompt"     Die Beschreibung auf ENGLISCH, ein Satz, beginnend mit einer
-             Ortsangabe wie "in", "on" oder "at". Was den Ort ausmacht, gehört
-             in den Text. KEINE Personen darin, auch keine mit Namen: wer dort
-             steht, ist ein eigener Baustein und wird davorgesetzt. Steht
-             trotzdem eine Person im Ort, erscheint sie im Bild zweimal.
+"prompt"     Die Beschreibung auf ENGLISCH, ein bis zwei Sätze, beginnend
+             mit einer Ortsangabe wie "in", "on" oder "at". Was den Ort
+             ausmacht, gehört in den Text, und zwar handfest: Baustoff,
+             Größe, Licht, Boden, was an den Wänden ist, was herumsteht.
+             "in a workshop" ist zu wenig -- daraus baut das Modell jedes Mal
+             eine andere Werkstatt. KEINE Personen darin, auch keine mit
+             Namen: wer dort steht, ist ein eigener Baustein und wird
+             davorgesetzt. Steht trotzdem eine Person im Ort, erscheint sie
+             im Bild zweimal.
              Wechselndes wie Tageszeit oder Wetter setzt du als
              Lücke in geschweifte Klammern, etwa {tageszeit} oder {wetter}.
              Höchstens drei Lücken, Namen klein und ohne Umlaute.
@@ -286,8 +298,11 @@ immer wieder verwendet werden soll.
 
 Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
-"prompt"     Die Beschreibung auf ENGLISCH, ein Satz. Form, Material und
-             Merkmale gehören in den Text. KEINE Personen darin, auch keine
+"prompt"     Die Beschreibung auf ENGLISCH, ein bis zwei Sätze. Form,
+             Größe, Material, Oberfläche und Zustand gehören in den Text --
+             bei einer Maschine oder einem Gerät auch, woraus sie besteht,
+             wie sie bedient wird und ob sie neu, abgenutzt oder beschädigt
+             ist. "a machine" ist zu wenig. KEINE Personen darin, auch keine
              mit Namen -- wer ihn hält, ist ein eigener Baustein. Wechselndes wie Farbe oder Zustand
              setzt du als Lücke in geschweifte Klammern, etwa {farbe}.
              Höchstens drei Lücken, Namen klein und ohne Umlaute.
@@ -383,7 +398,8 @@ def person_teilen(prompt: str, model: str | None = None) -> dict:
     })
     if not isinstance(roh, dict):
         return {}
-    raus = {k: _ohne_subjekt(str(roh.get(k) or "").strip()[:400].rstrip("."))
+    raus = {k: _sinnvoll(_ohne_subjekt(
+                str(roh.get(k) or "").strip()[:400].rstrip(".")))
             for k in ("prompt", "gesicht", "kleidung")}
     # Ohne allgemeinen Teil waere der Baustein hinterher schlechter als
     # vorher. Dann lieber nichts anruehren.
@@ -419,7 +435,7 @@ def teil_prompt(feld: str, text: str, person: str = "",
         # die Person, und die steht schon im allgemeinen Prompt.
         fertig = re.sub(r"^.{0,90}?\b(?:wearing|wears|dressed in|clad in)\s+",
                         "", fertig, flags=re.I)
-    return _ohne_subjekt(fertig)
+    return _sinnvoll(_ohne_subjekt(fertig))
 
 
 def _ohne_subjekt(text: str) -> str:
@@ -646,8 +662,21 @@ def baustein_prompt(text: str, art: str = "person",
     # dann gilt eben der allgemeine Prompt.
     if art == "person":
         for feld in ("gesicht", "kleidung"):
-            erg[feld] = str(roh.get(feld) or "").strip()[:400]
+            erg[feld] = _sinnvoll(str(roh.get(feld) or "").strip()[:400])
     return erg
+
+
+# Was das Modell schreibt, wenn ihm nichts einfaellt. Als Prompt waere es
+# schlimmer als ein leeres Feld: "no clothing" malt das Bildmodell mit.
+LEERFLOSKEL = ("none", "no clothing", "nothing", "n/a", "not specified",
+               "unspecified", "unknown", "keine", "keine angabe", "nichts",
+               "no description", "no face", "-")
+
+
+def _sinnvoll(text: str) -> str:
+    """Leerfloskeln zu einem leeren Feld machen."""
+    sauber = text.strip().strip(".").strip()
+    return "" if sauber.lower() in LEERFLOSKEL else text
 
 
 LUECKEN_SYSTEM = """Du füllst eine Lücke in einem Bildprompt mit Vorschlägen.

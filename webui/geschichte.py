@@ -389,6 +389,14 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
 
 
 
+# Woran man Kleidung im allgemeinen Prompt erkennt. Keine Wissenschaft, nur
+# die Stuecke, die das Sprachmodell dort immer wieder unterbringt.
+KLEIDUNGSWORT = ("jacket", "coat", "dress", "shirt", "blouse", "trousers",
+                 "pants", "jeans", "boot", "shoe", "hat", "cap", "uniform",
+                 "suit", "jumper", "sweater", "hoodie", "skirt", "scarf",
+                 "overall", "apron", "robe", "cloak")
+
+
 def pruefen(roh: list[dict], alle: list[dict],
             eigene: dict | None = None) -> list[dict]:
     """Durchsehen, ob die Gliederung vollstaendig ist.
@@ -458,10 +466,34 @@ def pruefen(roh: list[dict], alle: list[dict],
                      f"{e['label']}: ohne Klammer gilt die Vorgabe für "
                      f"{luecke}.")
 
-    # Bausteine ohne Prompt taugen nirgends -- auch wenn sie benutzt werden.
+    # Und die benutzten Bausteine selbst: was hier fehlt, faellt in jedem
+    # Bild auf, in dem sie vorkommen.
     for b in alle:
-        if b["id"] in benutzt and not (b.get("prompt") or "").strip():
+        if b["id"] not in benutzt:
+            continue
+        text = (b.get("prompt") or "").strip()
+        if not text:
             fund(0, "fehler", f"/{b['name']} hat keinen Prompt.")
+            continue
+        # Gemessen: unter vierzig Zeichen steht dort "in a workshop" oder
+        # "a machine", und das Modell baut jedes Mal etwas anderes daraus.
+        if len(text) < 40:
+            fund(0, "warnung", f"/{b['name']} ist sehr knapp beschrieben — "
+                               "das Bild fällt jedes Mal anders aus.")
+        if b.get("art") == "person":
+            for feld, was in (("gesicht", "keine Gesichtsbeschreibung"),
+                              ("kleidung", "keine Kleidung")):
+                if not (b.get(feld) or "").strip():
+                    fund(0, "hinweis", f"/{b['name']} hat {was}.")
+            # Kleidung an zwei Stellen widerspricht sich im Bild: der
+            # allgemeine Prompt sagt Arbeitsjacke, das Kleidungsfeld Mantel.
+            if (b.get("kleidung") or "").strip():
+                doppelt = [w for w in KLEIDUNGSWORT
+                           if re.search(rf"\b{w}s?\b", text, re.I)]
+                if doppelt:
+                    fund(0, "warnung",
+                         f"/{b['name']}: „{doppelt[0]}“ steht im allgemeinen "
+                         "Prompt und die Kleidung noch einmal daneben.")
     return funde
 
 

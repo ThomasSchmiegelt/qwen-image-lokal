@@ -1286,6 +1286,31 @@ function offeneNamen(text) {
   return raus;
 }
 
+// Ein geschriebener Prompt merkt sich die Zeile, aus der er entstand. Weicht
+// die jetzige davon ab, ist er von gestern -- und niemand sieht es dem Bild
+// hinterher an.
+function geschriebeneZeile(nr) {
+  const p = ((GESCHICHTE && GESCHICHTE.prompts) || []).find(x => x.nr === nr);
+  return p ? (p.zeile || "") : null;
+}
+
+function veraltet(i) {
+  const war = geschriebeneZeile(i + 1);
+  if (war === null) return false;
+  // Verglichen wird, was das Sprachmodell zu sehen bekam: ohne #, ohne \ und
+  // ohne die Erklaerungen in Anfuehrungszeichen.
+  return blankZeile(gsZeilen[i].text) !== blankZeile(war);
+}
+
+function blankZeile(text) {
+  return String(text || "")
+    .replace(/#[^#\n]*/g, "")
+    .replace(/\\[A-Za-zÄÖÜäöüß0-9][\wÄÖÜäöüß-]{0,29}(\([^)]*\))?/g, "")
+    .replace(/"[^"]*"|„[^“]*“|»[^«]*«/g, "")
+    .replace(/\//g, "")
+    .replace(/\s{2,}/g, " ").trim();
+}
+
 // Welche Bausteine in dieser Zeile stehen, in der Reihenfolge des Textes.
 // Nur die angelegten: ein Name ohne Baustein laesst sich nicht tauschen.
 function bausteineInZeile(text) {
@@ -1401,9 +1426,12 @@ function zeigeSelbstszenen() {
                esc(offeneNamen(z.text).join(", "))} anlegen"
                onclick="bausteineDerSzene(${i});return false">+ ${
                offeneNamen(z.text).length} anlegen</a>` : ""}
-        <a href="#" class="szprompt" data-i="${i}"
-           title="nur für diese Szene den Bildprompt schreiben lassen"
-           onclick="promptFuerSzene(${i});return false">Prompt</a>
+        <a href="#" class="szprompt${veraltet(i) ? " alt" : ""}" data-i="${i}"
+           title="${veraltet(i)
+             ? "Die Zeile hat sich geändert — Prompt neu schreiben lassen"
+             : "nur für diese Szene den Bildprompt schreiben lassen"}"
+           onclick="promptFuerSzene(${i});return false">${
+             veraltet(i) ? "Prompt ↻" : "Prompt"}</a>
         <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
           title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
         <span class="knopf" onclick="gsSchieben(${i}, -1)" title="nach oben">▲</span>
@@ -1578,7 +1606,7 @@ async function promptFuerSzene(i) {
   if (!z || !z.text.trim()) return say("Die Szene ist leer.", "err");
   const res = await fetch("/api/gliederung", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({zeilen: [z], nur: i + 1,
+    body: JSON.stringify({zeilen: [z], nummern: [i + 1],
                           stil: $("gsStil").value, welt: $("gsWelt").value,
                           kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
                           modell: $("gsModell").value,
@@ -1619,6 +1647,35 @@ $("gsErgaenzen").onclick = async e => {
   buttonState("busy");
   poll();
   say(`${fehlt} Szenen werden geschrieben …`);
+};
+
+// Alle Szenen, die sich seit ihrem Prompt geaendert haben, in einem Zug
+// nachschreiben. In einem Auftrag, nicht in fuenf: das grosse Modell zu
+// laden kostet eine halbe Minute, und das fuenfmal waere Unfug.
+$("gsEinpflegen").onclick = async e => {
+  e.preventDefault();
+  const offen = gsZeilen.map((z, i) => i).filter(i => veraltet(i));
+  if (!offen.length) {
+    return say(GESCHICHTE && GESCHICHTE.prompts && GESCHICHTE.prompts.length
+      ? "Alle Prompts sind auf dem Stand der Szenen."
+      : "Es sind noch keine Prompts geschrieben.", "ok");
+  }
+  const res = await fetch("/api/gliederung", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen: offen.map(i => gsZeilen[i]),
+                          nummern: offen.map(i => i + 1),
+                          stil: $("gsStil").value, welt: $("gsWelt").value,
+                          kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value,
+                          schluessel: GSAKTUELL, band: gsBandNr})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Das ließ sich nicht einpflegen.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say(`${offen.length} geänderte Szene(n) werden neu geschrieben …`);
 };
 
 // Durchsehen, was noch fehlt. Kostet nichts -- kein Sprachmodell, nur
