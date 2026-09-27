@@ -35,6 +35,7 @@ import demo  # noqa: E402
 import projekte  # noqa: E402
 import bausteine  # noqa: E402
 import baender  # noqa: E402
+from torwache import torwaechter  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -339,11 +340,6 @@ def _cfg_fuer(params: dict) -> float:
     return wert
 
 
-def _ausschluesse(text: str) -> list[str]:
-    """Die Begriffe aus dem Feld "was nicht ins Bild soll"."""
-    return [t.strip().lower() for t in re.split(r"[,;\n]", text or "") if t.strip()]
-
-
 def _durchs_tor(prompt: str, params: dict) -> str:
     """Einen einzelnen Prompt durch den Torwaechter schicken und mitschreiben,
     was dabei herausfiel."""
@@ -351,49 +347,6 @@ def _durchs_tor(prompt: str, params: dict) -> str:
     if weg:
         current["tor"] = list(current["tor"]) + weg
     return sauber
-
-
-def torwaechter(prompt: str, ausschluss: str) -> tuple[str, list[str]]:
-    """Streicht ausgeschlossene Begriffe aus dem fertigen Prompt.
-
-    Der billige Weg: "Kueche" und "Buero" stehen als Wort im Prompt -- meist
-    aus einer Umgebungsachse oder einem Baustein. Sie dort zu entfernen
-    kostet nichts, waehrend es dem Modell auszureden die Rechenzeit
-    verdoppelt. Entfernt wird das ganze Aufzaehlungsglied, in dem der Begriff
-    steht, sonst bliebe ein Satzbruchstueck zurueck.
-
-    Gibt den bereinigten Prompt und die tatsaechlich entfernten Stuecke
-    zurueck -- stillschweigend soll das nicht geschehen.
-    """
-    begriffe = _ausschluesse(ausschluss)
-    if not begriffe or not prompt:
-        return prompt, []
-    behalten, entfernt = [], []
-    for glied in prompt.split(","):
-        treffer = next((b for b in begriffe if b in glied.lower()), None)
-        if not treffer:
-            behalten.append(glied)
-            continue
-        # Steht der Begriff nicht gleich vorn, ist er ein Beiwerk: dann faellt
-        # nur der Nebensatz, nicht das ganze Glied. "eine Markthalle mit
-        # Leuchtreklame" ohne Leuchtreklame soll eine Markthalle bleiben --
-        # beim ersten Versuch war sie mit verschwunden.
-        teile = re.split(r"(\s+(?:with|and|featuring|including|under)\s+)", glied)
-        wenn_vorn = treffer in teile[0].lower()
-        if wenn_vorn or len(teile) == 1:
-            entfernt.append(f"{glied.strip()} (wegen „{treffer}“)")
-            continue
-        rest, weg = [teile[0]], []
-        for i in range(1, len(teile), 2):
-            trenner, stueck = teile[i], teile[i + 1] if i + 1 < len(teile) else ""
-            if treffer in stueck.lower():
-                weg.append(stueck.strip())
-            else:
-                rest += [trenner, stueck]
-        behalten.append("".join(rest))
-        entfernt.append(f"{' / '.join(weg)} (wegen „{treffer}“)")
-    sauber = ",".join(behalten).strip().strip(",").strip()
-    return (sauber or prompt), entfernt
 
 
 def _series_kwargs(params: dict, refs: list, kind: str, on_image) -> dict:
@@ -517,6 +470,18 @@ def run_expose(params: dict) -> None:
         engine.note("error", current["error"])
 
 
+def _eingefuegt(szene: dict, schluessel, band: int) -> list[dict]:
+    """Eine neu geschriebene Szene in die vorhandenen Prompts einsortieren."""
+    vorher = []
+    if schluessel:
+        g = baender.lesen(_projekt_des_laufs, str(schluessel))
+        for b in g.get("baende") or []:
+            if b.get("nr") == band:
+                vorher = list(b.get("prompts") or [])
+    zusammen = [p for p in vorher if p.get("nr") != szene["nr"]] + [szene]
+    return sorted(zusammen, key=lambda p: p.get("nr") or 0)
+
+
 def run_prompts(params: dict) -> None:
     """Aus der Gliederung die Bildprompts schreiben, der Reihe nach.
 
@@ -531,8 +496,12 @@ def run_prompts(params: dict) -> None:
         # Was sich in den Augen spiegelt, tippt der Benutzer deutsch; im
         # Prompt muss es englisch stehen. Ein Aufruf fuer alle Angaben, vor
         # dem grossen Modell -- danach ist die Karte belegt.
-        angaben = sorted({(z.get("spiegelung") or "").strip()
-                          for z in roh if (z.get("spiegelung") or "").strip()})
+        # Dasselbe gilt fuer die #-Hinweise: die Erwartung geht als Auftrag
+        # an das Sprachmodell, der Ausschluss streicht spaeter im englischen
+        # Prompt -- beides braucht Englisch.
+        angaben = sorted({(z.get(feld) or "").strip() for z in roh
+                          for feld in ("spiegelung", "erwartung", "ausschluss")
+                          if (z.get(feld) or "").strip()})
         englisch = {}
         if angaben:
             current["stage"] = "Angaben werden übersetzt"
@@ -544,7 +513,10 @@ def run_prompts(params: dict) -> None:
         def fortschritt(nr, gesamt):
             current["stage"] = f"Prompt {nr} von {gesamt}"
 
-        szenen = chat.gliederung(zeilen, stil=params.get("stil") or "",
+        hinweise = [{"erwartung": z.get("erwartung") or "",
+                     "ausschluss": z.get("ausschluss") or ""} for z in roh]
+        szenen = chat.gliederung(zeilen, hinweise=hinweise,
+                                 stil=params.get("stil") or "",
                                  welt=params.get("welt") or "",
                                  kurz=params.get("kurz") or "",
                                  fiktion=params.get("fiktion"),
@@ -555,25 +527,39 @@ def run_prompts(params: dict) -> None:
         # falschen Szene.
         for szene in szenen:
             i = int(szene.get("nr") or 0) - 1
-            quelle = (roh[i].get("spiegelung") or "").strip() if 0 <= i < len(roh) else ""
-            if quelle:
-                szene["spiegelung"] = englisch.get(quelle, quelle)
+            if not 0 <= i < len(roh):
+                continue
+            for feld in ("spiegelung", "ausschluss"):
+                quelle = (roh[i].get(feld) or "").strip()
+                if quelle:
+                    szene[feld] = englisch.get(quelle, quelle)
         if params.get("prosa"):
             current["stage"] = "Text wird geschrieben"
             absaetze = chat.prosa(szenen, model=params.get("modell") or None)
             for i, s in enumerate(szenen):
                 s["prosa"] = absaetze[i] if i < len(absaetze) else ""
+        # Eine einzelne Szene ersetzt nur sich selbst. Ohne das loeschte ein
+        # Nachbessern an Szene drei die anderen sieben Prompts.
+        nur = int(params.get("nur") or 0)
+        schluessel = params.get("schluessel")
+        if nur and szenen:
+            szenen[0]["nr"] = nur
+            szenen = _eingefuegt(szenen[0], schluessel,
+                                 int(params.get("band") or 1))
         current["gliederung"] = szenen
         # Sofort in die Geschichte schreiben, nicht erst wenn die Seite es
         # nachholt: `current` wird vom naechsten Auftrag geleert, und eine
         # Minute Arbeit des grossen Modells darf daran nicht haengen.
-        if params.get("schluessel"):
-            baender.speichern(_projekt_des_laufs, str(params["schluessel"]),
+        if schluessel:
+            baender.speichern(_projekt_des_laufs, str(schluessel),
                               {"band": int(params.get("band") or 1),
                                "prompts": szenen})
         current["stage"] = ""
-        geschrieben = sum(1 for s in szenen if s.get("prompt"))
-        engine.note("idle", f"{geschrieben} von {len(zeilen)} Prompts geschrieben")
+        if nur:
+            engine.note("idle", f"Prompt fuer Szene {nur} geschrieben")
+        else:
+            geschrieben = sum(1 for s in szenen if s.get("prompt"))
+            engine.note("idle", f"{geschrieben} von {len(zeilen)} Prompts geschrieben")
     except Exception:
         err = traceback.format_exc()
         print(err, file=sys.stderr)

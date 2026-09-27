@@ -1192,12 +1192,20 @@ function zeigeSelbstszenen() {
           placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
       </div>
       <div class="szleiste">
+        <select class="gsteil" data-i="${i}" title="Baustein einsetzen">
+          <option value="">+ Baustein …</option>
+          ${BAUSTEINE.map(b =>
+            `<option value="${esc(b.name)}">/${esc(b.name)}</option>`).join("")}
+        </select>
         <select class="gseinst" data-i="${i}" title="Kameraeinstellung">${wahl}</select>
         ${luecke ? `<input class="gsangabe" data-i="${i}"
             placeholder="${esc(luecke === "hoehe" ? "Höhe, z. B. fünf Meter"
                                                   : "was sich spiegelt")}"
             value="${esc(e.angabe)}">` : ""}
         <span class="fuell"></span>
+        <a href="#" class="szprompt" data-i="${i}"
+           title="nur für diese Szene den Bildprompt schreiben lassen"
+           onclick="promptFuerSzene(${i});return false">Prompt</a>
         <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
           title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
         <span class="knopf" onclick="gsSchieben(${i}, -1)" title="nach oben">▲</span>
@@ -1235,6 +1243,12 @@ function zeigeSelbstszenen() {
     el.oninput = () => {
       gsZeilen[+el.dataset.i].bilder = Math.max(1, parseInt(el.value, 10) || 1);
       gsSumme();
+    };
+  });
+  $("gsSelbst").querySelectorAll(".gsteil").forEach(el => {
+    el.onchange = () => {
+      if (el.value) vorschlagNehmen(+el.dataset.i, el.value);
+      el.value = "";
     };
   });
   $("gsSelbst").querySelectorAll(".gseinst").forEach(el => {
@@ -1340,6 +1354,29 @@ function gsZeileWeg(i) {
   gsZeilen.splice(i, 1);
   if (!gsZeilen.length) gsZeilen = [{text: "", bilder: 1}];
   zeigeSelbstszenen();
+}
+
+// Den Bildprompt fuer eine einzelne Szene schreiben lassen. Dieselbe Strecke
+// wie fuer die ganze Gliederung, nur mit einer Zeile -- und das Ergebnis
+// ersetzt genau diesen einen Prompt, nicht die anderen sieben.
+async function promptFuerSzene(i) {
+  const z = gsZeilen[i];
+  if (!z || !z.text.trim()) return say("Die Szene ist leer.", "err");
+  const res = await fetch("/api/gliederung", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen: [z], nur: i + 1,
+                          stil: $("gsStil").value, welt: $("gsWelt").value,
+                          kurz: $("gsKurz").value, fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value,
+                          schluessel: GSAKTUELL, band: gsBandNr})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Der Prompt ließ sich nicht schreiben.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say(`Der Prompt für Szene ${i + 1} wird geschrieben …`);
 }
 
 // Je Szene vorschlagen, welche Bausteine sie braucht. Zwei Schritte statt
@@ -1637,11 +1674,16 @@ $("gsErzeugen").onclick = async e => {
   say("Die Prompts werden geschrieben …");
 };
 
+let gsLetztePrompts = "";
+
 async function zeigeGliederung(prompts) {
   if (!prompts || !prompts.length) return;
-  if (GESCHICHTE && GESCHICHTE.prompts
-      && GESCHICHTE.prompts.length === prompts.length
-      && GESCHICHTE.prompts[0].prompt === prompts[0].prompt) return;
+  // Genau vergleichen, nicht nur Laenge und erster Prompt: wird eine einzelne
+  // Szene nachgeschrieben, bleibt beides gleich und die Aenderung fiele unter
+  // den Tisch.
+  const jetzt = JSON.stringify(prompts);
+  if (jetzt === gsLetztePrompts) return;
+  gsLetztePrompts = jetzt;
   const zeilen = gsZeilen.filter(z => z.text.trim());
   const g = await fetch("/api/szenen", {
     method: "POST", headers: {"Content-Type": "application/json"},

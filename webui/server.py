@@ -428,6 +428,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "Keine Szene im Inhaltsverzeichnis"})
             auftrag = einreihen("prompts", {
                 "zeilen": zeilen, "stil": str(params.get("stil") or ""),
+                # "nur" ist die Nummer der einen Szene, die neu geschrieben
+                # werden soll. Dann steht in "zeilen" auch nur diese eine.
+                "nur": int(params.get("nur") or 0),
                 "welt": str(params.get("welt") or ""),
                 "kurz": str(params.get("kurz") or ""),
                 "fiktion": params.get("fiktion"),

@@ -141,7 +141,7 @@ denn, die Zeile verlangt einen Bruch."""
 
 def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
                kurz: str = "", fiktion=None, model: str | None = None,
-               fortschritt=None) -> list[dict]:
+               fortschritt=None, hinweise: list[dict] | None = None) -> list[dict]:
     """Aus den Zeilen einer Gliederung die Bildprompts, der Reihe nach.
 
     Je Zeile ein Aufruf, damit das Modell die vorigen Bilder kennt. Das
@@ -173,6 +173,18 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
                 continue
             if fortschritt:
                 fortschritt(nr, len(zeilen))
+            # Erwartung und Ausschluss dieser einen Szene. Sie stehen im
+            # Auftrag, nicht im Systemprompt: sie gelten nur hier und duerfen
+            # die naechste Szene nicht faerben.
+            h = (hinweise or [{}] * len(zeilen))[nr - 1] if nr <= len(hinweise or []) else {}
+            frage = f"Szene {nr} von {len(zeilen)}: {text}"
+            if (h.get("erwartung") or "").strip():
+                frage += ("\nDas muss in diesem Bild zu sehen sein: "
+                          + h["erwartung"].strip())
+            if (h.get("ausschluss") or "").strip():
+                frage += ("\nDas darf in diesem Bild nicht vorkommen: "
+                          + h["ausschluss"].strip()
+                          + ". Erwaehne es auch nicht, um es zu verneinen.")
             roh = antwort({
                 "model": name,
                 "format": "json",
@@ -180,8 +192,7 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
                 "options": {"temperature": 0.7, "num_predict": 500},
                 "messages": [{"role": "system", "content": system},
                              *verlauf,
-                             {"role": "user",
-                              "content": f"Szene {nr} von {len(zeilen)}: {text}"}],
+                             {"role": "user", "content": frage}],
             }, timeout=600)
             if not isinstance(roh, dict) or not str(roh.get("prompt") or "").strip():
                 szenen.append({"nr": nr, "zeile": text, "prompt": "",

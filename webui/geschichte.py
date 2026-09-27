@@ -24,6 +24,7 @@ import re
 import time
 
 import bausteine
+import torwache
 import projekte
 from kataloge import (
     CAMERAS, EINSTELLUNGEN, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO,
@@ -129,6 +130,10 @@ def zu_bloecken(szenen: list[dict], teile: list[dict],
         text = szene_zu_text(szene, nach_kennung)
         if not text:
             continue
+        # Was diese Szene nicht zeigen soll, faellt hier heraus -- derselbe
+        # Torwaechter wie beim einzelnen Auftrag.
+        if (szene.get("ausschluss") or "").strip():
+            text = torwache.torwaechter(text, szene["ausschluss"])[0]
         # Die Kameraeinstellung steht hinter der Szene: erst was zu sehen
         # ist, dann von wo aus. Ein Paar ergibt zwei Bilder.
         fassungen = mit_einstellung(text, szene.get("einstellung") or "",
@@ -223,6 +228,9 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             # Die uebersetzte Fassung schlaegt die getippte: beim Schreiben
             # der Prompts wurde sie schon ins Englische gebracht.
             "spiegelung": p.get("spiegelung") or zeile.get("spiegelung") or "",
+            # Wie bei der Spiegelung: die uebersetzte Fassung schlaegt die
+            # getippte, denn im Prompt steht Englisch.
+            "ausschluss": p.get("ausschluss") or zeile.get("ausschluss") or "",
             "titel": (zeile.get("text") or "")[:60] or f"Bild {i}",
             "person": erster("person"),
             "ort": zeile.get("ort") or erster("ort"),
@@ -426,6 +434,31 @@ def einstellung_von(zeile: str, eigene: dict | None = None) -> tuple[str, str, s
     return re.sub(r"\s{2,}", " ", text).strip(), gefunden, angabe
 
 
+# --- Erwartung und Ausschluss je Szene ------------------------------------
+# Mit einer Raute sagt eine Zeile, was im Bild sein soll; mit #- was nicht.
+# Beides gilt genau fuer diese eine Szene:
+#   Nora am Fenster #dichter Nebel draussen #-keine anderen Menschen
+HINWEIS = re.compile(r"#(-?)([^#\n]{1,200})")
+
+
+def hinweise_von(zeile: str) -> tuple[str, str, str]:
+    """Trennt die #-Hinweise ab. Zurueck: (Text, Erwartung, Ausschluss).
+
+    Mehrere Hinweise derselben Art werden mit Komma verbunden -- so, wie das
+    Feld "was nicht ins Bild soll" es ohnehin erwartet.
+    """
+    will, nicht = [], []
+
+    def ersatz(treffer):
+        (nicht if treffer.group(1) else will).append(treffer.group(2).strip())
+        return ""
+
+    text = HINWEIS.sub(ersatz, zeile or "")
+    return (re.sub(r"\s{2,}", " ", text).strip(),
+            ", ".join(t for t in will if t),
+            ", ".join(t for t in nicht if t))
+
+
 def zeilen_lesen(roh: list[dict], alle: list[dict],
                  eigene: dict | None = None) -> list[dict]:
     r"""Das Inhaltsverzeichnis, wie es die Seite schickt, in fertige Zeilen.
@@ -439,12 +472,14 @@ def zeilen_lesen(roh: list[dict], alle: list[dict],
     for z in roh:
         # Erst die Kameraeinstellung heraus, dann die Bausteine: das
         # Sprachmodell soll die Anordnung nicht auch noch beschreiben.
-        roh_text, einst, spieg = einstellung_von(str(z.get("text") or ""), eigene)
+        ohne_raute, will, nicht = hinweise_von(str(z.get("text") or ""))
+        roh_text, einst, spieg = einstellung_von(ohne_raute, eigene)
         text, teile = verweise(roh_text, alle)
         if not text:
             continue
         zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
                        "einstellung": einst, "spiegelung": spieg,
+                       "erwartung": will, "ausschluss": nicht,
                        "teile": teile})
     return zeilen
 

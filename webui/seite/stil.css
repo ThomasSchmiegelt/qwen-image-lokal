@@ -344,7 +344,9 @@
 .szleiste select, .szleiste input {
   font-size: 11.5px; padding: 3px 5px; height: 26px;
 }
-.szleiste .gseinst { width: 12.5em; flex: none; }
+.szleiste .gsteil { width: 9.5em; flex: none; }
+.szleiste .gseinst { width: 12em; flex: none; }
+.szleiste .szprompt { font-size: 11.5px; white-space: nowrap; }
 .szleiste .gsangabe { flex: 1; min-width: 6em; }
 .selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em;
                    padding-top: 8px; }
