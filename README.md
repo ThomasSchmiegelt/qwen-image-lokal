@@ -123,6 +123,14 @@ durchnummeriert), Gesamtdauer eintragen — Standzeit und Überblendung rechnet
 der Server daraus aus. Die Bilder gehen nahtlos ineinander über, ohne Schnitt
 und ohne Beschriftung.
 
+**Noten und gemerkte Prompts.** Unter dem angezeigten Bild stehen fünf
+Sterne, ein Namensfeld und eine Notiz. Alles landet in
+`projekte/<name>/bewertung.json` — lesbar und zum Weiterreichen gedacht, samt
+einer Liste für Verbesserungshinweise. Wer ein Bild benennt, merkt sich
+seinen Prompt: in einer Szene holt ihn `\name` oder `\nummer` zurück, genau
+wie eine feste Kameraeinstellung. Der Prompt wird dabei aus dem PNG
+herausgeschrieben — das Bild darf später weg, der gute Prompt bleibt.
+
 **Was nicht ins Bild soll.** Das Feld arbeitet als **Torwächter**: die
 eingetragenen Begriffe werden aus dem fertigen Prompt gestrichen, bevor
 gerechnet wird — „Küche" und „Büro" kommen ohnehin als Wort aus einer
@@ -169,17 +177,33 @@ bei 100 % wandeln sich die Regale, während sie sucht.
 
 **Gliedern:** je Zeile eine Szene, mit `/Name` holst du einen Baustein herein
 (`/Anna rennt durch die /Markthalle`), mit `\Name` die Kameraeinstellung.
-Vier gibt es: `\augen` (Blick aus dem Gesichtsfeld in die Augen des
-Gegenübers, mit Spiegelung in der Iris), `\spiegel` (Kamera hinter den
-Figuren, Rücken und Spiegelbild in einem Bild), `\scheibe` (durch eine
-Glasscheibe hindurch, mit gespiegeltem Gesicht darauf) und `\zelle` — das
-ergibt **zwei** Bilder, einmal aus der Zelle heraus und einmal über die
-Schulter des Davorstehenden hinein. Rechts steht, wie viele Bilder aus
+Sechs gibt es: `\augen` (Makro dicht vor den Augen, die Iris füllt das Bild,
+mit Spiegelung darin), `\spiegel` (Kamera hinter den Figuren, Rücken und
+Spiegelbild in einem Bild), `\scheibe` (durch eine halbtransparente
+Glasscheibe hindurch, das Dahinter dämmrig und zugleich gespiegelt),
+`\decke` (Kamera hängt über der Szene und schaut senkrecht herab),
+`\bettlage` (vom Boden senkrecht hoch) und `\raus` — das ergibt **zwei**
+Bilder, einmal von drinnen heraus und einmal von draußen hinein.
+
+Was in Klammern dahintersteht, füllt die Lücke der Einstellung: bei `\augen`
+und `\spiegel`, was sich spiegelt, bei `\decke` die Höhe — `\augen(das
+brennende Deck)`, `\decke(fünf Meter)`. Zahl und Einheit übersetzt das
+Programm selbst, den Rest einmal das Sprachmodell.
+
+Verlangt eine Einstellung eine Großaufnahme, zählt nur noch das Gesicht:
+Kleidung, Ort und Gegenstand fallen aus dem Prompt, sonst zieht eine Hose
+darin die Kamera wieder zurück. Deshalb hat eine Person drei Prompts —
+allgemein, Gesicht, Bekleidung.
+
+Ein Bild, das du in der Galerie benannt hast, kommt mit demselben Zeichen
+wieder: `\augen-makro` oder `\7`. Rechts steht, wie viele Bilder aus
 dieser Szene entstehen — mehrere zeigen denselben Augenblick aus wechselndem
-Blickwinkel. Gewürfelt wird dabei nur der Blick, nicht Stil, Ort, Kleidung
-oder Kameraart: eine gewürfelte Überwachungskamera machte aus einem Manga
+Blickwinkel. Gewürfelt wird dabei nur der Blick: Standpunkt, Objektiv und die
+sechs Einstellungen, achtzehn Möglichkeiten. Stil, Ort und Kleidung bleiben,
+wie sie sind — eine gewürfelte Überwachungskamera machte aus einem Manga
 mittendrin ein Lichtbild. Bei den elf gezeichneten Stilen steht zusätzlich
-ausdrücklich im Prompt, dass kein Foto entstehen soll.
+ausdrücklich im Prompt, dass kein Foto entstehen soll; ab 70 % Fiktion rät
+das Programm ohnehin zu Anime, Comic oder Manga.
 
 **Schreiben lassen:** die Prompts entstehen der Reihe nach, jede Szene sieht
 die vorigen. Dafür ist das große Modell (`qwen3.8:27b-mtp-q4_K_M`, 16,5 GB)
@@ -226,8 +250,9 @@ Sprachmodell beschreibt es als Prompt und stellt Stil, Licht und Objektiv
 gleich passend ein (gemessen 5–9 s). Im Ablauf-Reiter wird ein hochgeladenes
 Startbild sofort kurz beschrieben; der Text lässt sich vor dem Start ändern.
 
-**Voreinstellungen** in `webui/kataloge/`, frei erweiterbar: 22 Stile,
-10 Lichtstimmungen, 11 Kameraperspektiven, 10 Blickwinkel, 8 Vorlagen
+**Voreinstellungen** in `webui/kataloge/`, frei erweiterbar: 23 Stile,
+10 Lichtstimmungen, 18 Kameraperspektiven (elf Objektive und die sieben aus
+den Einstellungen), 10 Blickwinkel, 8 Vorlagen
 (Porträt, Logo, Buchumschlag, Verpackung, Icon, Web- und App-Muster) sowie
 17 Effekte als Kurzbefehle — `/remove BG`, `/colorize`, `/blueprint`,
 `/cad2real` (aus einer CAD-Ansicht ein Produktfoto mit echten Materialien,
