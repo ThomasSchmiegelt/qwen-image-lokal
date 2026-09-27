@@ -1138,6 +1138,20 @@ let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
 const EINST_MUSTER =
   /\\([A-Za-zÄÖÜäöüß0-9][\wÄÖÜäöüß-]{0,29})(?:\(([^)]{1,120})\))?/;
 
+// Namen mit Schraegstrich, zu denen es noch keinen Baustein gibt. Damit
+// weiss die Szene, ob sie etwas anzulegen hat.
+const VERWEIS_MUSTER = /\/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})/g;
+
+function offeneNamen(text) {
+  const da = new Set(BAUSTEINE.map(b => (b.name || "").toLowerCase()));
+  const raus = [];
+  for (const m of String(text || "").matchAll(VERWEIS_MUSTER)) {
+    const n = m[1];
+    if (!da.has(n.toLowerCase()) && !raus.includes(n)) raus.push(n);
+  }
+  return raus;
+}
+
 function einstellungBekannt(name) {
   const klein = (name || "").toLowerCase();
   return EINSTELLUNGEN.some(x => x.key === klein)
@@ -1203,6 +1217,11 @@ function zeigeSelbstszenen() {
                                                   : "was sich spiegelt")}"
             value="${esc(e.angabe)}">` : ""}
         <span class="fuell"></span>
+        ${offeneNamen(z.text).length
+          ? `<a href="#" class="szprompt" title="${
+               esc(offeneNamen(z.text).join(", "))} anlegen"
+               onclick="bausteineDerSzene(${i});return false">+ ${
+               offeneNamen(z.text).length} anlegen</a>` : ""}
         <a href="#" class="szprompt" data-i="${i}"
            title="nur für diese Szene den Bildprompt schreiben lassen"
            onclick="promptFuerSzene(${i});return false">Prompt</a>
@@ -1354,6 +1373,22 @@ function gsZeileWeg(i) {
   gsZeilen.splice(i, 1);
   if (!gsZeilen.length) gsZeilen = [{text: "", bilder: 1}];
   zeigeSelbstszenen();
+}
+
+// Die Bausteine genau dieser Szene anlegen. Derselbe Weg wie fuer die ganze
+// Gliederung, nur mit einer Zeile -- wer eine Figur gerade erfunden hat, will
+// sie sofort haben und nicht erst am Ende.
+async function bausteineDerSzene(i) {
+  const z = gsZeilen[i];
+  if (!z || !offeneNamen(z.text).length) return;
+  say("Der Baustein wird geschrieben …");
+  const g = await bausteinRuf({tu: "vorschlagen", zeilen: [z]});
+  if (!g) return;
+  if (!g.neu.length) return say(g.hinweis || "Nichts anzulegen.", "ok");
+  await bausteineHolen();
+  zeigeSelbstszenen();
+  say(`Angelegt: ${g.neu.map(b => b.name).join(", ")} `
+      + "— im Reiter Bausteine gegenlesen und ändern.", "ok");
 }
 
 // Den Bildprompt fuer eine einzelne Szene schreiben lassen. Dieselbe Strecke

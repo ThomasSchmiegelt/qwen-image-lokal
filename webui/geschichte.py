@@ -183,6 +183,34 @@ def startbild(szenen: list[dict], teile: list[dict]) -> str:
 VERWEIS = re.compile(r"/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})")
 
 
+# Ein Baustein laesst sich gleich in der Szene erklaeren:
+#   /Susi "weisse Frau, Mitte dreissig"
+# Der Name steht wie immer hinter dem Schraegstrich, die Erklaerung in
+# Anfuehrungszeichen dahinter. Sie ist eine Anweisung an das Programm und
+# gehoert nicht in den Bildprompt -- sie wird deshalb herausgeschnitten.
+DEFINITION = re.compile(
+    r"/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})\s*"
+    r"""(?:"([^"]{1,200})"|„([^“]{1,200})“|»([^«]{1,200})«|'([^']{1,200})')""")
+
+
+def definitionen(zeile: str) -> tuple[str, dict]:
+    """Trennt die Erklaerungen ab. Zurueck: (Zeile ohne sie, {Name: Text}).
+
+    Der /Name selbst bleibt stehen -- er ist der Verweis, und der wird noch
+    gebraucht. Nur die Anfuehrungszeichen und was darin steht fallen weg.
+    """
+    gefunden = {}
+
+    def ersatz(treffer):
+        text = next((g for g in treffer.groups()[1:] if g), "").strip()
+        if text:
+            gefunden[treffer.group(1)] = text
+        return "/" + treffer.group(1)
+
+    ohne = DEFINITION.sub(ersatz, zeile or "")
+    return re.sub(r"\s{2,}", " ", ohne).strip(), gefunden
+
+
 def verweise(zeile: str, teile: list[dict]) -> tuple[str, list[dict]]:
     """Loest /Name gegen die Bausteine auf.
 
@@ -473,14 +501,15 @@ def zeilen_lesen(roh: list[dict], alle: list[dict],
         # Erst die Kameraeinstellung heraus, dann die Bausteine: das
         # Sprachmodell soll die Anordnung nicht auch noch beschreiben.
         ohne_raute, will, nicht = hinweise_von(str(z.get("text") or ""))
-        roh_text, einst, spieg = einstellung_von(ohne_raute, eigene)
+        ohne_def, erklaert = definitionen(ohne_raute)
+        roh_text, einst, spieg = einstellung_von(ohne_def, eigene)
         text, teile = verweise(roh_text, alle)
         if not text:
             continue
         zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
                        "einstellung": einst, "spiegelung": spieg,
                        "erwartung": will, "ausschluss": nicht,
-                       "teile": teile})
+                       "definitionen": erklaert, "teile": teile})
     return zeilen
 
 

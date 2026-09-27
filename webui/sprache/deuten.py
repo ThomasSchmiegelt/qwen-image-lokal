@@ -271,7 +271,10 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
 "prompt"     Die Beschreibung auf ENGLISCH, ein Satz, beginnend mit einer
              Ortsangabe wie "in", "on" oder "at". Was den Ort ausmacht, gehört
-             in den Text. Wechselndes wie Tageszeit oder Wetter setzt du als
+             in den Text. KEINE Personen darin, auch keine mit Namen: wer dort
+             steht, ist ein eigener Baustein und wird davorgesetzt. Steht
+             trotzdem eine Person im Ort, erscheint sie im Bild zweimal.
+             Wechselndes wie Tageszeit oder Wetter setzt du als
              Lücke in geschweifte Klammern, etwa {tageszeit} oder {wetter}.
              Höchstens drei Lücken, Namen klein und ohne Umlaute.
 "variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
@@ -284,7 +287,8 @@ immer wieder verwendet werden soll.
 Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
 "prompt"     Die Beschreibung auf ENGLISCH, ein Satz. Form, Material und
-             Merkmale gehören in den Text. Wechselndes wie Farbe oder Zustand
+             Merkmale gehören in den Text. KEINE Personen darin, auch keine
+             mit Namen -- wer ihn hält, ist ein eigener Baustein. Wechselndes wie Farbe oder Zustand
              setzt du als Lücke in geschweifte Klammern, etwa {farbe}.
              Höchstens drei Lücken, Namen klein und ohne Umlaute.
 "variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
@@ -391,7 +395,9 @@ diese Schlüssel:
 "beschreibung" Ein Satz auf DEUTSCH, wie das aussieht. Halte dich an das,
                was das Inhaltsverzeichnis hergibt, und erfinde den Rest
                plausibel dazu -- es ist ein Vorschlag, den der Benutzer
-               danach ändert. Keine Handlung, nur Aussehen."""
+               danach ändert. Keine Handlung, nur Aussehen. Bei einem Ort
+               oder Gegenstand kommt keine Person darin vor, auch nicht
+               dem Namen nach: jede Person ist ein eigener Eintrag."""
 
 
 def bausteine_raten(namen: list[str], umfeld: str = "",

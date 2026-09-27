@@ -559,9 +559,18 @@ class Handler(BaseHTTPRequestHandler):
                 if not offen:
                     return self._json(200, {"neu": [], "hinweis":
                         "Alle erwaehnten Bausteine gibt es schon."})
+                # Was der Benutzer selbst erklaert hat -- /Susi "weisse Frau"
+                # --, schlaegt die Vermutung des Sprachmodells. Er hat es ja
+                # gerade hingeschrieben.
+                erklaert = {}
+                for z in zeilen:
+                    for name, text in geschichte.definitionen(z)[1].items():
+                        erklaert[name.lower()] = text
                 geraten = chat.bausteine_raten(offen, "\n".join(zeilen))
                 neu = []
                 for e in geraten:
+                    e["beschreibung"] = (erklaert.get(e["name"].lower())
+                                         or e["beschreibung"])
                     fertig = chat.baustein_prompt(e["beschreibung"] or e["name"],
                                                   e["art"])
                     if not fertig.get("prompt"):
