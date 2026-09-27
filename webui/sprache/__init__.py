@@ -14,7 +14,9 @@ from .deuten import (
     luecken_vorschlaege, sanitise,
     system_prompt, teil_prompt,
 )
-from .erzaehlen import WELTEN, expose, geschichte, gliederung, prosa
+from .erzaehlen import (
+    WELTEN, expose, geschichte, gliederung, prosa, szenen_ergaenzen,
+)
 from .ollama import GROSS, MODEL, OLLAMA, available, entladen
 from .sehen import bild_frage, bild_lesen, bild_zu_prompt, ist_weiblich
 from .uebersetzen import looks_german, translate
@@ -25,6 +27,6 @@ __all__ = [
     "bild_zu_prompt", "geschichte", "gliederung", "interpret",
     "ist_weiblich",
     "luecken_vorschlaege", "prosa",
-    "looks_german", "sanitise", "teil_prompt",
+    "looks_german", "sanitise", "szenen_ergaenzen", "teil_prompt",
     "system_prompt", "translate",
 ]

@@ -361,6 +361,20 @@
 .szleiste .gsangabe { flex: 1; min-width: 6em; }
 .selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em;
                    padding-top: 8px; }
+/* Das Ergebnis des Durchsehens. Drei Schweren, drei Farben -- Fehler heisst,
+   dass so kein brauchbares Bild entsteht; Hinweis heisst, dass das Modell die
+   Luecke selbst fuellen wird. */
+#gsPruefung { margin: 4px 0 10px; }
+.fund {
+  font-size: 12px; padding: 4px 8px; margin-bottom: 3px; border-radius: 5px;
+  background: var(--sunk); border-left: 3px solid var(--line);
+}
+.fund b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.fund.fehler { border-left-color: var(--err); }
+.fund.warnung { border-left-color: var(--busy); }
+.fund.hinweis { border-left-color: var(--line); color: var(--muted); }
+.fund.gut { border-left-color: var(--ok); }
+
 /* Die Vorschlaege unter einer Szene. Zwei Farben, ein Unterschied: gibt es
    schon, oder muss noch angelegt werden. */
 .szvorschlag { display: flex; flex-wrap: wrap; gap: 5px; align-items: center;

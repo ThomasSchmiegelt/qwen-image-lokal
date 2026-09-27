@@ -389,6 +389,75 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
 
 
 
+def pruefen(roh: list[dict], alle: list[dict],
+            eigene: dict | None = None) -> list[dict]:
+    """Durchsehen, ob die Gliederung vollstaendig ist.
+
+    Gefunden wird, was spaeter ein schlechtes Bild ergibt, aber jetzt noch
+    leicht zu beheben ist: eine Szene ohne Baustein bekommt eine erfundene
+    Person, ein nicht angelegter Name landet als blosses Wort im Prompt, und
+    eine Grossaufnahme ohne Gesichtsbeschreibung zeigt irgendein Gesicht.
+
+    Zurueck kommt je Fund ein Eintrag mit Szenennummer, Schwere und Text.
+    """
+    nach_name = {(b.get("name") or "").lower(): b for b in alle}
+    funde = []
+
+    def fund(nr, schwere, text):
+        funde.append({"nr": nr, "schwere": schwere, "text": text})
+
+    benutzt = set()
+    for i, z in enumerate(roh, 1):
+        getippt = str(z.get("text") or "")
+        if not getippt.strip():
+            fund(i, "warnung", "Die Zeile ist leer.")
+            continue
+        ohne_raute, _, _ = hinweise_von(getippt)
+        ohne_def, _ = definitionen(ohne_raute)
+        text, einst, _ = einstellung_von(ohne_def, eigene)
+        namen = VERWEIS.findall(text)
+        fehlend = [n for n in namen if n.lower() not in nach_name]
+        teile = [nach_name[n.lower()] for n in namen if n.lower() in nach_name]
+        benutzt |= {b["id"] for b in teile}
+
+        if not namen:
+            fund(i, "warnung", "Kein Baustein genannt — das Bild erfindet sich "
+                               "Person und Ort selbst.")
+        for n in fehlend:
+            fund(i, "fehler", f"/{n} ist nicht angelegt.")
+        # Solange ein Name fehlt, sind Person und Ort noch nicht entschieden:
+        # beides klaert sich, sobald der Baustein angelegt ist. Es jetzt zu
+        # melden waere dreimal dasselbe.
+        if not fehlend:
+            if namen and not any(b.get("art") == "person" for b in teile):
+                fund(i, "hinweis", "Keine Person in der Szene.")
+            if not (z.get("ort") or "").strip() \
+                    and not any(b.get("art") == "ort" for b in teile):
+                fund(i, "hinweis", "Kein Ort — die Umgebung wird erfunden.")
+
+        e = EINSTELLUNGEN.get(einst) or {}
+        if e.get("nur_gesicht"):
+            ohne = [b for b in teile if b.get("art") == "person"
+                    and not (b.get("gesicht") or "").strip()]
+            for b in ohne:
+                fund(i, "warnung", f"Grossaufnahme, aber /{b['name']} hat keine "
+                                   "Gesichtsbeschreibung.")
+            if not fehlend and not any(b.get("art") == "person" for b in teile):
+                fund(i, "warnung", "Grossaufnahme ohne Person.")
+        if e.get("vorgabe") and not (z.get("spiegelung") or "").strip():
+            luecke = next(iter(e["vorgabe"]))
+            if f"\\{einst}(" not in getippt:
+                fund(i, "hinweis",
+                     f"{e['label']}: ohne Klammer gilt die Vorgabe für "
+                     f"{luecke}.")
+
+    # Bausteine ohne Prompt taugen nirgends -- auch wenn sie benutzt werden.
+    for b in alle:
+        if b["id"] in benutzt and not (b.get("prompt") or "").strip():
+            fund(0, "fehler", f"/{b['name']} hat keinen Prompt.")
+    return funde
+
+
 # --- Kameraeinstellung je Szene -----------------------------------------
 # Mit einem Rueckwaertsschraegstrich und Namen setzt eine Zeile die Anordnung
 # von Kamera und Figuren, so wie der Schraegstrich einen Baustein holt. Zwei Zeichen, zwei Bedeutungen: wer und wie.

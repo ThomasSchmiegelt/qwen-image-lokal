@@ -85,6 +85,8 @@ def _titel(art: str, params: dict) -> str:
     """Eine Zeile, an der man den Auftrag in der Liste wiedererkennt."""
     if art == "expose":
         return "Geschichte umreissen"
+    if art == "ergaenzen":
+        return f"{params.get('fehlt') or 0} Szenen ergaenzen"
     if art == "prompts":
         return f"Prompts schreiben, {len(params.get('zeilen') or [])} Szenen"
     if art == "demo":
@@ -232,7 +234,7 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
                        nummer=auftrag["nummer"], titel=titel)
         if len(alle) == 1:
             laeufe = {"demo": run_demo, "prompts": run_prompts,
-                      "expose": run_expose}
+                      "expose": run_expose, "ergaenzen": run_ergaenzen}
             laeufe.get(auftrag["art"], run_job)(auftrag["params"])
         else:
             # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
@@ -497,6 +499,30 @@ def _eingefuegt(szene: dict, schluessel, band: int) -> list[dict]:
                 vorher = list(b.get("prompts") or [])
     zusammen = [p for p in vorher if p.get("nr") != szene["nr"]] + [szene]
     return sorted(zusammen, key=lambda p: p.get("nr") or 0)
+
+
+def run_ergaenzen(params: dict) -> None:
+    """Die fehlenden Zeilen eines Inhaltsverzeichnisses nachschreiben.
+
+    Als Auftrag wie das Umreissen: es ist dasselbe grosse Modell, und das
+    belegt die Karte.
+    """
+    try:
+        melden("Grosses Sprachmodell wird geladen")
+        neu = chat.szenen_ergaenzen(
+            [z.get("text") or "" for z in (params.get("zeilen") or [])],
+            int(params.get("fehlt") or 0),
+            kurz=params.get("kurz") or "", welt=params.get("welt") or "",
+            fiktion=params.get("fiktion"), stil=params.get("stil") or "",
+            model=params.get("modell") or None)
+        current["expose"] = {"szenen": neu, "nur_ergaenzung": True}
+        melden("")
+        engine.note("idle", f"{len([z for z in neu if z])} Szenen ergaenzt")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        engine.note("error", current["error"])
 
 
 def run_prompts(params: dict) -> None:

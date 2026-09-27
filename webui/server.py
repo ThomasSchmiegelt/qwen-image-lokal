@@ -446,6 +446,24 @@ class Handler(BaseHTTPRequestHandler):
                                                 "teile": [t["name"] for t in z["teile"]]}
                                                for z in zeilen]})
 
+        if path == "/api/ergaenzen":
+            # Fehlende Zeilen nachschreiben lassen. Die vorhandenen bleiben,
+            # wie sie sind -- nachgereicht wird nur, was fehlt.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            fehlt = int(params.get("fehlt") or 0)
+            if fehlt < 1:
+                return self._json(400, {"error": "Es fehlt keine Szene"})
+            auftrag = einreihen("ergaenzen", {
+                "zeilen": params.get("zeilen") or [], "fehlt": fehlt,
+                "kurz": str(params.get("kurz") or ""),
+                "welt": str(params.get("welt") or ""),
+                "stil": str(params.get("stil") or ""),
+                "fiktion": params.get("fiktion"),
+                "modell": str(params.get("modell") or "") or None})
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
+
         if path == "/api/szenen":
             # Aus Gliederung plus geschriebenen Prompts die Ablaufbloecke.
             params = self._body()
@@ -530,6 +548,17 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "pruefen":
+                # Kostet nichts: kein Sprachmodell, nur Nachsehen. Deshalb
+                # auch kein Puls und keine Warteschlange.
+                zeilen = params.get("zeilen") or []
+                alle = bausteine.liste(projekt)
+                funde = geschichte.pruefen(zeilen, alle,
+                                           bewertung.nach_namen(projekt))
+                return self._json(200, {"funde": funde,
+                                        "szenen": len([z for z in zeilen
+                                                       if str(z.get("text") or "").strip()])})
+
             if was == "empfehlen":
                 # Je Szene sagen, welche Bausteine sie braucht. Was es schon
                 # gibt, wird beim Namen genannt; der Rest ist ein Vorschlag,
@@ -542,8 +571,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(400, {"error": "Keine Szene"})
                 da = bausteine.liste(projekt)
                 bekannt = {(b.get("name") or "").lower() for b in da}
-                melden("Die Gliederung wird gelesen")
-                erg = chat.bausteine_empfehlen(zeilen, da)
+                def weit(ist, von):
+                    melden(f"Szene {ist} von {von} gelesen", ist, von)
+
+                weit(0, len(zeilen))
+                erg = chat.bausteine_empfehlen(zeilen, da, fortschritt=weit)
                 melden("")
                 for e in erg:
                     for t in e["teile"]:
@@ -560,7 +592,7 @@ class Handler(BaseHTTPRequestHandler):
                 zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
                           for z in (params.get("zeilen") or [])]
                 da = bausteine.liste(projekt)
-                offen = geschichte.offene_verweise(zeilen, da)[:12]
+                offen = geschichte.offene_verweise(zeilen, da)[:40]
                 if not offen:
                     return self._json(200, {"neu": [], "hinweis":
                         "Alle erwaehnten Bausteine gibt es schon."})

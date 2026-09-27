@@ -336,6 +336,66 @@ diesen Schlüsseln:
           Bild zu sehen ist."""
 
 
+ERGAENZEN_SYSTEM = """Du setzt ein Inhaltsverzeichnis fort.
+
+Der Benutzer hat eine Bilderfolge begonnen und braucht noch weitere Szenen.
+Du bekommst die vorhandenen Zeilen und die Zahl der fehlenden.
+
+Antworte ausschließlich mit JSON: {{"szenen": [ … ]}} -- eine Liste deutscher
+Zeilen, GENAU {fehlt} Stück, nicht mehr und nicht weniger. Jede Zeile sagt,
+was in diesem einen Bild zu sehen ist.
+
+Regeln:
+- Die vorhandenen Zeilen wiederholst du nicht. Du schreibst nur die neuen.
+- Sie schliessen an die letzte vorhandene an und fuehren die Handlung weiter.
+- Dieselben Figuren und Orte wie bisher, mit denselben Namen.
+- Eine Zeile, ein Augenblick. Keine Abfolge in einer Zeile."""
+
+
+def szenen_ergaenzen(zeilen: list[str], fehlt: int, kurz: str = "",
+                     welt: str = "", fiktion=None, stil: str = "",
+                     model: str | None = None) -> list[str]:
+    """Die fehlenden Zeilen eines Inhaltsverzeichnisses nachschreiben.
+
+    Gedacht fuer den Fall, dass das Umreissen zu wenige geliefert hat oder
+    die Geschichte laenger werden soll als geplant.
+    """
+    fehlt = max(1, min(int(fehlt or 0), MAX_SZENEN))
+    da = [(z or "").strip() for z in zeilen if (z or "").strip()]
+    name = model or GROSS
+    system = ERGAENZEN_SYSTEM.format(fehlt=fehlt)
+    if kurz.strip():
+        system += f"\n\nWorum es geht: {kurz.strip()}"
+    if welt in WELTEN:
+        system += f"\n\n{WELTEN[welt][1]}"
+    _, satz = grad(fiktion)
+    if satz:
+        system += f"\n\n{satz}"
+    if stil in STYLES:
+        system += f"\n\nDie ganze Folge ist im Stil: {STYLES[stil][1]}"
+    inhalt = "\n".join(f"{i}. {z}" for i, z in enumerate(da, 1)) or "(noch nichts)"
+    try:
+        roh = antwort({
+            "model": name, "format": "json", "keep_alive": "10m",
+            "options": {"temperature": 0.8,
+                        "num_predict": min(4000, 400 + 60 * fehlt)},
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user",
+                          "content": f"Bisher:\n{inhalt}\n\n"
+                                     f"Schreibe die {fehlt} fehlenden Szenen."}],
+        }, timeout=600)
+    finally:
+        entladen(name)
+    if not isinstance(roh, dict):
+        return []
+    neu = [str(z or "").strip()[:200] for z in (roh.get("szenen") or [])
+           if str(z or "").strip()]
+    # Was schon dasteht, faellt heraus: das Modell wiederholt gern die letzte.
+    vorhanden = {z.lower() for z in da}
+    neu = [z for z in neu if z.lower() not in vorhanden]
+    return neu[:fehlt] + [""] * max(0, fehlt - len(neu))
+
+
 def expose(idee: str, fiktion=None, vorher: str = "",
            model: str | None = None, anzahl: int = 0) -> dict:
     """Aus einer Idee die Kurzbeschreibung samt Stil und Weltzuordnung.

@@ -377,7 +377,12 @@ def teil_prompt(feld: str, text: str, person: str = "",
     return fertig[:1].lower() + fertig[1:] if fertig else ""
 
 
-MAX_ZEILEN = 24
+MAX_ZEILEN = 60
+
+# Wie viele Szenen oder Namen in einen Aufruf gehen. Gemessen: bei dreissig
+# Szenen auf einmal brach die Antwort mittendrin ab, und die hinteren fehlten
+# -- stillschweigend, denn ein abgeschnittenes JSON sieht wie ein kuerzeres aus.
+JE_AUFRUF = 8
 
 RATEN_SYSTEM = """Du ordnest Namen aus einer Geschichte ein.
 
@@ -407,16 +412,25 @@ def bausteine_raten(namen: list[str], umfeld: str = "",
     Ein Aufruf fuer alle Namen: sie gehoeren zu derselben Geschichte, und
     einzeln gefragt erfindet das Modell zu jedem eine eigene Welt.
     """
-    namen = [n for n in namen if (n or "").strip()][:12]
+    namen = [n for n in namen if (n or "").strip()][:40]
     if not namen:
         return []
+    # Wie bei den Empfehlungen: viele Namen in einem Aufruf brechen die
+    # Antwort ab, und die hinteren fehlen dann.
+    if len(namen) > JE_AUFRUF:
+        raus = []
+        for anfang in range(0, len(namen), JE_AUFRUF):
+            raus += bausteine_raten(namen[anfang:anfang + JE_AUFRUF],
+                                    umfeld, model)
+        return raus
     frage = "Namen: " + ", ".join(namen)
     if umfeld.strip():
         frage = f"Inhaltsverzeichnis:\n{umfeld.strip()[:2000]}\n\n{frage}"
     roh = antwort({
         "model": model or MODEL,
         "format": "json",
-        "options": {"temperature": 0.5, "num_predict": 900},
+        "options": {"temperature": 0.5,
+                    "num_predict": 300 + 150 * len(namen)},
         "messages": [{"role": "system", "content": RATEN_SYSTEM},
                      {"role": "user", "content": frage}],
     }, timeout=300)
@@ -464,23 +478,44 @@ Regeln:
 
 
 def bausteine_empfehlen(zeilen: list[str], vorhanden: list[dict],
-                        model: str | None = None) -> list[dict]:
+                        model: str | None = None, fortschritt=None) -> list[dict]:
     """Je Szene vorschlagen, welche Bausteine gebraucht werden.
 
-    Ein Aufruf fuer die ganze Gliederung: nur so kann das Modell dieselbe
-    Person in Szene eins und Szene sieben wiedererkennen.
+    In Haeppchen zu acht Szenen. Was in den vorigen Haeppchen an Namen
+    entstand, geht ins naechste mit hinein -- sonst hiesse dieselbe Figur in
+    Szene drei anders als in Szene zwoelf.
     """
     zeilen = [(z or "").strip() for z in zeilen][:MAX_ZEILEN]
     if not any(zeilen):
         return []
-    liste = "\n".join(f'  {b.get("name")} ({b.get("art")})'
-                       for b in vorhanden if b.get("name")) or "  (keine)"
+    bekannt = [{"name": b.get("name"), "art": b.get("art")}
+               for b in vorhanden if b.get("name")]
+    raus = []
+    for anfang in range(0, len(zeilen), JE_AUFRUF):
+        teil = zeilen[anfang:anfang + JE_AUFRUF]
+        if fortschritt:
+            fortschritt(anfang + len(teil), len(zeilen))
+        dazu = _empfehlen_teil(teil, anfang, bekannt, model)
+        raus += dazu
+        # Die neuen Namen gelten ab jetzt als bekannt.
+        for e in dazu:
+            for t in e["teile"]:
+                if not any(b["name"].lower() == t["name"].lower() for b in bekannt):
+                    bekannt.append({"name": t["name"], "art": t["art"]})
+    return raus
+
+
+def _empfehlen_teil(zeilen: list[str], versatz: int, vorhanden: list[dict],
+                    model: str | None) -> list[dict]:
+    """Ein Haeppchen Szenen. `versatz` ist die Nummer der ersten minus eins."""
+    liste = "\n".join(f'  {b["name"]} ({b["art"]})' for b in vorhanden) or "  (keine)"
     inhalt = "\n".join(f"{i}. {z}" for i, z in enumerate(zeilen, 1) if z)
     frage = f"Vorhandene Bausteine:\n{liste}\n\nInhaltsverzeichnis:\n{inhalt}"
     roh = antwort({
         "model": model or MODEL,
         "format": "json",
-        "options": {"temperature": 0.3, "num_predict": 1200},
+        "options": {"temperature": 0.3,
+                    "num_predict": 400 + 150 * len(zeilen)},
         "messages": [{"role": "system", "content": EMPFEHLEN_SYSTEM},
                      {"role": "user", "content": frage}],
     }, timeout=300)
@@ -495,6 +530,7 @@ def bausteine_empfehlen(zeilen: list[str], vorhanden: list[dict],
             continue
         if not 1 <= nr <= len(zeilen):
             continue
+        nr += versatz
         teile, gesehen = [], set()
         for t in (e.get("teile") or [])[:5]:
             if not isinstance(t, dict):

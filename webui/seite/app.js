@@ -1195,6 +1195,7 @@ async function einreihenEinfach(zusatz) {
 // Szene gilt -- und weil ein Modell, dem niemand sagt, dass Drachen erlaubt
 // sind, die Handlung so lange zurechtbiegt, bis sie alltagstauglich wird.
 let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
+let gsErgaenztZuletzt = "";
 
 // Die Kameraeinstellung steht als \Name in der Zeile -- aber niemand soll
 // sie dort suchen muessen. Jede Szene traegt deshalb ein Auswahlfeld, das
@@ -1478,6 +1479,55 @@ async function promptFuerSzene(i) {
   say(`Der Prompt für Szene ${i + 1} wird geschrieben …`);
 }
 
+// Fehlt die Gliederung an Zeilen, schreibt das Sprachmodell sie nach. Was
+// dasteht, bleibt -- angehaengt wird nur, was fehlt.
+$("gsErgaenzen").onclick = async e => {
+  e.preventDefault();
+  const da = gsZeilen.filter(z => z.text.trim()).length;
+  const ziel = parseInt($("gsAnzahl").value, 10) || 0;
+  const fehlt = ziel ? ziel - da : parseInt(prompt("Wie viele Szenen dazu?", "5"), 10);
+  if (!fehlt || fehlt < 1) {
+    return say(ziel ? `Es stehen schon ${da} von ${ziel} Szenen.`
+                    : "Keine Zahl angegeben.", ziel ? "ok" : "err");
+  }
+  const res = await fetch("/api/ergaenzen", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen: gsZeilen.filter(z => z.text.trim()), fehlt,
+                          kurz: $("gsKurz").value, welt: $("gsWelt").value,
+                          stil: $("gsStil").value,
+                          fiktion: +$("gsFiktion").value,
+                          modell: $("gsModell").value})
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    const err = res ? await res.json().catch(() => ({})) : {};
+    return say(err.error || "Das ließ sich nicht ergänzen.", "err");
+  }
+  buttonState("busy");
+  poll();
+  say(`${fehlt} Szenen werden geschrieben …`);
+};
+
+// Durchsehen, was noch fehlt. Kostet nichts -- kein Sprachmodell, nur
+// Nachsehen -- und sagt vor dem teuren Teil, was schiefgehen wird.
+$("gsPruefen").onclick = async e => {
+  e.preventDefault();
+  const g = await bausteinRuf({tu: "pruefen", zeilen: gsZeilen});
+  if (!g) return;
+  const rang = {fehler: 0, warnung: 1, hinweis: 2};
+  const funde = (g.funde || []).sort((a, b) =>
+    (rang[a.schwere] - rang[b.schwere]) || (a.nr - b.nr));
+  $("gsPruefung").innerHTML = funde.length
+    ? `<p class="hint">${g.szenen} Szenen, ${funde.length} Anmerkung(en):</p>`
+      + funde.map(f => `<div class="fund ${f.schwere}">`
+          + (f.nr ? `<b>Szene ${f.nr}</b> ` : "")
+          + esc(f.text) + `</div>`).join("")
+    : `<div class="fund gut">Alle ${g.szenen} Szenen sind versorgt: `
+      + `Bausteine genannt, angelegt und beschrieben.</div>`;
+  say(funde.length ? `${funde.length} Anmerkung(en) — siehe unten.`
+                   : "Die Gliederung ist vollständig.",
+      funde.length ? "" : "ok");
+};
+
 // Je Szene vorschlagen, welche Bausteine sie braucht. Zwei Schritte statt
 // einem: erst sehen, was gemeint ist, dann entscheiden, was hineinkommt.
 $("gsEmpfehlen").onclick = async e => {
@@ -1730,6 +1780,19 @@ $("gsUmreissen").onclick = async e => {
 };
 
 function zeigeExpose(e) {
+  // Eine Ergaenzung bringt keine Kurzfassung mit, nur neue Zeilen. Sie
+  // werden angehaengt, nicht eingesetzt -- das Vorhandene bleibt stehen.
+  if (e && e.nur_ergaenzung) {
+    const neu = (e.szenen || []).filter(t => t !== undefined);
+    if (!neu.length || gsErgaenztZuletzt === JSON.stringify(neu)) return;
+    gsErgaenztZuletzt = JSON.stringify(neu);
+    gsZeilen = gsZeilen.filter(z => z.text.trim())
+      .concat(neu.map(t => ({text: t, bilder: 1})));
+    zeigeSelbstszenen();
+    gsMerken();
+    say(`${neu.filter(t => t).length} Szenen ergänzt.`, "ok");
+    return;
+  }
   if (!e || !e.kurz || e.kurz === $("gsKurz").value) return;
   $("gsKurz").value = e.kurz;
   if (e.stil) $("gsStil").value = e.stil;
