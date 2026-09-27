@@ -127,6 +127,10 @@ JSON und genau diesen Schlüsseln:
           Nenne den Ort nur, wenn er in der Zeile steht -- sonst wird er
           separat ergänzt.
 "mimik"   Ein Schlüssel aus der Liste, oder "".
+"kleidung" Nur wenn die Zeile ausdrücklich etwas anderes anzieht als sonst:
+          was die Figur in diesem Bild trägt, auf ENGLISCH, ein kurzer Satz.
+          Sonst "". Was sie üblicherweise trägt, steht schon woanders --
+          schreib es hier nicht noch einmal hin.
 
 Mimik: {mimik}
 
@@ -180,12 +184,17 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
                               "content": f"Szene {nr} von {len(zeilen)}: {text}"}],
             }, timeout=600)
             if not isinstance(roh, dict) or not str(roh.get("prompt") or "").strip():
-                szenen.append({"nr": nr, "zeile": text, "prompt": "", "mimik": ""})
+                szenen.append({"nr": nr, "zeile": text, "prompt": "",
+                               "mimik": "", "kleidung": ""})
                 continue
             prompt = str(roh["prompt"]).strip()[:400]
             mimik = str(roh.get("mimik") or "").strip()
             szenen.append({"nr": nr, "zeile": text, "prompt": prompt,
-                           "mimik": mimik if mimik in MIMIK else ""})
+                           "mimik": mimik if mimik in MIMIK else "",
+                           # Zieht die Szene etwas anderes an, gilt das statt
+                           # der Vorzugskleidung des Bausteins -- sonst
+                           # stuenden Raumanzug und Wollmantel im selben Bild.
+                           "kleidung": str(roh.get("kleidung") or "").strip()[:200]})
             verlauf += [{"role": "user", "content": f"Szene {nr}: {text}"},
                         {"role": "assistant", "content": prompt}]
             del verlauf[:-12]
@@ -330,6 +339,17 @@ def expose(idee: str, fiktion=None, vorher: str = "",
         stile=", ".join(STYLES))
     if satz:
         system += f"\n\nDer Benutzer hat den Wirklichkeitsgrad vorgegeben: {satz}"
+    # Je unwirklicher, desto eher gezeichnet. Ein Foto muss glaubhaft sein --
+    # eine fliegende Stadt im Fotostil sieht nach Montage aus, dieselbe Stadt
+    # als Anime nach Absicht.
+    try:
+        stufe = int(fiktion)
+    except (TypeError, ValueError):
+        stufe = -1
+    if stufe >= 7:
+        system += ("\n\nSo weit weg von der Wirklichkeit sind gezeichnete "
+                   "Stile klar im Vorteil. Waehle einen davon: "
+                   + ", ".join(sorted(GEZEICHNET)) + ".")
     # Ein Folgeband faengt nicht bei null an. Ohne die Vorgeschichte erfindet
     # das Modell die Figuren neu und widerspricht dem, was schon geschehen ist.
     if vorher.strip():

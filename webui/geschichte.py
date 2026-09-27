@@ -226,6 +226,7 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             "gegenstand": erster("gegenstand"),
             "handlung": text,
             "mimik": p.get("mimik") or "",
+            "kleidung": p.get("kleidung") or "",
             "stil": stil,
         })
     return szenen

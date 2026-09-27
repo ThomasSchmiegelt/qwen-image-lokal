@@ -233,23 +233,32 @@ verwendet werden soll.
 
 Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
-"prompt"     Die Beschreibung auf ENGLISCH, ein Satz. Unveränderliches gehört
-             in den Text: ungefähres Alter, Statur, Gesicht, Haarfarbe und
-             Frisur. Nennt die Beschreibung einen Charakterzug -- schüchtern,
-             streng, herzlich, misstrauisch --, setze ihn als sichtbares
-             Merkmal um: Haltung, Blick, Zug um den Mund. "streng" wird zu
-             "an upright bearing and a level, unsmiling gaze", nicht zu
-             "strict". Alles, was sich von Bild zu Bild ändern darf -- vor allem
-             Kleidung und Schuhe -- setzt du als Lücke in geschweifte Klammern,
-             zum Beispiel {kleidung} oder {schuhe}. Höchstens vier Lücken,
-             Namen klein und ohne Umlaute.
+"prompt"     Die ganze Person auf ENGLISCH, ein Satz: ungefähres Alter,
+             Statur, Gesicht, Haarfarbe und Frisur. OHNE Kleidung -- die
+             steht für sich. Nennt die Beschreibung einen Charakterzug --
+             schüchtern, streng, herzlich, misstrauisch --, setze ihn als
+             sichtbares Merkmal um: Haltung, Blick, Zug um den Mund. "streng"
+             wird zu "an upright bearing and a level, unsmiling gaze", nicht
+             zu "strict".
+"gesicht"    Nur das Gesicht, auf ENGLISCH, ein kurzer Satz: Form, Augen,
+             Haut, Mund, Brauen, der Ansatz der Haare. Nichts vom Körper,
+             nichts von der Kleidung -- dieser Text steht allein im Bild,
+             wenn die Kamera dicht an die Augen geht.
+"kleidung"   Was die Person üblicherweise trägt, auf ENGLISCH, ein kurzer
+             Satz mit Schuhen. Eine Szene darf ihn überschreiben.
 "variablen"  Ein Objekt mit genau einer englischen Vorgabe je Lücke,
              als einzelner Text, nicht als Liste. Fällt dir zu einer
              Lücke keine Vorgabe ein, mach dort keine Lücke.
 
+Lücken in geschweiften Klammern sind erlaubt, wo etwas von Bild zu Bild
+wechseln darf, etwa {haarfarbe}. Höchstens vier, Namen klein und ohne
+Umlaute. Kleidung braucht keine Lücke mehr -- dafür ist "kleidung" da.
+
 Beispiel: {"prompt": "a woman in her thirties, slim, high cheekbones, short
-dark hair, wearing {kleidung} and {schuhe}", "variablen": {"kleidung": "a red
-wool coat", "schuhe": "brown leather boots"}}""",
+dark hair, an upright bearing", "gesicht": "a narrow face with high
+cheekbones, dark brown eyes under straight brows, pale skin, a level mouth",
+"kleidung": "a red wool coat over a grey jumper, brown leather boots",
+"variablen": {}}""",
 
     "ort": """Du schreibst den Bildprompt für einen Ort, der immer wieder
 verwendet werden soll.
@@ -312,8 +321,15 @@ def baustein_prompt(text: str, art: str = "person",
             wert = wert[0] if wert else ""
         return str(wert or "").strip()[:120]
 
-    return {"prompt": prompt,
-            "variablen": {k: vorgabe(gegeben.get(k)) for k in dict.fromkeys(offen)}}
+    erg = {"prompt": prompt,
+           "variablen": {k: vorgabe(gegeben.get(k)) for k in dict.fromkeys(offen)}}
+    # Nur bei Personen: das Gesicht fuer die Grossaufnahme, die Kleidung zum
+    # Ueberschreiben durch die Szene. Fehlen sie, bleiben die Felder leer --
+    # dann gilt eben der allgemeine Prompt.
+    if art == "person":
+        for feld in ("gesicht", "kleidung"):
+            erg[feld] = str(roh.get(feld) or "").strip()[:400]
+    return erg
 
 
 LUECKEN_SYSTEM = """Du füllst eine Lücke in einem Bildprompt mit Vorschlägen.

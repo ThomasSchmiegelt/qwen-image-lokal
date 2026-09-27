@@ -76,10 +76,12 @@ fetch("/api/info").then(r => r.json()).then(info => {
   BSARTEN = info.bausteinarten || [];
   $("bsArt").innerHTML = BSARTEN.map(
     a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
+  personFelder();
   MIMIKLISTE = info.mimik || [];
   EINSTELLUNGEN = info.einstellungen || [];
   STILLISTE = info.styles || [];
   fill("gsStil", info.styles);
+  GEZEICHNET = info.gezeichnet || [];
   fill("gsWelt", info.welten);
   // Gross fuer die schoepferische Arbeit, klein fuer alles andere.
   $("gsModell").innerHTML =
@@ -790,7 +792,7 @@ $("chat").addEventListener("keydown", e => {
 // Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
 // steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
 let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [],
-    EINSTELLUNGEN = [];
+    EINSTELLUNGEN = [], GEZEICHNET = [];
 const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
 
 function luecken(text) {
@@ -865,6 +867,8 @@ $("bsErzeugen").onclick = async e => {
   const g = await bausteinRuf({tu: "prompt", text, art: $("bsArt").value});
   if (!g) return;
   $("bsPrompt").value = g.prompt;
+  $("bsGesicht").value = g.gesicht || "";
+  $("bsKleidung").value = g.kleidung || "";
   luckenFelder("bsVariablen", g.prompt, g.variablen, false);
   say(`Prompt erzeugt, ${luecken(g.prompt).length} Lücke(n). Bitte gegenlesen.`, "ok");
 };
@@ -876,8 +880,17 @@ $("bsPrompt").addEventListener("input", () => {
 function bausteinAusFeldern() {
   return {id: $("bsPrompt").dataset.id || "", art: $("bsArt").value,
           name: $("bsName").value, prompt: $("bsPrompt").value,
+          gesicht: $("bsGesicht").value, kleidung: $("bsKleidung").value,
           variablen: lueckenWerte("bsVariablen")};
 }
+
+// Gesicht und Kleidung gibt es nur bei Personen. Ein Ort hat kein Gesicht,
+// und ein leeres Feld, das nie etwas tut, verwirrt nur.
+function personFelder() {
+  $("bsPersonBox").style.display =
+    $("bsArt").value === "person" ? "block" : "none";
+}
+$("bsArt").addEventListener("change", personFelder);
 
 $("bsSpeichern").onclick = async e => {
   e.preventDefault();
@@ -909,7 +922,9 @@ $("bsBild").onclick = async e => {
 $("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
 
 function bausteinLeeren() {
-  ["bsName", "bsText", "bsPrompt"].forEach(id => $(id).value = "");
+  ["bsName", "bsText", "bsPrompt", "bsGesicht", "bsKleidung"]
+    .forEach(id => $(id).value = "");
+  personFelder();
   $("bsPrompt").dataset.id = "";
   $("bsVariablen").innerHTML = "";
   bausteinKopf();
@@ -932,7 +947,10 @@ function bausteinLaden(id) {
   $("bsArt").value = b.art;
   $("bsName").value = b.name;
   $("bsPrompt").value = b.prompt;
+  $("bsGesicht").value = b.gesicht || "";
+  $("bsKleidung").value = b.kleidung || "";
   $("bsPrompt").dataset.id = b.id;
+  personFelder();
   luckenFelder("bsVariablen", b.prompt, b.variablen, false);
   bausteinKopf();
   say(`„${b.name}“ geladen. Ändern und speichern.`);
@@ -1165,7 +1183,22 @@ function zeigeGrad() {
   const passend = n <= 3 ? "wirklich" : n <= 5 ? "scifi"
                 : n <= 7 ? "fantasie" : n <= 9 ? "fantasie" : "maerchen";
   if ($("gsWelt").value === "wirklich" || n <= 3) $("gsWelt").value = passend;
+  stilHinweis();
 }
+
+// Je unwirklicher die Geschichte, desto besser fahren Anime, Comic und Manga:
+// ein Foto muss glaubhaft sein, eine Zeichnung darf alles. Gesagt wird es nur
+// -- gewaehlt wird der Stil weiter von Hand.
+function stilHinweis() {
+  const hoch = +$("gsFiktion").value >= 7;
+  const stil = $("gsStil").value;
+  const gezeichnet = !stil || GEZEICHNET.includes(stil);
+  $("gsStilHinweis").textContent = hoch && !gezeichnet
+    ? "Bei so viel Fiktion sind Anime, Comic und Manga klar im Vorteil — "
+      + "ein Foto muss glaubhaft aussehen, eine Zeichnung darf alles."
+    : "";
+}
+$("gsStil").addEventListener("change", stilHinweis);
 
 $("gsFiktion").addEventListener("input", zeigeGrad);
 
