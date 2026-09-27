@@ -848,8 +848,9 @@ function zeigeBausteine(liste) {
           <span class="art">${esc(label(b.art))}</span><br>
           <code>${esc(b.prompt)}</code></div>
         <span class="knopf" onclick="bausteinLaden('${b.id}')" title="bearbeiten">✎</span>
-        ${b.bild ? "" : `<span class="knopf" onclick="bausteinBild('${b.id}')"
-            title="Musterbild dazu erzeugen">▣</span>`}
+        <span class="knopf" onclick="bausteinBild('${b.id}')"
+          title="${b.bild ? "Musterbild neu erzeugen und ersetzen"
+                          : "Musterbild dazu erzeugen"}">▣</span>
         <span class="knopf" onclick="bausteinWeg('${b.id}')" title="löschen">×</span>
       </div>`).join("")
     : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
@@ -883,6 +884,7 @@ function lueckenWerte(wohin) {
 // Diese Aufrufe gehen ans Sprachmodell und dauern. Die uebrigen -- speichern,
 // loeschen, zusammensetzen -- sind sofort da und brauchen keinen Puls.
 const LANGSAM = {
+  auffrischen: "Die Personen werden aufgeteilt",
   prompt: "Der Prompt wird geschrieben",
   teilprompt: "Der Prompt wird geschrieben",
   luecken: "Vorschläge werden gesucht",
@@ -1002,12 +1004,30 @@ $("bsBild").onclick = async e => {
 async function bausteinBild(id) {
   const b = BAUSTEINE.find(x => x.id === id);
   if (!b) return;
+  // Ein vorhandenes Bild wird ersetzt, nicht ergaenzt -- das sagt man besser
+  // vorher, sonst ist das gute von gestern weg.
+  if (b.bild && !confirm(`Das Musterbild von „${b.name}“ neu erzeugen? `
+                         + "Das bisherige wird ersetzt.")) return;
   const g = await bausteinRuf({tu: "zusammensetzen", ids: [id],
                                werte: b.variablen, freistellen: true});
   if (!g) return;
   await einreihenEinfach({prompt: g.prompt, baustein: id, aspect: "3:4"});
   say(`Bild zu „${b.name}“ eingereiht.`, "ok");
 }
+
+// Personen aus der Zeit vor der Trennung nachziehen. Eine Geschichte, die
+// sie benutzt, bekommt die Aenderung von selbst: ihre Bloecke werden aus den
+// Bausteinen gebaut, nicht aus einer alten Abschrift.
+$("bsAuffrischen").onclick = async e => {
+  e.preventDefault();
+  if (!confirm("Bei allen Personen ohne Gesicht oder Kleidung beides aus dem "
+               + "vorhandenen Prompt herauslösen?")) return;
+  const g = await bausteinRuf({tu: "auffrischen"});
+  if (!g) return;
+  if (!g.neu.length) return say(g.hinweis || "Nichts aufzufrischen.", "ok");
+  await bausteineHolen();
+  say(`Aufgefrischt: ${g.neu.map(b => b.name).join(", ")}.`, "ok");
+};
 
 $("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
 

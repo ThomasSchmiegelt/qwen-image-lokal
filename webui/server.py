@@ -548,6 +548,39 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "auffrischen":
+                # Personen aus der Zeit vor der Trennung: Gesicht und Kleidung
+                # standen damals im allgemeinen Prompt oder in einer Luecke.
+                # Hier werden sie herausgeloest -- ohne neu zu formulieren.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                offen = [b for b in bausteine.liste(projekt)
+                         if b.get("art") == "person"
+                         and not ((b.get("gesicht") or "").strip()
+                                  and (b.get("kleidung") or "").strip())]
+                if not offen:
+                    return self._json(200, {"neu": [], "hinweis":
+                        "Alle Personen haben schon Gesicht und Kleidung."})
+                frisch = []
+                for i, b in enumerate(offen, 1):
+                    melden(f"Person {i} von {len(offen)}: {b['name']}", i, len(offen))
+                    # Was frueher in {kleidung} steckte, gehoert mit in den
+                    # Text, sonst faellt es beim Trennen unter den Tisch.
+                    ganz = bausteine.einsetzen(b.get("prompt") or "",
+                                               b.get("variablen") or {})
+                    teile = chat.person_teilen(ganz)
+                    if not teile:
+                        continue
+                    b = dict(b)
+                    b["prompt"] = teile["prompt"]
+                    b["gesicht"] = (b.get("gesicht") or "").strip() or teile["gesicht"]
+                    b["kleidung"] = (b.get("kleidung") or "").strip() or teile["kleidung"]
+                    # Die Luecken sind jetzt eingesetzt, also weg damit.
+                    b["variablen"] = {}
+                    frisch.append(bausteine.speichern(projekt, b))
+                melden("")
+                return self._json(200, {"neu": frisch, "hinweis": ""})
+
             if was == "pruefen":
                 # Kostet nichts: kein Sprachmodell, nur Nachsehen. Deshalb
                 # auch kein Puls und keine Warteschlange.

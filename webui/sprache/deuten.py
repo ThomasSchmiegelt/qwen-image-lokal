@@ -343,6 +343,53 @@ Antwort ist englisch -- kein deutsches Wort bleibt stehen.""",
 }
 
 
+TEILEN_SYSTEM = """Du zerlegst die Beschreibung einer Person in drei Teile.
+
+Du bekommst einen englischen Bildprompt, in dem alles zusammensteht. Trenne
+ihn auf, ohne neu zu formulieren: die Wendungen bleiben, wie sie sind, sie
+werden nur verteilt.
+
+Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
+
+"prompt"   Alles zur Person selbst OHNE Kleidung: Alter, Statur, Haare,
+           Haltung, Blick.
+"gesicht"  Nur das Gesicht: Form, Augen, Haut, Mund, Brauen. Steht davon
+           nichts im Text, leite es aus Alter, Statur und Haaren ab und
+           nenne trotzdem Form, Augen und Haut -- dieser Text steht allein
+           im Bild, wenn die Kamera dicht an die Augen geht, und "alert
+           expression" allein ergibt dort kein Gesicht.
+"kleidung" Nur was die Person am Leib trägt, mit Schuhen. Steht nichts
+           davon im Text, gib "" zurück -- erfinde keine Kleidung.
+
+Alles auf ENGLISCH, ohne Subjekt, ohne vollständigen Satz. Nichts geht
+verloren: was weder Gesicht noch Kleidung ist, bleibt in "prompt"."""
+
+
+def person_teilen(prompt: str, model: str | None = None) -> dict:
+    """Einen alten Personenprompt in allgemein, Gesicht und Kleidung trennen.
+
+    Fuer Bausteine, die vor der Trennung entstanden sind. Neu geschrieben
+    wird nichts -- eine Person, die sich bewaehrt hat, soll gleich bleiben.
+    """
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return {}
+    roh = antwort({
+        "model": model or MODEL,
+        "format": "json",
+        "options": {"temperature": 0.2, "num_predict": 500},
+        "messages": [{"role": "system", "content": TEILEN_SYSTEM},
+                     {"role": "user", "content": prompt}],
+    })
+    if not isinstance(roh, dict):
+        return {}
+    raus = {k: _ohne_subjekt(str(roh.get(k) or "").strip()[:400].rstrip("."))
+            for k in ("prompt", "gesicht", "kleidung")}
+    # Ohne allgemeinen Teil waere der Baustein hinterher schlechter als
+    # vorher. Dann lieber nichts anruehren.
+    return raus if raus["prompt"] else {}
+
+
 def teil_prompt(feld: str, text: str, person: str = "",
                 model: str | None = None) -> str:
     """Aus einer deutschen Angabe den Prompt fuer Gesicht oder Kleidung.
@@ -364,7 +411,7 @@ def teil_prompt(feld: str, text: str, person: str = "",
     })
     if not isinstance(roh, dict):
         return ""
-    fertig = str(roh.get("text") or "").strip()[:400].rstrip(".")
+    fertig = _ohne_subjekt(str(roh.get("text") or "").strip()[:400].rstrip("."))
     # Trotz aller Ansage kommt manchmal ein ganzer Satz zurueck. Das Subjekt
     # davor faellt weg, sonst steht eine zweite Person im Prompt.
     if feld == "kleidung":
@@ -372,9 +419,17 @@ def teil_prompt(feld: str, text: str, person: str = "",
         # die Person, und die steht schon im allgemeinen Prompt.
         fertig = re.sub(r"^.{0,90}?\b(?:wearing|wears|dressed in|clad in)\s+",
                         "", fertig, flags=re.I)
-    fertig = re.sub(r"^(?:an?|the)\s+\w+(?:'s)?\s+(?:face\s+)?"
-                    r"(?:is|has)\s+", "", fertig, flags=re.I)
-    return fertig[:1].lower() + fertig[1:] if fertig else ""
+    return _ohne_subjekt(fertig)
+
+
+def _ohne_subjekt(text: str) -> str:
+    """"Her expression is alert" -> "alert". Ein zweites Subjekt im Prompt
+    setzt neben die Person eine weitere ins Bild."""
+    text = re.sub(r"^(?:an?|the|her|his|their)\s+\w+(?:'s)?\s+(?:face\s+)?"
+                  r"(?:is|has|are|have)\s+", "", text or "", flags=re.I)
+    text = re.sub(r"^(?:she|he|they)\s+(?:is|has|wears|are|have)\s+", "",
+                  text, flags=re.I)
+    return text[:1].lower() + text[1:] if text else ""
 
 
 MAX_ZEILEN = 60

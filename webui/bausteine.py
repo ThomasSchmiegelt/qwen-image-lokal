@@ -243,7 +243,10 @@ def zusammensetzen(teile: list[dict], werte: dict | None = None) -> str:
     werte = werte or {}
     reihung = {"person": 0, "gegenstand": 1, "ort": 2, "szene": 3}
     geordnet = sorted(teile, key=lambda b: reihung.get(b.get("art"), 9))
-    stuecke = [einsetzen(b.get("prompt") or "", werte) for b in geordnet]
+    # Eine Person kommt angezogen: die Vorzugskleidung steht seit der Trennung
+    # in einem eigenen Feld, und ohne sie erfindet das Modell eine.
+    stuecke = [person_text(b, werte) if b.get("art") == "person"
+               else einsetzen(b.get("prompt") or "", werte) for b in geordnet]
     stuecke = [s.rstrip(".") for s in stuecke if s]
     return ", ".join([stuecke[0]] + [_klein(s) for s in stuecke[1:]]) if stuecke else ""
 
