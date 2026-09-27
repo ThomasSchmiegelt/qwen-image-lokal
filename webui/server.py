@@ -517,6 +517,22 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "teilprompt":
+                # Gesicht oder Kleidung einzeln: der Benutzer hat das Feld
+                # von Hand auf Deutsch gefuellt und will es englisch zurueck.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                feld = str(params.get("feld") or "")
+                text = (params.get("text") or "").strip()
+                if not text:
+                    return self._json(400, {"error": "Keine Beschreibung"})
+                fertig = chat.teil_prompt(feld, text,
+                                          str(params.get("person") or ""))
+                if not fertig:
+                    return self._json(502, {"error":
+                        "Das Sprachmodell hat keinen Prompt geliefert."})
+                return self._json(200, {"text": fertig})
+
             if was == "katalog":
                 # Was in einer Geschichte mit /Name erwaehnt wird, aber noch
                 # nicht angelegt ist, gehoert sichtbar dazu: es ist eine

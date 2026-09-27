@@ -873,6 +873,31 @@ $("bsErzeugen").onclick = async e => {
   say(`Prompt erzeugt, ${luecken(g.prompt).length} Lücke(n). Bitte gegenlesen.`, "ok");
 };
 
+// Gesicht und Kleidung einzeln schreiben lassen. Beide Felder entstehen
+// schon beim "Prompt daraus erzeugen" mit -- das hier ist fuer danach: eine
+// Kleidung, die man auf Deutsch hineingetippt hat, kommt englisch zurueck.
+async function teilSchreiben(feld, id) {
+  const eigen = $(id).value.trim();
+  const text = eigen || $("bsText").value.trim();
+  if (!text) return say("Erst beschreiben — im Feld oder oben auf Deutsch.", "err");
+  say("Der Prompt wird geschrieben …");
+  const g = await bausteinRuf({tu: "teilprompt", feld, text,
+                               person: $("bsPrompt").value});
+  if (!g) return;
+  $(id).value = g.text;
+  say("Geschrieben. Bitte gegenlesen.", "ok");
+}
+
+$("bsGesichtNeu").onclick = e => {
+  e.preventDefault();
+  teilSchreiben("gesicht", "bsGesicht");
+};
+
+$("bsKleidungNeu").onclick = e => {
+  e.preventDefault();
+  teilSchreiben("kleidung", "bsKleidung");
+};
+
 $("bsPrompt").addEventListener("input", () => {
   luckenFelder("bsVariablen", $("bsPrompt").value, lueckenWerte("bsVariablen"), false);
 });

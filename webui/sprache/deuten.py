@@ -254,10 +254,16 @@ Lücken in geschweiften Klammern sind erlaubt, wo etwas von Bild zu Bild
 wechseln darf, etwa {haarfarbe}. Höchstens vier, Namen klein und ohne
 Umlaute. Kleidung braucht keine Lücke mehr -- dafür ist "kleidung" da.
 
-Beispiel: {"prompt": "a woman in her thirties, slim, high cheekbones, short
-dark hair, an upright bearing", "gesicht": "a narrow face with high
-cheekbones, dark brown eyes under straight brows, pale skin, a level mouth",
-"kleidung": "a red wool coat over a grey jumper, brown leather boots",
+Das Beispiel zeigt nur die Form. Beschreibe die Person aus der Anfrage,
+nicht die aus dem Beispiel -- übernimm keine Wendung daraus, die in der
+Anfrage nicht steht.
+
+Beispiel für "ein alter Fischer, breit gebaut, wettergegerbt, gutmütig":
+{"prompt": "a broad-shouldered man in his seventies, weathered and
+thickset, a full white beard, a slow and easy way of standing",
+"gesicht": "a broad, deeply lined face, sun-darkened skin, small grey eyes
+in a web of creases, a full white beard, bushy brows",
+"kleidung": "a worn oilskin jacket over a knitted jumper, rubber boots",
 "variablen": {}}""",
 
     "ort": """Du schreibst den Bildprompt für einen Ort, der immer wieder
@@ -287,6 +293,86 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
              als einzelner Text, nicht als Liste. Fällt dir zu einer
              Lücke keine Vorgabe ein, mach dort keine Lücke.""",
 }
+
+
+# Einzelne Teile einer Person nachschaerfen. Die Felder entstehen zwar schon
+# beim "Prompt daraus erzeugen" mit -- aber wer eines davon von Hand
+# ueberschreibt, tut das auf Deutsch und will es genauso uebersetzt haben.
+TEIL_SYSTEM = {
+    "gesicht": """Du schreibst den Bildprompt für das GESICHT einer Person.
+
+Antworte ausschließlich mit JSON: {"text": "…"}.
+
+Eine kurze englische Aufzählung, nur das Gesicht: Form, Augen, Haut, Mund,
+Brauen, der Ansatz der Haare. Nichts vom Körper, nichts von der Kleidung,
+keine Umgebung -- dieser Text steht allein im Bild, wenn die Kamera dicht an
+die Augen geht. Ein Charakterzug wird zu etwas Sichtbarem: "misstrauisch"
+zu "narrowed eyes and a set jaw", nicht zu "suspicious".
+
+KEIN vollständiger Satz und KEIN Subjekt: nicht "A man's face has …",
+sondern gleich das Gesicht, in der Form
+"<shape> face with <eyes>, <skin>, <mouth>" -- die Wörter selbst auf
+ENGLISCH.
+Der Text wird an die Beschreibung der Person angehängt -- ein zweites
+"a man" darin setzt eine zweite Person ins Bild.
+
+Nimm ausschließlich, was in der Anfrage steht. Erfinde keine Merkmale dazu
+und übernimm keine aus dieser Anweisung. Die Anfrage ist deutsch, die
+Antwort ist englisch -- kein deutsches Wort bleibt stehen.""",
+
+    "kleidung": """Du schreibst den Bildprompt für die KLEIDUNG einer Person.
+
+Antworte ausschließlich mit JSON: {"text": "…"}.
+
+Eine kurze englische Aufzählung, nur was die Person am Leib trägt, von oben
+nach unten und mit Schuhen. Stoff und Schnitt gehören dazu, Farbe auch. Kein
+Gesicht, kein Körperbau, keine Umgebung, keine Tätigkeit.
+
+Beginne mit dem ersten Kleidungsstück. KEIN Subjekt, kein vollständiger
+Satz, und die Person kommt darin nicht vor: nicht "a woman … wearing …",
+sondern gleich die Form
+"<garment> over <garment>, <shoes>" -- die Wörter selbst auf ENGLISCH.
+Der Text wird an die Beschreibung der Person angehängt -- steht sie ein
+zweites Mal darin, setzt das eine zweite Person ins Bild.
+
+Nimm ausschließlich die Kleidungsstücke aus der Anfrage. Erfinde keine dazu
+und übernimm keine aus dieser Anweisung. Die Anfrage ist deutsch, die
+Antwort ist englisch -- kein deutsches Wort bleibt stehen.""",
+}
+
+
+def teil_prompt(feld: str, text: str, person: str = "",
+                model: str | None = None) -> str:
+    """Aus einer deutschen Angabe den Prompt fuer Gesicht oder Kleidung.
+
+    `person` ist der allgemeine Prompt und dient als Umfeld: eine Jacke fuer
+    eine Bergsteigerin sieht anders aus als eine fuer eine Beamtin.
+    """
+    system = TEIL_SYSTEM.get(feld)
+    if not system or not (text or "").strip():
+        return ""
+    if person.strip():
+        system += f"\n\nDie Person: {person.strip()}"
+    roh = antwort({
+        "model": model or MODEL,
+        "format": "json",
+        "options": {"temperature": 0.3, "num_predict": 300},
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": text}],
+    })
+    if not isinstance(roh, dict):
+        return ""
+    fertig = str(roh.get("text") or "").strip()[:400].rstrip(".")
+    # Trotz aller Ansage kommt manchmal ein ganzer Satz zurueck. Das Subjekt
+    # davor faellt weg, sonst steht eine zweite Person im Prompt.
+    if feld == "kleidung":
+        # "... wearing a red coat" -> "a red coat". Alles vor dem Tragen ist
+        # die Person, und die steht schon im allgemeinen Prompt.
+        fertig = re.sub(r"^.{0,90}?\b(?:wearing|wears|dressed in|clad in)\s+",
+                        "", fertig, flags=re.I)
+    fertig = re.sub(r"^(?:an?|the)\s+\w+(?:'s)?\s+(?:face\s+)?"
+                    r"(?:is|has)\s+", "", fertig, flags=re.I)
+    return fertig[:1].lower() + fertig[1:] if fertig else ""
 
 
 def baustein_prompt(text: str, art: str = "person",
