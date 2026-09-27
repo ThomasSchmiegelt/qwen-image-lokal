@@ -254,17 +254,15 @@ Lücken in geschweiften Klammern sind erlaubt, wo etwas von Bild zu Bild
 wechseln darf, etwa {haarfarbe}. Höchstens vier, Namen klein und ohne
 Umlaute. Kleidung braucht keine Lücke mehr -- dafür ist "kleidung" da.
 
-Das Beispiel zeigt nur die Form. Beschreibe die Person aus der Anfrage,
-nicht die aus dem Beispiel -- übernimm keine Wendung daraus, die in der
-Anfrage nicht steht.
+Nimm ausschließlich, was in der Anfrage steht, und ergänze nur, was daraus
+folgt. Aus dieser Anweisung übernimmst du keine einzige Wendung -- kein
+Beispielwort, keine Beispielperson.
 
-Beispiel für "ein alter Fischer, breit gebaut, wettergegerbt, gutmütig":
-{"prompt": "a broad-shouldered man in his seventies, weathered and
-thickset, a full white beard, a slow and easy way of standing",
-"gesicht": "a broad, deeply lined face, sun-darkened skin, small grey eyes
-in a web of creases, a full white beard, bushy brows",
-"kleidung": "a worn oilskin jacket over a knitted jumper, rubber boots",
-"variablen": {}}""",
+Die Form, mit Platzhaltern statt Wörtern:
+{"prompt": "<Alter und Statur>, <Haare>, <Haltung oder Blick>",
+ "gesicht": "<Gesichtsform> face with <Augen>, <Haut>, <Mund>",
+ "kleidung": "<Kleidungsstück> over <Kleidungsstück>, <Schuhe>",
+ "variablen": {}}""",
 
     "ort": """Du schreibst den Bildprompt für einen Ort, der immer wieder
 verwendet werden soll.
@@ -375,6 +373,66 @@ def teil_prompt(feld: str, text: str, person: str = "",
     return fertig[:1].lower() + fertig[1:] if fertig else ""
 
 
+RATEN_SYSTEM = """Du ordnest Namen aus einer Geschichte ein.
+
+Du bekommst das Inhaltsverzeichnis einer Bilderfolge und eine Liste von
+Namen, die darin mit einem Schrägstrich erwähnt werden. Zu jedem Namen sagst
+du, was er ist und wie er aussehen könnte.
+
+Antworte ausschließlich mit JSON: {"teile": [ … ]}. Jeder Eintrag hat genau
+diese Schlüssel:
+
+"name"         Der Name, unverändert aus der Liste.
+"art"          "person", "ort" oder "gegenstand". Was in der Geschichte
+               handelt, ist eine Person; wo sie sich aufhält, ein Ort; was
+               sie benutzt oder trägt, ein Gegenstand.
+"beschreibung" Ein Satz auf DEUTSCH, wie das aussieht. Halte dich an das,
+               was das Inhaltsverzeichnis hergibt, und erfinde den Rest
+               plausibel dazu -- es ist ein Vorschlag, den der Benutzer
+               danach ändert. Keine Handlung, nur Aussehen."""
+
+
+def bausteine_raten(namen: list[str], umfeld: str = "",
+                    model: str | None = None) -> list[dict]:
+    """Zu unbekannten /Namen Art und eine deutsche Beschreibung vorschlagen.
+
+    Ein Aufruf fuer alle Namen: sie gehoeren zu derselben Geschichte, und
+    einzeln gefragt erfindet das Modell zu jedem eine eigene Welt.
+    """
+    namen = [n for n in namen if (n or "").strip()][:12]
+    if not namen:
+        return []
+    frage = "Namen: " + ", ".join(namen)
+    if umfeld.strip():
+        frage = f"Inhaltsverzeichnis:\n{umfeld.strip()[:2000]}\n\n{frage}"
+    roh = antwort({
+        "model": model or MODEL,
+        "format": "json",
+        "options": {"temperature": 0.5, "num_predict": 900},
+        "messages": [{"role": "system", "content": RATEN_SYSTEM},
+                     {"role": "user", "content": frage}],
+    }, timeout=300)
+    gegeben = roh.get("teile") if isinstance(roh, dict) else None
+    nach_name = {}
+    for e in gegeben or []:
+        if not isinstance(e, dict):
+            continue
+        name = str(e.get("name") or "").strip()
+        art = str(e.get("art") or "").strip().lower()
+        if name:
+            nach_name[name.lower()] = {
+                "art": art if art in ("person", "ort", "gegenstand") else "",
+                "beschreibung": str(e.get("beschreibung") or "").strip()[:400]}
+    # Jeder gefragte Name kommt zurueck, auch wenn das Modell ihn ausliess --
+    # sonst fehlt am Ende ein Baustein, ohne dass jemand es merkt.
+    raus = []
+    for n in namen:
+        e = nach_name.get(n.lower()) or {}
+        raus.append({"name": n, "art": e.get("art") or "person",
+                     "beschreibung": e.get("beschreibung") or ""})
+    return raus
+
+
 def baustein_prompt(text: str, art: str = "person",
                     model: str | None = None) -> dict:
     """Aus einer deutschen Beschreibung einen Baustein-Prompt mit Luecken.
@@ -394,7 +452,7 @@ def baustein_prompt(text: str, art: str = "person",
     })
     if not isinstance(roh, dict):
         return {"prompt": "", "variablen": {}}
-    prompt = str(roh.get("prompt") or "").strip()[:600]
+    prompt = str(roh.get("prompt") or "").strip()[:600].rstrip(".")
     gegeben = roh.get("variablen") if isinstance(roh.get("variablen"), dict) else {}
     # Nur Luecken, die wirklich im Text stehen.
     offen = re.findall(r"\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}", prompt)

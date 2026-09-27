@@ -247,9 +247,13 @@ class Handler(BaseHTTPRequestHandler):
             info["gezeichnet"] = sorted(GEZEICHNET)
             info["welten"] = [{"key": k, "label": v[0]}
                               for k, v in chat.WELTEN.items()]
-            info["einstellungen"] = [{"key": k, "label": v["label"],
-                                      "paar": "gegentext" in v}
-                                     for k, v in EINSTELLUNGEN.items()]
+            # "luecke" ist der Name dessen, was in die Klammer gehoert --
+            # bei "augen" die Spiegelung, bei "decke" die Hoehe. Die Seite
+            # macht daraus ein eigenes kleines Feld je Szene.
+            info["einstellungen"] = [
+                {"key": k, "label": v["label"], "paar": "gegentext" in v,
+                 "luecke": next(iter(v.get("vorgabe") or {}), "")}
+                for k, v in EINSTELLUNGEN.items()]
             info["projekt"] = projekte.aktiv()
             info["demo"] = demo.available()
             info["kulissen"] = [{"key": k, "label": v[0]}
@@ -513,10 +517,45 @@ class Handler(BaseHTTPRequestHandler):
                 if not text:
                     return self._json(400, {"error": "Keine Beschreibung"})
                 erg = chat.baustein_prompt(text, str(params.get("art") or "person"))
+                erg["prompt"], erg["variablen"] = bausteine.ohne_leere_luecken(
+                    erg["prompt"], erg["variablen"])
                 if not erg["prompt"]:
                     return self._json(502, {"error":
                         "Das Sprachmodell hat keinen Prompt geliefert."})
                 return self._json(200, erg)
+            if was == "vorschlagen":
+                # Alles, was die Geschichte mit /Name verlangt und noch nicht
+                # gibt, gleich anlegen -- mit einem geschriebenen Prompt, den
+                # der Benutzer danach abaendert. Ein leeres Feld hilft
+                # niemandem, ein Vorschlag schon.
+                if engine.lock.locked():
+                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
+                zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
+                          for z in (params.get("zeilen") or [])]
+                da = bausteine.liste(projekt)
+                offen = geschichte.offene_verweise(zeilen, da)[:12]
+                if not offen:
+                    return self._json(200, {"neu": [], "hinweis":
+                        "Alle erwaehnten Bausteine gibt es schon."})
+                geraten = chat.bausteine_raten(offen, "\n".join(zeilen))
+                neu = []
+                for e in geraten:
+                    fertig = chat.baustein_prompt(e["beschreibung"] or e["name"],
+                                                  e["art"])
+                    if not fertig.get("prompt"):
+                        continue
+                    # Eine Luecke ohne Vorgabe ist in einem Vorschlag eine
+                    # Falle: sie faellt erst im fertigen Bild auf.
+                    text_fertig, werte = bausteine.ohne_leere_luecken(
+                        fertig["prompt"], fertig.get("variablen") or {})
+                    neu.append(bausteine.speichern(projekt, {
+                        "art": e["art"], "name": e["name"],
+                        "prompt": text_fertig,
+                        "gesicht": fertig.get("gesicht") or "",
+                        "kleidung": fertig.get("kleidung") or "",
+                        "variablen": werte}))
+                return self._json(200, {"neu": neu, "hinweis": ""})
+
             if was == "teilprompt":
                 # Gesicht oder Kleidung einzeln: der Benutzer hat das Feld
                 # von Hand auf Deutsch gefuellt und will es englisch zurueck.

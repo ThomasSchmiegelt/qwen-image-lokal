@@ -217,6 +217,22 @@ def vorlage(teile: list[dict]) -> str:
     return ", ".join([stuecke[0]] + [_klein(t) for t in stuecke[1:]]) if stuecke else ""
 
 
+def ohne_leere_luecken(prompt: str, werte: dict) -> tuple[str, dict]:
+    """Luecken ohne Vorgabe aus dem Prompt herausnehmen.
+
+    Das Sprachmodell setzt manchmal eine Luecke und liefert nichts dazu --
+    "a cube with a {blue} glow" mit leerem Wert. Fuer einen Baustein, den
+    jemand von Hand angelegt hat, mag das angehen; fuer einen automatisch
+    vorgeschlagenen ist es eine Falle, die erst im Bild auffaellt.
+    """
+    leer = [k for k, v in (werte or {}).items() if not str(v or "").strip()]
+    if not leer:
+        return prompt, dict(werte or {})
+    # einsetzen() raeumt Bindewort und Satzzeichen gleich mit weg.
+    sauber = einsetzen(prompt, {k: "" for k in leer})
+    return sauber, {k: v for k, v in werte.items() if k not in leer}
+
+
 def zusammensetzen(teile: list[dict], werte: dict | None = None) -> str:
     """Person, Ort und Gegenstand zu einem Prompt verbinden.
 
@@ -316,9 +332,11 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
     """
     if nur_gesicht and (b.get("gesicht") or "").strip():
         return einsetzen(b["gesicht"], werte)
-    stuecke = [einsetzen(b.get("prompt") or "", werte)]
+    stuecke = [einsetzen(b.get("prompt") or "", werte).rstrip(".")]
     if not nur_gesicht:
         was = (kleidung or b.get("kleidung") or "").strip()
         if was:
-            stuecke.append(einsetzen(was, werte))
+            # Die Kleidung haengt mitten im Satz -- ein grosses "Worn wool
+            # coat" dort liest sich wie ein neuer Anfang.
+            stuecke.append(_klein(einsetzen(was, werte).rstrip(".")))
     return ", ".join(t for t in stuecke if t)

@@ -328,7 +328,24 @@
    sichtbar. Ohne das weiss man bei einer Sicherung nebenbei nie, ob sie lief. */
 #gsStand { color: var(--muted); font-size: 11.5px; margin-left: 8px; }
 
-.selbstszene { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 5px; }
+/* Eine Szene ist zwei Zeilen hoch: oben der Text, unten die Regler. In einer
+   Zeile wurde es zu eng, sobald Kamera, Spiegelung, Bildzahl und drei Knoepfe
+   daneben sollten -- und der Text ist das Wichtigste, er bekommt die Breite. */
+.selbstszene {
+  margin-bottom: 8px; padding: 6px 6px 4px; border-radius: 7px;
+  background: var(--sunk); border: 1px solid var(--line);
+}
+/* Eine Szene mit gesetzter Kamera ist auf den ersten Blick zu erkennen. */
+.selbstszene.mitkamera { border-left: 3px solid var(--accent); }
+.szkopf { display: flex; align-items: flex-start; gap: 6px; }
+.szleiste { display: flex; align-items: center; gap: 6px; margin-top: 4px;
+            padding-left: 1.9em; }
+.szleiste .fuell { flex: 1; }
+.szleiste select, .szleiste input {
+  font-size: 11.5px; padding: 3px 5px; height: 26px;
+}
+.szleiste .gseinst { width: 12.5em; flex: none; }
+.szleiste .gsangabe { flex: 1; min-width: 6em; }
 .selbstszene .nr { color: var(--muted); font-size: 12px; min-width: 1.4em;
                    padding-top: 8px; }
 /* Die Szenenzeile ist ein Textfeld, kein einzeiliges Eingabefeld: eine Szene
@@ -341,7 +358,8 @@
 }
 .selbstszene .gsbilder { width: 4.4em; flex: none; }
 .selbstszene .knopf {
-  cursor: pointer; color: var(--muted); padding: 8px 4px 0; user-select: none;
+  cursor: pointer; color: var(--muted); padding: 0 3px; user-select: none;
+  font-size: 12px; line-height: 1;
 }
 .selbstszene .knopf:hover { color: #e7eaf0; }
 

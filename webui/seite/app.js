@@ -1132,15 +1132,80 @@ async function einreihenEinfach(zusatz) {
 // sind, die Handlung so lange zurechtbiegt, bis sie alltagstauglich wird.
 let GESCHICHTE = null, gsZeilen = [{text: "", bilder: 1}], gsLetzteNr = 0;
 
+// Die Kameraeinstellung steht als \Name in der Zeile -- aber niemand soll
+// sie dort suchen muessen. Jede Szene traegt deshalb ein Auswahlfeld, das
+// zeigt, was gesetzt ist, und daneben das Feld fuer die Klammer.
+const EINST_MUSTER =
+  /\\([A-Za-zÄÖÜäöüß0-9][\wÄÖÜäöüß-]{0,29})(?:\(([^)]{1,120})\))?/;
+
+function einstellungBekannt(name) {
+  const klein = (name || "").toLowerCase();
+  return EINSTELLUNGEN.some(x => x.key === klein)
+      || GEMERKTE.some(x => (x.name || "").toLowerCase() === klein);
+}
+
+// Was in dieser Zeile an Kamera steht: {key, angabe, treffer} oder null.
+function einstellungInZeile(text) {
+  const m = EINST_MUSTER.exec(text || "");
+  if (!m || !einstellungBekannt(m[1])) return null;
+  return {key: m[1].toLowerCase(), angabe: m[2] || "", treffer: m[0]};
+}
+
+function einstellungEintrag(key) {
+  return EINSTELLUNGEN.find(x => x.key === key) || null;
+}
+
+// Einstellung und Klammer einer Szene neu setzen. Der Text bleibt, was er
+// ist -- getauscht wird nur das \Wort.
+function einstellungSchreiben(i, key, angabe) {
+  const z = gsZeilen[i];
+  const alt = einstellungInZeile(z.text);
+  let text = alt ? z.text.replace(alt.treffer, "").replace(/\s{2,}/g, " ").trim()
+                 : z.text;
+  if (key) {
+    const klammer = (angabe || "").trim() ? `(${angabe.trim()})` : "";
+    text = (`\\${key}${klammer} ` + text).trim();
+  }
+  z.text = text;
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
 function zeigeSelbstszenen() {
-  $("gsSelbst").innerHTML = gsZeilen.map((z, i) => `
-    <div class="selbstszene"><span class="nr">${i + 1}</span>
-      <textarea class="gszeile" data-i="${i}" rows="2"
-        placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
-      <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
-        title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
-      <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
-    </div>`).join("")
+  $("gsSelbst").innerHTML = gsZeilen.map((z, i) => {
+    const e = einstellungInZeile(z.text);
+    const fest = e ? einstellungEintrag(e.key) : null;
+    const luecke = fest ? fest.luecke : "";
+    const wahl = [`<option value="">— ohne Kamera —</option>`]
+      .concat(EINSTELLUNGEN.map(x =>
+        `<option value="${x.key}"${e && e.key === x.key ? " selected" : ""}>${
+          esc(x.label)}${x.paar ? " (2 Bilder)" : ""}</option>`))
+      .concat(GEMERKTE.map(x =>
+        `<option value="${esc(x.name)}"${
+          e && e.key === (x.name || "").toLowerCase() ? " selected" : ""
+        }>gemerkt: ${esc(x.name)}</option>`))
+      .join("");
+    return `
+    <div class="selbstszene${e ? " mitkamera" : ""}">
+      <div class="szkopf"><span class="nr">${i + 1}</span>
+        <textarea class="gszeile" data-i="${i}" rows="2"
+          placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
+      </div>
+      <div class="szleiste">
+        <select class="gseinst" data-i="${i}" title="Kameraeinstellung">${wahl}</select>
+        ${luecke ? `<input class="gsangabe" data-i="${i}"
+            placeholder="${esc(luecke === "hoehe" ? "Höhe, z. B. fünf Meter"
+                                                  : "was sich spiegelt")}"
+            value="${esc(e.angabe)}">` : ""}
+        <span class="fuell"></span>
+        <input type="number" class="gsbilder" data-i="${i}" min="1" max="20"
+          title="wie viele Bilder aus dieser Szene" value="${z.bilder || 1}">
+        <span class="knopf" onclick="gsSchieben(${i}, -1)" title="nach oben">▲</span>
+        <span class="knopf" onclick="gsSchieben(${i}, 1)" title="nach unten">▼</span>
+        <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
+      </div>
+    </div>`;
+  }).join("")
     + (BAUSTEINE.length
         ? `<p class="hint">Bausteine: ` + BAUSTEINE.map(x =>
             `<a href="#" onclick="gsEinfuegen('/', '${esc(x.name)}');return false">/${esc(x.name)}</a>`
@@ -1169,6 +1234,22 @@ function zeigeSelbstszenen() {
     el.oninput = () => {
       gsZeilen[+el.dataset.i].bilder = Math.max(1, parseInt(el.value, 10) || 1);
       gsSumme();
+    };
+  });
+  $("gsSelbst").querySelectorAll(".gseinst").forEach(el => {
+    el.onchange = () => {
+      const i = +el.dataset.i;
+      const alt = einstellungInZeile(gsZeilen[i].text);
+      einstellungSchreiben(i, el.value, alt ? alt.angabe : "");
+    };
+  });
+  $("gsSelbst").querySelectorAll(".gsangabe").forEach(el => {
+    // Erst beim Verlassen schreiben: bei jedem Tastendruck neu zu zeichnen
+    // naehme dem Feld den Fokus.
+    el.onchange = () => {
+      const i = +el.dataset.i;
+      const alt = einstellungInZeile(gsZeilen[i].text);
+      if (alt) einstellungSchreiben(i, alt.key, el.value);
     };
   });
   gsSumme();
@@ -1200,11 +1281,41 @@ function gsEinfuegen(zeichen, name) {
   gsMerken();
 }
 
+// Die Reihenfolge aendern. Eine Szene an die falsche Stelle zu schreiben
+// passiert staendig; sie dafuer zweimal abzutippen ist zu viel verlangt.
+function gsSchieben(i, wohin) {
+  const ziel = i + wohin;
+  if (ziel < 0 || ziel >= gsZeilen.length) return;
+  const [weg] = gsZeilen.splice(i, 1);
+  gsZeilen.splice(ziel, 0, weg);
+  gsLetzteNr = ziel;
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
 function gsZeileWeg(i) {
   gsZeilen.splice(i, 1);
   if (!gsZeilen.length) gsZeilen = [{text: "", bilder: 1}];
   zeigeSelbstszenen();
 }
+
+// Alles, was die Geschichte mit /Name verlangt und noch nicht gibt, gleich
+// anlegen -- mit geratener Art und geschriebenem Prompt. Ein Vorschlag zum
+// Abaendern ist mehr wert als ein leeres Feld.
+$("gsFehlend").onclick = async e => {
+  e.preventDefault();
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  if (!zeilen.length) return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  say("Die fehlenden Bausteine werden geschrieben …");
+  const g = await bausteinRuf({tu: "vorschlagen", zeilen});
+  if (!g) return;
+  if (!g.neu.length) return say(g.hinweis || "Nichts anzulegen.", "ok");
+  await bausteineHolen();
+  zeigeSelbstszenen();
+  say(`${g.neu.length} Baustein(e) angelegt: `
+      + g.neu.map(b => b.name).join(", ")
+      + " — im Reiter Bausteine gegenlesen und ändern.", "ok");
+};
 
 // Regler und Einordnung halten sich stimmig: der Regler sagt, wie weit weg
 // von der Wirklichkeit, das Feld sagt wohin.
