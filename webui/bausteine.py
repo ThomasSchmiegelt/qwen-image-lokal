@@ -24,6 +24,7 @@ import shutil
 import time
 
 import projekte
+from kataloge import GEZEICHNET, NICHT_FOTO, STYLES
 
 # "szene" entsteht nicht von Hand, sondern beim Zusammenstellen: die fertige
 # Mischung aus Person, Gegenstand und Ort, mit ihren Luecken, ihrem Bild und
@@ -168,13 +169,18 @@ def speichern(projekt: str, baustein: dict) -> dict:
     neu = {"id": kennung, "art": art, "name": name, "prompt": prompt,
            "gesicht": (baustein.get("gesicht") or "").strip(),
            "kleidung": (baustein.get("kleidung") or "").strip(),
+           # Der Stil gehoert zum Musterbild, nicht zum Baustein: er sagt,
+           # wie das Bild entstanden ist. Der Prompt selbst bleibt stilfrei,
+           # damit dieselbe Person in der naechsten Geschichte als Manga
+           # auftreten kann.
+           "stil": (baustein.get("stil") or "").strip(),
            "variablen": vorgaben, "bild": baustein.get("bild") or ""}
 
     # Nichts verlieren, was der Aufrufer nicht mitschickt.
     for vorher in daten:
         if vorher.get("id") != kennung:
             continue
-        for feld in ("bild", "gesicht", "kleidung"):
+        for feld in ("bild", "gesicht", "kleidung", "stil"):
             if not neu[feld]:
                 neu[feld] = vorher.get(feld) or ""
     rest = [b for b in daten if b.get("id") != kennung]
@@ -264,6 +270,23 @@ FREISTELLEN = {
                    "angle, on a plain seamless neutral grey background, even "
                    "studio lighting, no surroundings, no hands, no props"),
 }
+
+
+def mit_stil(prompt: str, stil: str) -> str:
+    """Den Stil an ein Musterbild haengen.
+
+    Nur ans Bild, nie an den Baustein: die Person soll in der naechsten
+    Geschichte als Manga auftreten duerfen, auch wenn ihr erstes Bild ein
+    Foto war.
+    """
+    eintrag = STYLES.get(stil or "")
+    prompt = (prompt or "").strip().rstrip(".")
+    if not eintrag or not prompt:
+        return prompt
+    text = f"{prompt}, {eintrag[1]}"
+    if stil in GEZEICHNET:
+        text += f" {NICHT_FOTO}"
+    return text
 
 
 def freigestellt(prompt: str, art: str) -> str:

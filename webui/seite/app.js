@@ -81,6 +81,9 @@ fetch("/api/info").then(r => r.json()).then(info => {
   EINSTELLUNGEN = info.einstellungen || [];
   STILLISTE = info.styles || [];
   fill("gsStil", info.styles);
+  $("bsStil").innerHTML = `<option value="">— Stil der Geschichte —</option>`
+    + (info.styles || []).map(x =>
+        `<option value="${x.key}">${esc(x.label)}</option>`).join("");
   GEZEICHNET = info.gezeichnet || [];
   fill("gsWelt", info.welten);
   // Gross fuer die schoepferische Arbeit, klein fuer alles andere.
@@ -845,8 +848,10 @@ function zeigeBausteine(liste) {
         ${b.bild ? `<img src="/outputs/${b.bild}" alt="${esc(b.name)}"
              onclick="show('${b.bild}')">` : `<span class="ohnebild">?</span>`}
         <div class="bstext"><b>${esc(b.name)}</b>
-          <span class="art">${esc(label(b.art))}</span><br>
-          <code>${esc(b.prompt)}</code></div>
+          <span class="art">${esc(label(b.art))}</span>
+          ${b.stil ? `<span class="art">Bild: ${esc(
+              (STILLISTE.find(x => x.key === b.stil) || {}).label || b.stil)}</span>` : ""}
+          <br><code>${esc(b.prompt)}</code></div>
         <span class="knopf" onclick="bausteinLaden('${b.id}')" title="bearbeiten">✎</span>
         <span class="knopf" onclick="bausteinBild('${b.id}')"
           title="${b.bild ? "Musterbild neu erzeugen und ersetzen"
@@ -960,7 +965,14 @@ function bausteinAusFeldern() {
   return {id: $("bsPrompt").dataset.id || "", art: $("bsArt").value,
           name: $("bsName").value, prompt: $("bsPrompt").value,
           gesicht: $("bsGesicht").value, kleidung: $("bsKleidung").value,
-          variablen: lueckenWerte("bsVariablen")};
+          stil: musterStil(), variablen: lueckenWerte("bsVariablen")};
+}
+
+// Der Stil fuers Musterbild: was im Feld steht, sonst der der Geschichte.
+// Er haengt nur am Bild -- der Prompt des Bausteins bleibt stilfrei, sonst
+// koennte ihn keine zweite Geschichte mehr anders zeichnen.
+function musterStil() {
+  return $("bsStil").value || $("gsStil").value || "";
 }
 
 // Gesicht und Kleidung gibt es nur bei Personen. Ein Ort hat kein Gesicht,
@@ -990,7 +1002,8 @@ $("bsBild").onclick = async e => {
   // Mit den Vorgaben gefuellt -- das Bild soll den Baustein zeigen, wie er
   // gemeint ist, nicht mit offenen Luecken.
   const g = await bausteinRuf({tu: "zusammensetzen", ids: [b.id],
-                               werte: b.variablen, freistellen: true});
+                               werte: b.variablen, freistellen: true,
+                               stil: musterStil()});
   if (!g) return;
   await einreihenEinfach({prompt: g.prompt, baustein: b.id, aspect: "3:4"});
   // Aufraeumen nicht vergessen: bleibt die Kennung stehen, ueberschreibt der
@@ -1008,9 +1021,15 @@ async function bausteinBild(id) {
   // vorher, sonst ist das gute von gestern weg.
   if (b.bild && !confirm(`Das Musterbild von „${b.name}“ neu erzeugen? `
                          + "Das bisherige wird ersetzt.")) return;
+  // Der zuletzt benutzte Stil des Bausteins gilt weiter, solange keiner
+  // gewaehlt ist: ein zweiter Anlauf soll nicht ploetzlich anders aussehen.
+  const stil = $("bsStil").value || b.stil || $("gsStil").value || "";
   const g = await bausteinRuf({tu: "zusammensetzen", ids: [id],
-                               werte: b.variablen, freistellen: true});
+                               werte: b.variablen, freistellen: true, stil});
   if (!g) return;
+  if (stil !== (b.stil || "")) {
+    await bausteinRuf({tu: "speichern", baustein: {...b, stil}});
+  }
   await einreihenEinfach({prompt: g.prompt, baustein: id, aspect: "3:4"});
   say(`Bild zu „${b.name}“ eingereiht.`, "ok");
 }
@@ -1034,6 +1053,7 @@ $("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
 function bausteinLeeren() {
   ["bsName", "bsText", "bsPrompt", "bsGesicht", "bsKleidung"]
     .forEach(id => $(id).value = "");
+  $("bsStil").value = "";
   personFelder();
   $("bsPrompt").dataset.id = "";
   $("bsVariablen").innerHTML = "";
@@ -1059,6 +1079,7 @@ function bausteinLaden(id) {
   $("bsPrompt").value = b.prompt;
   $("bsGesicht").value = b.gesicht || "";
   $("bsKleidung").value = b.kleidung || "";
+  $("bsStil").value = b.stil || "";
   $("bsPrompt").dataset.id = b.id;
   personFelder();
   luckenFelder("bsVariablen", b.prompt, b.variablen, false);
