@@ -361,6 +361,20 @@
    sichtbar. Ohne das weiss man bei einer Sicherung nebenbei nie, ob sie lief. */
 #gsStand { color: var(--muted); font-size: 11.5px; margin-left: 8px; }
 
+/* Fassungen eines Bandes: eine Zeile je Stand, die neueste oben. */
+#gsFassungen { margin: 4px 0 8px; }
+.fassung {
+  display: flex; align-items: center; gap: 8px; font-size: 12px;
+  padding: 3px 7px; margin-bottom: 3px; border-radius: 5px;
+  background: var(--sunk); border-left: 2px solid var(--line);
+}
+.fassung .fuell { flex: 1; }
+.fassung .art { color: var(--muted); font-size: 11px; margin-left: 0; }
+.fassung .knopf {
+  cursor: pointer; color: var(--muted); padding: 0 3px; user-select: none;
+}
+.fassung .knopf:hover { color: #e7eaf0; }
+
 /* Eine Szene ist zwei Zeilen hoch: oben der Text, unten die Regler. In einer
    Zeile wurde es zu eng, sobald Kamera, Spiegelung, Bildzahl und drei Knoepfe
    daneben sollten -- und der Text ist das Wichtigste, er bekommt die Breite. */

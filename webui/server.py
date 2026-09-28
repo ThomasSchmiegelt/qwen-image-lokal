@@ -395,6 +395,27 @@ class Handler(BaseHTTPRequestHandler):
             if was == "loeschen":
                 gut = baender.loeschen(projekt, schluessel)
                 return self._json(200 if gut else 404, {"ok": gut})
+
+            # Fassungen: der Stand eines Bandes zu einem Zeitpunkt. Damit
+            # laesst sich ein neuer Autor gefahrlos ausprobieren -- die
+            # bisherige Arbeit liegt daneben und kommt auf Wunsch zurueck.
+            nr = int(params.get("band") or 1)
+            if was == "fassungen":
+                return self._json(200, {"fassungen":
+                                        baender.fassungen(projekt, schluessel, nr)})
+            if was == "sichern":
+                f = baender.fassung_sichern(projekt, schluessel, nr,
+                                            str(params.get("name") or ""))
+                return self._json(200 if f else 404,
+                                  {"fassung": f} if f else {"error": "nicht gefunden"})
+            if was == "holen":
+                g = baender.fassung_holen(projekt, schluessel, nr,
+                                          int(params.get("index") or 0))
+                return self._json(200 if g else 404, g or {"error": "nicht gefunden"})
+            if was == "fassung_weg":
+                gut = baender.fassung_loeschen(projekt, schluessel, nr,
+                                               int(params.get("index") or 0))
+                return self._json(200 if gut else 404, {"ok": gut})
             return self._json(400, {"error": "unbekannte Aktion"})
 
         if path == "/api/expose":

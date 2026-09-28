@@ -12,6 +12,7 @@ dem Band. Sie zweimal zu halten hiesse, sie frueher oder spaeter zweimal zu
 aendern.
 """
 
+import copy
 import json
 import os
 import re
@@ -111,6 +112,84 @@ def speichern(projekt: str, schluessel: str, daten: dict) -> dict:
         if k in daten:
             band[k] = daten[k]
     return _schreiben(projekt, g)
+
+
+# --- Fassungen ------------------------------------------------------------
+# Eine Fassung ist der Stand eines Bandes zu einem Zeitpunkt: die Zeilen mit
+# ihrer Prosa, die geschriebenen Prompts und die Erzaehlstimme. Sie kostet
+# nichts als Text und ist der Grund, warum man einen neuen Autor gefahrlos
+# ausprobieren kann -- die alte Fassung liegt daneben.
+FASSUNG = ("zeilen", "prompts", "kurz", "titel", "anfang", "ende", "kapitel")
+STIMME = ("erzaehler", "erzaehler_wer", "erzaehler_text")
+
+
+def _band(g: dict, nr: int) -> dict | None:
+    return next((b for b in g.get("baende") or [] if b.get("nr") == nr), None)
+
+
+def fassung_sichern(projekt: str, schluessel: str, nr: int,
+                    name: str = "") -> dict:
+    """Den jetzigen Stand eines Bandes als Fassung ablegen."""
+    g = lesen(projekt, schluessel)
+    band = _band(g, nr) if g else None
+    if not band:
+        return {}
+    wann = time.strftime("%Y-%m-%d %H:%M")
+    eintrag = {"name": (name or "").strip()[:60] or f"Fassung vom {wann}",
+               "wann": wann,
+               **{k: copy.deepcopy(band.get(k)) for k in FASSUNG},
+               **{k: g.get(k) for k in STIMME}}
+    band.setdefault("fassungen", []).append(eintrag)
+    _schreiben(projekt, g)
+    return eintrag
+
+
+def fassungen(projekt: str, schluessel: str, nr: int) -> list[dict]:
+    """Nur Name und Zeitpunkt -- der Inhalt waere zu viel fuer eine Liste."""
+    g = lesen(projekt, schluessel)
+    band = _band(g, nr) if g else None
+    return [{"nr": i, "name": f.get("name"), "wann": f.get("wann"),
+             "zeilen": len(f.get("zeilen") or []),
+             "erzaehler": f.get("erzaehler") or ""}
+            for i, f in enumerate(band.get("fassungen") or [])] if band else []
+
+
+def fassung_holen(projekt: str, schluessel: str, nr: int, index: int) -> dict:
+    """Eine Fassung zurueckholen. Der jetzige Stand wird vorher gesichert.
+
+    Ohne diese Sicherung waere das Zurueckholen selbst ein Verlust -- man
+    haette den neuen Stand weggeworfen, um den alten zu bekommen.
+    """
+    g = lesen(projekt, schluessel)
+    band = _band(g, nr) if g else None
+    if not band:
+        return {}
+    liste = band.get("fassungen") or []
+    if not 0 <= index < len(liste):
+        return {}
+    fassung_sichern(projekt, schluessel, nr, "vor dem Zurückholen")
+    g = lesen(projekt, schluessel)
+    band = _band(g, nr)
+    alt = (band.get("fassungen") or [])[index]
+    for k in FASSUNG:
+        band[k] = copy.deepcopy(alt.get(k))
+    for k in STIMME:
+        if alt.get(k) is not None:
+            g[k] = alt[k]
+    _schreiben(projekt, g)
+    return g
+
+
+def fassung_loeschen(projekt: str, schluessel: str, nr: int,
+                     index: int) -> bool:
+    g = lesen(projekt, schluessel)
+    band = _band(g, nr) if g else None
+    liste = (band or {}).get("fassungen") or []
+    if not 0 <= index < len(liste):
+        return False
+    del liste[index]
+    _schreiben(projekt, g)
+    return True
 
 
 def band_anlegen(projekt: str, schluessel: str) -> dict:

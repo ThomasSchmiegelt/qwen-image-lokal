@@ -83,6 +83,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fill("gsStil", info.styles);
   fill("gsFreigabe", info.freigaben);
   fill("gsErzaehler", info.erzaehler);
+  ERZAEHLERLISTE = info.erzaehler || [];
   fill("bsWesen", info.wesen);
   WESENLISTE = info.wesen || [];
   $("bsStil").innerHTML = `<option value="">— Stil der Geschichte —</option>`
@@ -836,7 +837,7 @@ $("chat").addEventListener("keydown", e => {
 // Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
 // steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
 let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [],
-    EINSTELLUNGEN = [], GEZEICHNET = [], WESENLISTE = [];
+    EINSTELLUNGEN = [], GEZEICHNET = [], WESENLISTE = [], ERZAEHLERLISTE = [];
 const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
 
 function luecken(text) {
@@ -2137,6 +2138,7 @@ async function gsOeffnen(schluessel, nr) {
   $("gsSzenen").innerHTML = "";
   $("gsKnoepfe").style.display = "none";
   if (band.prompts && band.prompts.length) zeigeGliederung(band.prompts);
+  gsFassungenZeigen();
   say(`„${g.name}“, Band ${gsBandNr} geladen.`);
 }
 
@@ -2285,6 +2287,13 @@ $("gsProsaSchreiben").onclick = async e => {
   e.preventDefault();
   const zeilen = gsZeilen.filter(z => z.text.trim());
   if (!zeilen.length) return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  // Steht schon Prosa da, wird sie ueberschrieben. Vorher als Fassung
+  // sichern -- die Arbeit von gestern soll ein neuer Autor nicht wegnehmen.
+  if (zeilen.some(z => (z.prosa || "").trim())) {
+    const wer = (ERZAEHLERLISTE.find(x => x.key === $("gsErzaehler").value)
+                 || {}).label || "neu";
+    await gsFassungSichern(`vor „${wer}“`, true);
+  }
   const res = await fetch("/api/prosa", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({zeilen, kurz: $("gsKurz").value,
@@ -2310,6 +2319,69 @@ function erzaehlerFelder() {
           erzaehler_wer: $("gsErzaehlerWer").value,
           erzaehler_text: $("gsErzaehlerText").value};
 }
+
+// ---------- Fassungen ----------
+// Der Stand eines Bandes zu einem Zeitpunkt. Damit laesst sich ein neuer
+// Autor gefahrlos ausprobieren: die bisherige Arbeit liegt daneben.
+async function gsFassungSichern(name, still) {
+  if (!GSAKTUELL) {
+    if (!still) say("Erst eine Geschichte anlegen.", "err");
+    return false;
+  }
+  // Erst den jetzigen Stand in die Datei, dann sichern -- sonst fehlte der
+  // Fassung genau das, was seit der letzten Sicherung getippt wurde.
+  await gsJetztSpeichern();
+  const g = await gsRuf({tu: "sichern", schluessel: GSAKTUELL,
+                         band: gsBandNr, name});
+  if (!g) return false;
+  await gsFassungenZeigen();
+  if (!still) say(`Fassung „${g.fassung.name}“ gesichert.`, "ok");
+  return true;
+}
+
+async function gsFassungenZeigen() {
+  if (!GSAKTUELL) { $("gsFassungen").innerHTML = ""; return; }
+  const g = await gsRuf({tu: "fassungen", schluessel: GSAKTUELL,
+                         band: gsBandNr});
+  if (!g) return;
+  const liste = g.fassungen || [];
+  $("gsFassungen").innerHTML = !liste.length ? "" :
+    `<p class="hint">Fassungen dieses Bandes:</p>`
+    + liste.slice().reverse().map(f => `<div class="fassung">
+        <b>${esc(f.name)}</b>
+        <span class="art">${esc(f.wann)} · ${f.zeilen} Szenen</span>
+        <span class="fuell"></span>
+        <a href="#" onclick="gsFassungHolen(${f.nr});return false">zurückholen</a>
+        <span class="knopf" onclick="gsFassungWeg(${f.nr})"
+          title="Fassung löschen">×</span>
+      </div>`).join("");
+}
+
+async function gsFassungHolen(index) {
+  if (!confirm("Diese Fassung zurückholen? Der jetzige Stand wird vorher "
+               + "selbst als Fassung gesichert, es geht nichts verloren."))
+    return;
+  const g = await gsRuf({tu: "holen", schluessel: GSAKTUELL,
+                         band: gsBandNr, index});
+  if (!g) return;
+  await gsOeffnen(GSAKTUELL, gsBandNr);
+  say("Fassung zurückgeholt. Der vorige Stand liegt als Fassung daneben.", "ok");
+}
+
+async function gsFassungWeg(index) {
+  if (!confirm("Diese Fassung endgültig löschen?")) return;
+  if (!await gsRuf({tu: "fassung_weg", schluessel: GSAKTUELL,
+                    band: gsBandNr, index})) return;
+  await gsFassungenZeigen();
+  say("Fassung gelöscht.", "ok");
+}
+
+$("gsSichern").onclick = e => {
+  e.preventDefault();
+  const name = prompt("Wie soll die Fassung heißen?", "");
+  if (name === null) return;
+  gsFassungSichern(name, false);
+};
 
 // Dieselben drei Schritte, aber nur fuer eine Szene: Text, Bausteine, Bild.
 // Wer eine Zeile geaendert hat, will nicht die ganze Geschichte neu rechnen.
@@ -2365,14 +2437,22 @@ function zeigeExpose(e) {
     if (!liste.length || gsProsaZuletzt === JSON.stringify(liste)) return;
     gsProsaZuletzt = JSON.stringify(liste);
     const voll = gsZeilen.filter(z => z.text.trim());
+    const prompts = (GESCHICHTE && GESCHICHTE.prompts) || [];
     liste.forEach(x => {
       const z = voll[(x.nr || 0) - 1];
-      if (z && (x.text || "").trim()) z.prosa = x.text;
+      if (!z || !(x.text || "").trim()) return;
+      z.prosa = x.text;
+      // Ein neuer Autor aendert die Stimme, nicht das Sichtbare. Der Prompt
+      // gilt deshalb weiter -- sonst staende hinter jeder Szene "geaendert"
+      // und man rechnete Bilder neu, die genauso aussehen wuerden.
+      const p = prompts.find(q => q.nr === x.nr);
+      if (p) p.prosa_quelle = x.text;
     });
     zeigeSelbstszenen();
     gsMerken();
     say(`${liste.filter(x => x.text).length} Absätze geschrieben — `
-        + "in jeder Szene unter „Prosa“.", "ok");
+        + "in jeder Szene unter „Prosa“. Bausteine, Kamera und Bildprompts "
+        + "sind unberührt.", "ok");
     return;
   }
   // Stufe 1 bringt Rahmen und Abschnitte, aber noch keine Szenen.
