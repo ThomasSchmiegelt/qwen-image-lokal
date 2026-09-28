@@ -84,6 +84,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
   fill("gsFreigabe", info.freigaben);
   fill("gsErzaehler", info.erzaehler);
   ERZAEHLERLISTE = info.erzaehler || [];
+  FOLGENLISTE = info.folgen || [];
   fill("bsWesen", info.wesen);
   WESENLISTE = info.wesen || [];
   $("bsStil").innerHTML = `<option value="">— Stil der Geschichte —</option>`
@@ -522,6 +523,9 @@ function demoDauer() {
 }
 ["demoSteps", "demoBase", "demoDuration"].forEach(id => $(id).addEventListener("input", demoDauer));
 
+// Gilt nur fuer den naechsten Start: "Bild" statt "Video" an einer Szene.
+let ohneVideo = false;
+
 async function starteDemo() {
   const laeuftSchon = $("go").classList.contains("busy");
   buttonState("busy");
@@ -533,7 +537,10 @@ async function starteDemo() {
       image: demoRef, prompt: $("demoPrompt").value, bloecke,
       base: parseInt($("demoBase").value, 10),
       steps: parseInt($("demoSteps").value, 10) || 24,
-      duration: parseInt($("demoDuration").value, 10) || 20
+      duration: parseInt($("demoDuration").value, 10) || 20,
+      // Ohne Video, wenn nur die Bilder gewollt sind: das Zusammenbauen
+      // kostet Zeit und bei einem einzigen Bild ergibt es ohnehin nichts.
+      ohne_video: !!ohneVideo
     })
   }).catch(() => null);
   if (!res || !res.ok) {
@@ -837,7 +844,7 @@ $("chat").addEventListener("keydown", e => {
 // Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
 // steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
 let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [],
-    EINSTELLUNGEN = [], GEZEICHNET = [], WESENLISTE = [], ERZAEHLERLISTE = [];
+    EINSTELLUNGEN = [], GEZEICHNET = [], WESENLISTE = [], ERZAEHLERLISTE = [], FOLGENLISTE = [];
 const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
 
 function luecken(text) {
@@ -1536,6 +1543,8 @@ function zeigeSelbstszenen() {
           placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
         <span class="knopf" onclick="gsSchieben(${i}, -1)" title="nach oben">▲</span>
         <span class="knopf" onclick="gsSchieben(${i}, 1)" title="nach unten">▼</span>
+        <span class="knopf" onclick="gsSzeneDazu(${i})"
+          title="leere Szene darunter einfügen">+</span>
         <span class="knopf" onclick="gsZeileWeg(${i})" title="entfernen">×</span>
       </div>
       <div class="szkurz">
@@ -1570,7 +1579,13 @@ function zeigeSelbstszenen() {
                   x.id === b.id ? " selected" : ""}>/${esc(x.name)}</option>`).join("")}
               <option value="__weg">⨯ entfernen</option>
             </select>`).join("")}
-          <select class="gsteil" data-i="${i}" title="Baustein einsetzen">
+          <select class="gsfolge" title="Folge von Szenen darunter anlegen"
+          onchange="gsFolgeDazu(${i}, this)">
+          <option value="">+ Folge …</option>
+          ${FOLGENLISTE.map(f =>
+            `<option value="${f.key}">${esc(f.label)}</option>`).join("")}
+        </select>
+        <select class="gsteil" data-i="${i}" title="Baustein einsetzen">
             <option value="">+ Baustein …</option>
             ${BAUSTEINE.map(b =>
               `<option value="${esc(b.name)}">/${esc(b.name)}</option>`).join("")}
@@ -1602,6 +1617,11 @@ function zeigeSelbstszenen() {
                : "nur für diese Szene den Bildprompt schreiben lassen"}"
              onclick="promptFuerSzene(${i});return false">${
                veraltet(i) ? "Prompt ↻" : "Prompt"}</a>
+          <a href="#" class="szprompt" title="nur diese Szene erzeugen"
+             onclick="szeneErzeugen(${i}, false);return false">Bild</a>
+          <a href="#" class="szprompt"
+             title="diese Szene erzeugen und daraus ein Video bauen"
+             onclick="szeneErzeugen(${i}, true);return false">Video</a>
         </div>
         ${p && p.prompt ? `<code class="szsicht">${esc(p.prompt)}</code>` : ""}
       </div>`}
@@ -1755,6 +1775,63 @@ function szeneKlappen(i) {
 function alleKlappen(offen) {
   gsZeilen.forEach(z => z.offen = offen);
   zeigeSelbstszenen();
+}
+
+// Eine leere Szene unter dieser einfuegen. Ganz unten anzuhaengen und dann
+// zwoelfmal nach oben zu schieben ist keine Arbeitsweise.
+function gsSzeneDazu(i) {
+  gsZeilen.splice(i + 1, 0, {text: "", bilder: 1, offen: true});
+  gsLetzteNr = i + 1;
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
+// Eine ganze Folge darunter: erst in die Augen, dann aus etwas heraus, dann
+// in etwas hinein. Immer dieselben drei Handgriffe -- hier in einem. Der
+// Text der Szene wandert mit, ohne ihre Kamera: derselbe Augenblick aus
+// wechselndem Blick.
+function gsFolgeDazu(i, feld) {
+  const f = FOLGENLISTE.find(x => x.key === feld.value);
+  feld.value = "";
+  if (!f) return;
+  const e = einstellungInZeile(gsZeilen[i].text);
+  const roh = (e ? gsZeilen[i].text.replace(e.treffer, "") : gsZeilen[i].text)
+    .replace(/\s{2,}/g, " ").trim();
+  const neu = f.schritte.map(k => ({
+    text: (`\\${k} ` + roh).trim(), bilder: 1, offen: false,
+    prosa: gsZeilen[i].prosa || ""}));
+  gsZeilen.splice(i + 1, 0, ...neu);
+  zeigeSelbstszenen();
+  gsMerken();
+  say(`${neu.length} Szenen angelegt: ${f.label}. Der Text der Szene ${i + 1} `
+      + "steht in allen, nur der Blick wechselt.", "ok");
+}
+
+// Nur diese eine Szene erzeugen -- mit Video oder ohne. Der Weg ist
+// derselbe wie fuer die ganze Geschichte, nur mit einer Zeile.
+async function szeneErzeugen(i, mitVideo) {
+  const z = gsZeilen[i];
+  if (!z || !z.text.trim()) return say("Die Szene ist leer.", "err");
+  const g = await fetch("/api/szenen", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      zeilen: [z], stil: $("gsStil").value,
+      prompts: [{nr: 1, ...(((GESCHICHTE && GESCHICHTE.prompts) || [])
+                 .find(p => p.nr === i + 1) || {}), nr: 1}]})
+  }).then(r => r.json()).catch(() => null);
+  if (!g || !g.bloecke || !g.bloecke.length) {
+    return say("Für diese Szene gibt es noch keinen Prompt — erst „Prompt“.",
+               "err");
+  }
+  bloecke = JSON.parse(JSON.stringify(g.bloecke));
+  blockZeichnen();
+  const vorher = $("demoDuration").value;
+  ohneVideo = !mitVideo;
+  await starteDemo();
+  ohneVideo = false;
+  $("demoDuration").value = vorher;
+  say(mitVideo ? `Szene ${i + 1} wird erzeugt, danach das Video …`
+               : `Szene ${i + 1} wird erzeugt …`);
 }
 
 // Die Reihenfolge aendern. Eine Szene an die falsche Stelle zu schreiben

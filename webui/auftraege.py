@@ -903,7 +903,10 @@ def run_demo(params: dict) -> None:
             if block.get("zurueck"):
                 reihenfolge.append(basis_datei)
 
-        if demo.available()["video"]:
+        # "ohne_video" kommt von einer einzelnen Szene: dort sind die
+        # Bilder gewollt, das Zusammenbauen waere verlorene Zeit. Fehlt der
+        # Wert, wird gebaut wie bisher.
+        if demo.available()["video"] and not params.get("ohne_video"):
             pruefe()
             current["stage"] = "Video wird gebaut"
             video_ziel = os.path.join(ziel(), f"{stamp}_demonstration.mp4")

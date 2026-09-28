@@ -242,6 +242,23 @@ EINSTELLUNGEN = {
                      "foreground",
         "paar_label": ("von drinnen heraus", "von draussen hinein"),
     },
+    # Dieselben beiden Blicke einzeln. "raus" bleibt das Paar -- gespeicherte
+    # Geschichten rechnen damit --, aber in einer Folge will man sie auf zwei
+    # Szenen verteilen und dazwischen etwas anderes zeigen.
+    "heraus": {
+        "label": "Nur von drinnen heraus",
+        "text": "a point-of-view shot from inside an enclosed space looking "
+                "out through its opening at a person standing outside, the "
+                "dark inner walls framing the edges of the picture, the "
+                "person outside lit and sharp",
+    },
+    "rein": {
+        "label": "Nur von draussen hinein",
+        "text": "an over-the-shoulder shot from behind a person standing "
+                "outside an enclosed space, looking past their shoulder "
+                "through the opening at the figure inside, the figure inside "
+                "small and lit, the shoulder dark in the foreground",
+    },
     "scheibe": {
         "label": "Durch die halbdurchsichtige Scheibe",
         "text": "a shot through a semi-transparent pane of glass: what lies "
@@ -288,6 +305,24 @@ CAMERAS.update({
     "e_decke":      ("Von der Decke", _ohne_luecken(EINSTELLUNGEN["decke"]["text"])),
     "e_bettlage":   ("Bettlage, von unten hoch", EINSTELLUNGEN["bettlage"]["text"]),
 })
+
+
+# Folgen: dieselben drei, vier Blicke kommen immer wieder hintereinander --
+# erst in die Augen, dann aus etwas heraus, dann in etwas hinein. Sie einzeln
+# anzulegen ist dreimal dieselbe Handarbeit. Eine Folge legt die Szenen in
+# einem Zug an, jede mit ihrer Einstellung, und uebernimmt dabei den Text der
+# Szene, unter der sie entsteht: derselbe Augenblick aus wechselndem Blick.
+FOLGEN = {
+    "augen_raus_rein": ("Augen · heraus · hinein",
+                        ["augen", "heraus", "rein"]),
+    "augen_bett_rein": ("Augen · Bettlage · hinein",
+                        ["augen", "bettlage", "rein"]),
+    "scheibe_rein":    ("Scheibe · hinein", ["scheibe", "rein"]),
+    "augen_scheibe":   ("Augen · Scheibe", ["augen", "scheibe"]),
+    "raus_rein":       ("heraus · hinein", ["heraus", "rein"]),
+    "augen_spiegel":   ("Augen · Spiegel", ["augen", "spiegel"]),
+    "decke_bett":      ("Von der Decke · Bettlage", ["decke", "bettlage"]),
+}
 
 
 # Gesichtsausdruck. Fuer Geschichten: die Mimik soll aus der Handlung kommen,

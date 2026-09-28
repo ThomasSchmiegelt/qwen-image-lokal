@@ -39,8 +39,8 @@ import sprache as chat  # noqa: E402
 import ablauf  # noqa: E402
 import demo  # noqa: E402
 from kataloge import (  # noqa: E402
-    AXIS_OFF, EFFECTS, EINSTELLUNGEN, GEZEICHNET, GROUP_ACTIONS, MIMIK,
-    PAINT_TARGET, WESEN,
+    AXIS_OFF, EFFECTS, EINSTELLUNGEN, FOLGEN, GEZEICHNET, GROUP_ACTIONS,
+    MIMIK, PAINT_TARGET, WESEN,
     catalog, overrides,
     parse_command,
 )
@@ -248,6 +248,9 @@ class Handler(BaseHTTPRequestHandler):
                                  for k, v in chat.FREIGABEN.items()]
             info["erzaehler"] = [{"key": k, "label": v[0]}
                                  for k, v in chat.ERZAEHLER.items()]
+            # Folgen: mehrere Szenen mit festen Einstellungen in einem Zug.
+            info["folgen"] = [{"key": k, "label": v[0], "schritte": v[1]}
+                              for k, v in FOLGEN.items()]
             # Welche Stile gezeichnet sind, entscheidet der Katalog. Die Seite
             # rechnet sonst mit einer zweiten Liste, die auseinanderlaeuft.
             info["gezeichnet"] = sorted(GEZEICHNET)
