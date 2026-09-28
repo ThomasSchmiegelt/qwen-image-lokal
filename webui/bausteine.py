@@ -193,6 +193,10 @@ def speichern(projekt: str, baustein: dict) -> dict:
     neu = {"id": kennung, "art": art, "name": name, "prompt": prompt,
            "gesicht": (baustein.get("gesicht") or "").strip(),
            "kleidung": (baustein.get("kleidung") or "").strip(),
+           # Hautton, Haar- und Augenfarbe stehen einmal und gelten fuer
+           # beides: Ganzbild und Grossaufnahme. Als Text in zwei Prompts
+           # liefen sie auseinander, und dann war es ein anderer Mensch.
+           "haut": (baustein.get("haut") or "").strip(),
            # Der Stil gehoert zum Musterbild, nicht zum Baustein: er sagt,
            # wie das Bild entstanden ist. Der Prompt selbst bleibt stilfrei,
            # damit dieselbe Person in der naechsten Geschichte als Manga
@@ -211,7 +215,8 @@ def speichern(projekt: str, baustein: dict) -> dict:
     for vorher in daten:
         if vorher.get("id") != kennung:
             continue
-        for feld in ("bild", "bild_augen", "gesicht", "kleidung", "stil"):
+        for feld in ("bild", "bild_augen", "gesicht", "kleidung", "haut",
+                     "stil"):
             if not neu[feld]:
                 neu[feld] = vorher.get(feld) or ""
         if not neu["alias"]:
@@ -236,7 +241,8 @@ def zusammenfuehren(projekt: str, von: str, nach: str) -> dict:
     if not a or not b or von == nach:
         return {}
     ziel = dict(b)
-    for feld in ("prompt", "gesicht", "kleidung", "bild", "bild_augen", "stil"):
+    for feld in ("prompt", "gesicht", "kleidung", "haut", "bild",
+                 "bild_augen", "stil"):
         if not (ziel.get(feld) or "").strip():
             ziel[feld] = a.get(feld) or ""
     # Vorgaben zu Luecken, die der bleibende Prompt hat, aber nicht kennt.
@@ -442,9 +448,15 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
     Grossaufnahme braucht keine Hose. `kleidung` ersetzt die bevorzugte
     Kleidung, wenn die Szene eine andere verlangt.
     """
+    # Der Hautton steht in beiden Faellen dabei -- das ist der ganze Zweck
+    # des eigenen Feldes: er kann nicht mehr auseinanderlaufen.
+    haut = _klein((b.get("haut") or "").strip().rstrip("."))
     if nur_gesicht and (b.get("gesicht") or "").strip():
-        return einsetzen(b["gesicht"], werte)
+        gesicht = einsetzen(b["gesicht"], werte).rstrip(".")
+        return ", ".join(t for t in (gesicht, haut) if t)
     stuecke = [einsetzen(b.get("prompt") or "", werte).rstrip(".")]
+    if haut:
+        stuecke.append(haut)
     if not nur_gesicht:
         was = (kleidung or b.get("kleidung") or "").strip()
         if was:

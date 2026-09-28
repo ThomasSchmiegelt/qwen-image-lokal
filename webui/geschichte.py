@@ -505,14 +505,17 @@ def pruefen(roh: list[dict], alle: list[dict],
                                "das Bild fällt jedes Mal anders aus.")
         if b.get("art") == "person":
             for feld, was in (("gesicht", "keine Gesichtsbeschreibung"),
-                              ("kleidung", "keine Kleidung")):
+                              ("kleidung", "keine Kleidung"),
+                              ("haut", "keinen Hautton")):
                 if not (b.get(feld) or "").strip():
                     fund(0, "hinweis", f"/{b['name']} hat {was}.")
             # Hautton und Haarfarbe muessen in beiden Texten dieselben
             # sein. Die Grossaufnahme zeigt sonst einen anderen Menschen als
             # das Ganzbild.
+            # Steht der Hautton im eigenen Feld, kann er nicht mehr
+            # auseinanderlaufen -- dann ist hier nichts zu pruefen.
             gesicht = (b.get("gesicht") or "").strip()
-            if gesicht:
+            if gesicht and not (b.get("haut") or "").strip():
                 for liste, was in ((HAUTWORT, "Hautton"),
                                    (HAARWORT, "Haarfarbe")):
                     a, c = _woerter(text, liste), _woerter(gesicht, liste)

@@ -867,6 +867,7 @@ function zeigeBausteine(liste) {
                     b.bild_augen ? "Augen" : "",
                     person && !(b.gesicht || "").trim() ? "ohne Gesicht" : "",
                     person && !(b.kleidung || "").trim() ? "ohne Kleidung" : "",
+                    person && !(b.haut || "").trim() ? "ohne Hautton" : "",
                     b.stil ? stilname(b.stil) : ""].filter(Boolean).join(" · ");
       const andere = liste.filter(x => x.id !== b.id && x.art === b.art);
       return `<div class="baustein${offen ? " auf" : ""}">
@@ -893,6 +894,8 @@ function zeigeBausteine(liste) {
           <code>${esc(b.prompt)}</code>
           ${person && (b.gesicht || "").trim()
             ? `<div><span class="art">Gesicht</span> ${esc(b.gesicht)}</div>` : ""}
+          ${person && (b.haut || "").trim()
+            ? `<div><span class="art">Haut</span> ${esc(b.haut)}</div>` : ""}
           ${person && (b.kleidung || "").trim()
             ? `<div><span class="art">Kleidung</span> ${esc(b.kleidung)}</div>` : ""}
           ${Object.keys(b.variablen || {}).length
@@ -983,6 +986,7 @@ $("bsErzeugen").onclick = async e => {
   $("bsPrompt").value = g.prompt;
   $("bsGesicht").value = g.gesicht || "";
   $("bsKleidung").value = g.kleidung || "";
+  $("bsHaut").value = g.haut || "";
   luckenFelder("bsVariablen", g.prompt, g.variablen, false);
   say(`Prompt erzeugt, ${luecken(g.prompt).length} Lücke(n). Bitte gegenlesen.`, "ok");
 };
@@ -1012,6 +1016,11 @@ $("bsKleidungNeu").onclick = e => {
   teilSchreiben("kleidung", "bsKleidung");
 };
 
+$("bsHautNeu").onclick = e => {
+  e.preventDefault();
+  teilSchreiben("haut", "bsHaut");
+};
+
 $("bsPrompt").addEventListener("input", () => {
   luckenFelder("bsVariablen", $("bsPrompt").value, lueckenWerte("bsVariablen"), false);
 });
@@ -1020,7 +1029,7 @@ function bausteinAusFeldern() {
   return {id: $("bsPrompt").dataset.id || "", art: $("bsArt").value,
           name: $("bsName").value, prompt: $("bsPrompt").value,
           gesicht: $("bsGesicht").value, kleidung: $("bsKleidung").value,
-          alias: $("bsAlias").value,
+          haut: $("bsHaut").value, alias: $("bsAlias").value,
           stil: musterStil(), variablen: lueckenWerte("bsVariablen")};
 }
 
@@ -1151,7 +1160,7 @@ async function bausteinAugen(id) {
 $("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
 
 function bausteinLeeren() {
-  ["bsName", "bsText", "bsPrompt", "bsGesicht", "bsKleidung"]
+  ["bsName", "bsText", "bsPrompt", "bsGesicht", "bsKleidung", "bsHaut"]
     .forEach(id => $(id).value = "");
   $("bsStil").value = "";
   $("bsAlias").value = "";
@@ -1180,6 +1189,7 @@ function bausteinLaden(id) {
   $("bsPrompt").value = b.prompt;
   $("bsGesicht").value = b.gesicht || "";
   $("bsKleidung").value = b.kleidung || "";
+  $("bsHaut").value = b.haut || "";
   $("bsStil").value = b.stil || "";
   $("bsAlias").value = (b.alias || []).join(", ");
   $("bsPrompt").dataset.id = b.id;

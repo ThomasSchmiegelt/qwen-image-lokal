@@ -250,6 +250,12 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
              und Augenfarbe müssen mit "prompt" übereinstimmen, Wort für
              Wort: zwei verschiedene Hauttöne ergeben zwei verschiedene
              Menschen, einen im Ganzbild und einen in der Großaufnahme.
+"haut"       Hautton, Augenfarbe und Haarfarbe, auf ENGLISCH, wenige
+             Wörter: "warm brown skin, dark brown eyes, black hair". NUR
+             hier -- in "prompt" und "gesicht" kommt keine dieser Farben
+             noch einmal vor. Der Grund: dieser Text steht spaeter in
+             beiden Bildern, im Ganzbild und in der Grossaufnahme. Stuenden
+             sie zweimal, waeren es zwei verschiedene Menschen.
 "kleidung"   Was die Person üblicherweise trägt, auf ENGLISCH, ein kurzer
              Satz mit Schuhen. HIER gehört die Kleidung hin, und hier muss
              etwas stehen: benenne wirkliche Kleidungsstücke. Sagt die
@@ -270,8 +276,9 @@ folgt. Aus dieser Anweisung übernimmst du keine einzige Wendung -- kein
 Beispielwort, keine Beispielperson.
 
 Die Form, mit Platzhaltern statt Wörtern:
-{"prompt": "<Alter und Statur>, <Haare>, <Haltung oder Blick>",
- "gesicht": "<Gesichtsform> face with <Augen>, <Haut>, <Mund>",
+{"prompt": "<Alter und Statur>, <Frisur>, <Haltung oder Blick>",
+ "gesicht": "<Gesichtsform> face with <Augenform>, <Mund>, <Brauen>",
+ "haut": "<Hautton> skin, <Augenfarbe> eyes, <Haarfarbe> hair",
  "kleidung": "<Kleidungsstück> over <Kleidungsstück>, <Schuhe>",
  "variablen": {}}""",
 
@@ -342,6 +349,15 @@ Nimm ausschließlich, was in der Anfrage steht. Erfinde keine Merkmale dazu
 und übernimm keine aus dieser Anweisung. Die Anfrage ist deutsch, die
 Antwort ist englisch -- kein deutsches Wort bleibt stehen.""",
 
+    "haut": """Du schreibst Hautton, Augen- und Haarfarbe einer Person.
+
+Antworte ausschließlich mit JSON: {"text": "…"}.
+
+Wenige englische Wörter in der Form
+"<Hautton> skin, <Augenfarbe> eyes, <Haarfarbe> hair". Kein Satz, kein
+Subjekt, nichts über Alter, Statur, Frisur oder Kleidung. Die Anfrage ist
+deutsch, die Antwort englisch.""",
+
     "kleidung": """Du schreibst den Bildprompt für die KLEIDUNG einer Person.
 
 Antworte ausschließlich mit JSON: {"text": "…"}.
@@ -380,6 +396,9 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
            nenne trotzdem Form, Augen und Haut -- dieser Text steht allein
            im Bild, wenn die Kamera dicht an die Augen geht, und "alert
            expression" allein ergibt dort kein Gesicht.
+"haut"     Hautton, Augen- und Haarfarbe, wenige Wörter. Sie stehen
+           danach NUR hier, nicht mehr in "prompt" oder "gesicht": der Text
+           gilt fürs Ganzbild und für die Großaufnahme zugleich.
 "kleidung" Nur was die Person am Leib trägt, mit Schuhen. Steht nichts
            davon im Text, gib "" zurück -- erfinde keine Kleidung.
 
@@ -407,7 +426,7 @@ def person_teilen(prompt: str, model: str | None = None) -> dict:
         return {}
     raus = {k: _sinnvoll(_ohne_subjekt(
                 str(roh.get(k) or "").strip()[:400].rstrip(".")))
-            for k in ("prompt", "gesicht", "kleidung")}
+            for k in ("prompt", "gesicht", "kleidung", "haut")}
     # Ohne allgemeinen Teil waere der Baustein hinterher schlechter als
     # vorher. Dann lieber nichts anruehren.
     return raus if raus["prompt"] else {}
@@ -668,7 +687,7 @@ def baustein_prompt(text: str, art: str = "person",
     # Ueberschreiben durch die Szene. Fehlen sie, bleiben die Felder leer --
     # dann gilt eben der allgemeine Prompt.
     if art == "person":
-        for feld in ("gesicht", "kleidung"):
+        for feld in ("gesicht", "kleidung", "haut"):
             erg[feld] = _sinnvoll(str(roh.get(feld) or "").strip()[:400])
     return erg
 
