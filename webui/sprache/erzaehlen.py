@@ -245,7 +245,7 @@ JE_PROSA = 6
 
 def prosa(szenen: list[dict], model: str | None = None,
           kurz: str = "", welt: str = "", fiktion=None, alter: str = "",
-          fortschritt=None) -> list[str]:
+          figuren: str = "", fortschritt=None) -> list[str]:
     """Zu jeder Szene ein Absatz Prosa -- aus der Gliederung, nicht erfunden.
 
     In Haeppchen zu sechs Szenen, weil eine einzige Antwort fuer zwanzig
@@ -265,6 +265,13 @@ def prosa(szenen: list[dict], model: str | None = None,
         system += f"\n\n{satz}"
     if freigabe(alter):
         system += f"\n\n{freigabe(alter)}"
+    if figuren.strip():
+        # Wer vorkommt und was er ist. Ohne das schreibt das Modell ueber
+        # eine Androidin, als waere sie ein Mensch -- im Bild sieht man die
+        # Naht am Kiefer, im Text steht nichts davon.
+        system += ("\n\nWer und was darin vorkommt:\n" + figuren.strip()
+                   + "\n\nHalte dich daran. Ist eine Figur kein Mensch, "
+                     "schreibe sie auch nicht wie einen.")
 
     raus = []
     try:

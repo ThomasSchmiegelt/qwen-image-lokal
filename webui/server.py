@@ -483,8 +483,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "ungueltiges JSON"})
             if not (params.get("zeilen") or []):
                 return self._json(400, {"error": "Keine Szene"})
+            # Wer vorkommt und was er ist, geht mit: eine Androidin soll
+            # im Text nicht wie ein Mensch beschrieben werden.
+            projekt = projekte.aktiv()
             auftrag = einreihen("prosa", {
                 "zeilen": params.get("zeilen") or [],
+                "figuren": geschichte.besetzung(
+                    params.get("zeilen") or [], bausteine.liste(projekt),
+                    bewertung.nach_namen(projekt)),
                 "nummern": [int(n) for n in (params.get("nummern") or [])
                             if str(n).isdigit()],
                 "kurz": str(params.get("kurz") or ""),

@@ -25,8 +25,10 @@ import time
 
 import bausteine
 import torwache
+from bausteine import ARTEN
 import projekte
-from kataloge import (
+from kataloge import (  # noqa: F401
+    WESEN,
     CAMERAS, EINSTELLUNGEN, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO,
     STYLES, VIEWS,
 )
@@ -418,6 +420,35 @@ KLEIDUNGSWORT = ("jacket", "coat", "dress", "shirt", "blouse", "trousers",
                  "pants", "jeans", "boot", "shoe", "hat", "cap", "uniform",
                  "suit", "jumper", "sweater", "hoodie", "skirt", "scarf",
                  "overall", "apron", "robe", "cloak")
+
+
+def besetzung(roh: list[dict], alle: list[dict],
+              eigene: dict | None = None) -> str:
+    """Wer und was in diesen Zeilen vorkommt, als Text fuers Sprachmodell.
+
+    Gedacht fuer die Prosa: ohne diese Liste schreibt das Modell ueber eine
+    Androidin, als waere sie ein Mensch. Im Bild sieht man die Naht am
+    Kiefer, im Text stand nichts davon.
+    """
+    zeilen = zeilen_lesen(roh, alle, eigene)
+    gesehen, raus = set(), []
+    for z in zeilen:
+        for b in z["teile"]:
+            if b["id"] in gesehen:
+                continue
+            gesehen.add(b["id"])
+            art = ARTEN.get(b.get("art") or "", b.get("art") or "")
+            wesen = (WESEN.get(b.get("wesen") or "") or ("", ""))[0]
+            was = f"{art}, {wesen}" if wesen and b.get("wesen") != "mensch" else art
+            # Der Anfang der Beschreibung kommt mit: er sagt Geschlecht,
+            # Alter und Statur. Ohne ihn wurde aus "a woman in her thirties"
+            # im Text ein "er" -- das Modell raet sonst.
+            wie = bausteine.einsetzen(b.get("prompt") or "",
+                                      b.get("variablen") or {}).strip()
+            wie = re.split(r"(?<=[.;])\s", wie)[0][:160].rstrip(" ,.")
+            raus.append(f"  {b.get('name')} ({was})"
+                        + (f" -- {wie}" if wie else ""))
+    return "\n".join(raus)
 
 
 def pruefen(roh: list[dict], alle: list[dict],
