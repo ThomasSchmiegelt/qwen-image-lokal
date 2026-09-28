@@ -201,6 +201,24 @@ WESEN = {
 #
 # "gegentext" macht daraus ein Paar: zwei Bilder, die denselben Augenblick
 # von beiden Seiten zeigen. Die Szene ergibt dann zwei Bilder statt einem.
+# Jede Einstellung beschreibt eine Anordnung -- und jede Anordnung nennt
+# dabei jemanden: "eine Person draussen", "die Gestalt darueber". Das Modell
+# liest die Person der Szene dann als eine zweite und malt einen Fremden
+# dazu, gern in einem anderen Stil. Gemeldet fuer die Scheibe, gefunden in
+# fast allen. Deshalb sagt jede Einstellung ausdruecklich, dass nur die eine
+# Person im Bild ist.
+NUR_EINE = ("Exactly one person is in this picture: the one described in this prompt. "
+            "No bystanders, no onlookers, no second face, no reflection of "
+            "anyone else.")
+
+# Beim Blick von aussen hinein steht eine Schulter im Vordergrund. Sie ist
+# Bildrand, keine zweite Figur -- und muss es auch bleiben.
+NUR_EINE_SCHULTER = (
+    "Exactly one person is in this picture: the one described in this prompt, seen "
+    "through the opening. The shoulder in the foreground is an unlit, "
+    "featureless silhouette cut off by the frame, not a second character. "
+    "No bystanders, no other faces.")
+
 EINSTELLUNGEN = {
     "augen": {
         "label": "Blick in die Augen",
@@ -215,16 +233,20 @@ EINSTELLUNGEN = {
                 "gaze into the camera, individual eyelashes sharp, realistic "
                 "skin texture. Nothing but the face is in frame. Mirrored in "
                 "the eyes: {spiegelung}",
-        "vorgabe": {"spiegelung": "the silhouette of the person facing them"},
+        # Die Vorgabe darf niemanden hinzuerfinden: "die Silhouette des
+        # Gegenuebers" malte einen zweiten Menschen ins Bild.
+        "vorgabe": {"spiegelung": "the light and the shapes in front of them"},
+        "allein": NUR_EINE,
         "nur_gesicht": True,
     },
     "spiegel": {
         "label": "Blick in den Spiegel",
-        "text": "the camera stands behind the figures, who face a large "
-                "mirror: their backs fill the foreground, their reflected "
-                "faces look back out of the mirror, both in the same frame. "
+        "text": "the camera stands behind the person, who faces a large "
+                "mirror: their back fills the foreground, their reflected "
+                "face looks back out of the mirror, both in the same frame. "
                 "Also visible in the mirror: {spiegelung}",
         "vorgabe": {"spiegelung": "the room behind them"},
+        "allein": NUR_EINE,
     },
     "raus": {
         "label": "Von drinnen nach draussen",
@@ -232,15 +254,16 @@ EINSTELLUNGEN = {
         # malte sie prompt ins Bild. Gemeint war die Blickrichtung, nicht das
         # Gefaengnis.
         "text": "a point-of-view shot from inside an enclosed space looking "
-                "out through its opening at a person standing outside, the "
-                "dark inner walls framing the edges of the picture, the "
-                "person outside lit and sharp",
-        "gegentext": "an over-the-shoulder shot from behind a person standing "
-                     "outside an enclosed space, looking past their shoulder "
-                     "through the opening at the figure inside, the figure "
-                     "inside small and lit, the shoulder dark in the "
-                     "foreground",
+                "out through its opening at the person described in this "
+                "prompt, who stands outside in the light, the dark inner "
+                "walls framing the edges of the picture, that person lit "
+                "and sharp",
+        "gegentext": "an over-the-shoulder shot from outside an enclosed "
+                     "space, looking past an unlit, featureless shoulder in "
+                     "the near foreground, through the opening at the person "
+                     "described in this prompt, who is inside, small and lit",
         "paar_label": ("von drinnen heraus", "von draussen hinein"),
+        "allein": NUR_EINE_SCHULTER,
     },
     # Dieselben beiden Blicke einzeln. "raus" bleibt das Paar -- gespeicherte
     # Geschichten rechnen damit --, aber in einer Folge will man sie auf zwei
@@ -248,16 +271,19 @@ EINSTELLUNGEN = {
     "heraus": {
         "label": "Nur von drinnen heraus",
         "text": "a point-of-view shot from inside an enclosed space looking "
-                "out through its opening at a person standing outside, the "
-                "dark inner walls framing the edges of the picture, the "
-                "person outside lit and sharp",
+                "out through its opening at the person described in this "
+                "prompt, who stands outside in the light, the dark inner "
+                "walls framing the edges of the picture, that person lit "
+                "and sharp",
+        "allein": NUR_EINE,
     },
     "rein": {
         "label": "Nur von draussen hinein",
-        "text": "an over-the-shoulder shot from behind a person standing "
-                "outside an enclosed space, looking past their shoulder "
-                "through the opening at the figure inside, the figure inside "
-                "small and lit, the shoulder dark in the foreground",
+        "text": "an over-the-shoulder shot from outside an enclosed space, "
+                "looking past an unlit, featureless shoulder in the near "
+                "foreground, through the opening at the person described in "
+                "this prompt, who is inside, small and lit",
+        "allein": NUR_EINE_SCHULTER,
     },
     "scheibe": {
         "label": "Durch die halbdurchsichtige Scheibe",
@@ -265,20 +291,25 @@ EINSTELLUNGEN = {
                 "beyond shows through the glass, dimmed and slightly hazy, "
                 "and at the same time reflected on the glass surface: "
                 "{spiegelung}. Both layers overlap in the same frame",
-        "vorgabe": {"spiegelung": "the face of the onlooker"},
+        # "das Gesicht des Betrachters" war der gemeldete Fall: ein Fremder
+        # erschien auf dem Glas, in einem anderen Stil als die Szene.
+        "vorgabe": {"spiegelung": "the dim room on this side of the glass"},
+        "allein": NUR_EINE,
     },
     "decke": {
         "label": "Von der Decke",
         "text": "the camera hangs from the ceiling and looks straight down, "
-                "from a height of {hoehe}, the figures seen from directly "
-                "above, their shadows short on the floor",
+                "from a height of {hoehe}, the person described in this prompt, seen "
+                "from directly above, their shadow short on the floor",
         "vorgabe": {"hoehe": "three metres"},
+        "allein": NUR_EINE,
     },
     "bettlage": {
         "label": "Bettlage (von unten senkrecht hoch)",
         "text": "the camera lies flat on the ground directly below, looking "
                 "straight up, the figure standing over it and leaning into "
                 "the frame from above, the ceiling behind them",
+        "allein": NUR_EINE,
     },
 }
 

@@ -734,7 +734,14 @@ def mit_einstellung(text: str, schluessel: str, angabe: str = "",
     def bauen(anordnung):
         for name, wert in werte.items():
             anordnung = anordnung.replace("{" + name + "}", wert)
-        return f"{anordnung}. {text}. {VORRANG}"
+        # Die Anordnung nennt jemanden -- "eine Person draussen", "die
+        # Gestalt darueber". Ohne die Ansage liest das Modell die Person der
+        # Szene als eine zweite und malt einen Fremden dazu.
+        allein = (e.get("allein") or "").strip().rstrip(". ")
+        stuecke = [anordnung.rstrip(". "), text.rstrip(". "), VORRANG]
+        if allein:
+            stuecke.insert(2, allein)
+        return ". ".join(t for t in stuecke if t)
 
     if "gegentext" in e:
         return [bauen(e["text"]), bauen(e["gegentext"])]
