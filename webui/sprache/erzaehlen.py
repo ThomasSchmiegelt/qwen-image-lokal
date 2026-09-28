@@ -245,7 +245,8 @@ JE_PROSA = 6
 
 def prosa(szenen: list[dict], model: str | None = None,
           kurz: str = "", welt: str = "", fiktion=None, alter: str = "",
-          figuren: str = "", fortschritt=None) -> list[str]:
+          figuren: str = "", erzaehler: str = "",
+          fortschritt=None) -> list[str]:
     """Zu jeder Szene ein Absatz Prosa -- aus der Gliederung, nicht erfunden.
 
     In Haeppchen zu sechs Szenen, weil eine einzige Antwort fuer zwanzig
@@ -265,6 +266,10 @@ def prosa(szenen: list[dict], model: str | None = None,
         system += f"\n\n{satz}"
     if freigabe(alter):
         system += f"\n\n{freigabe(alter)}"
+    if erzaehler.strip():
+        # Wer schreibt. Steht vor der Besetzung: die Stimme bestimmt, wie
+        # ueber die Figuren geredet wird, nicht umgekehrt.
+        system += f"\n\n{erzaehler.strip()}"
     if figuren.strip():
         # Wer vorkommt und was er ist. Ohne das schreibt das Modell ueber
         # eine Androidin, als waere sie ein Mensch -- im Bild sieht man die
@@ -406,6 +411,57 @@ def freigabe(schluessel) -> str:
     """Der Satz zur Altersfreigabe fuers Sprachmodell, oder leer."""
     eintrag = FREIGABEN.get(str(schluessel or ""))
     return eintrag[1] if eintrag else ""
+
+
+# Wer die Prosa schreibt. Nicht der Stil des Bildes, sondern die Stimme des
+# Textes: dieselbe Szene klingt anders, je nachdem wer sie erzaehlt. "{wer}"
+# wird durch den Namen der Figur ersetzt, wenn eine gewaehlt ist.
+ERZAEHLER = {
+    "neutral": ("Neutral erzählt", ""),
+    "protagonist": (
+        "Eine Figur der Geschichte",
+        "Erzählt wird in der Ich-Form von {wer}. Alles steht in dieser Sicht: "
+        "Was {wer} nicht sieht, nicht hört und nicht weiß, kommt im Text nicht "
+        "vor. Auch das Urteil über die anderen ist ihres."),
+    "zeuge": (
+        "Eine Nebenfigur, die dabei war",
+        "Erzählt wird in der Ich-Form von jemandem, der dabeistand, aber nicht "
+        "im Mittelpunkt: einem Nachbarn, einem Kollegen, einem Kind. Er "
+        "berichtet, was er gesehen hat, und versteht nicht alles davon."),
+    "zukunft": (
+        "Jemand aus der Zukunft, im Rückblick",
+        "Geschrieben von jemandem, der lange nach diesen Ereignissen lebt und "
+        "zurückblickt. Vergangenheitsform, und ab und zu ein Satz aus dem "
+        "Abstand -- was daraus geworden ist, was man damals noch nicht wusste. "
+        "Aber keine Erklärung, die die Szene selbst auflöst."),
+    "chronist": (
+        "Ein Chronist, nüchtern",
+        "Ein Chronist berichtet: Vergangenheitsform, knapp, in der Reihenfolge "
+        "der Ereignisse, ohne Innensicht und ohne Ausschmückung. Was niemand "
+        "sehen konnte, steht nicht da."),
+    "maerchen": (
+        "Ein Märchenerzähler",
+        "Erzählt wie ein Märchen: einfache Sätze, feste Wendungen, "
+        "Wiederholungen, und der Erzähler wendet sich gelegentlich an den, "
+        "der zuhört."),
+    "eigen": ("Nur die eigene Beschreibung", ""),
+}
+
+
+def erzaehlerstimme(schluessel, wer: str = "", eigen: str = "") -> str:
+    """Der Satz zur Erzaehlstimme fuers Sprachmodell, oder leer.
+
+    `wer` ist der Name der Figur, aus deren Sicht erzaehlt wird; `eigen` eine
+    frei geschriebene Beschreibung des Autors, die immer dazukommt. Fehlt
+    beides, erzaehlt niemand Bestimmtes -- so wie bisher.
+    """
+    eintrag = ERZAEHLER.get(str(schluessel or ""))
+    text = (eintrag[1] if eintrag else "").replace(
+        "{wer}", (wer or "").strip() or "der Hauptfigur")
+    eigen = (eigen or "").strip()
+    if eigen:
+        text = (text + "\n\n" if text else "") + f"Wer das schreibt: {eigen}"
+    return text
 
 
 def grad(fiktion) -> tuple[list[str], str]:

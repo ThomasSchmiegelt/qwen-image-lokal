@@ -18,8 +18,8 @@ from .aufbau import (
     abschnitte, kapitel, rahmen, szenen_aus_abschnitt,
 )
 from .erzaehlen import (
-    FREIGABEN, WELTEN, expose, freigabe, geschichte, gliederung, prosa,
-    szenen_ergaenzen,
+    ERZAEHLER, FREIGABEN, WELTEN, erzaehlerstimme, expose, freigabe,
+    geschichte, gliederung, prosa, szenen_ergaenzen,
 )
 from .ollama import GROSS, MODEL, OLLAMA, available, entladen
 from .sehen import bild_frage, bild_lesen, bild_zu_prompt, ist_weiblich
@@ -27,7 +27,8 @@ from .uebersetzen import looks_german, translate
 
 __all__ = [
     "abschnitte", "kapitel", "rahmen", "szenen_aus_abschnitt",
-    "FREIGABEN", "GROSS", "MODEL", "MODES", "OLLAMA", "WELTEN", "freigabe", "entladen", "expose", "ask", "available", "baustein_prompt", "bausteine_empfehlen", "bausteine_raten",
+    "ERZAEHLER", "FREIGABEN", "GROSS", "MODEL", "MODES", "OLLAMA", "WELTEN",
+    "erzaehlerstimme", "freigabe", "entladen", "expose", "ask", "available", "baustein_prompt", "bausteine_empfehlen", "bausteine_raten",
     "bild_frage", "bild_lesen",
     "bild_zu_prompt", "geschichte", "gliederung", "interpret",
     "ist_weiblich",

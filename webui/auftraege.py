@@ -610,6 +610,7 @@ def run_prosa(params: dict) -> None:
                               fiktion=params.get("fiktion"),
                               alter=params.get("alter") or "",
                               figuren=params.get("figuren") or "",
+                              erzaehler=params.get("erzaehler") or "",
                               fortschritt=weit)
         current["expose"] = {"nur_prosa": True,
                              "prosa": [{"nr": s["nr"], "text": t}

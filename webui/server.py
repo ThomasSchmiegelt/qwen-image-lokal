@@ -246,6 +246,8 @@ class Handler(BaseHTTPRequestHandler):
             info["gross"] = chat.GROSS
             info["freigaben"] = [{"key": k, "label": v[0]}
                                  for k, v in chat.FREIGABEN.items()]
+            info["erzaehler"] = [{"key": k, "label": v[0]}
+                                 for k, v in chat.ERZAEHLER.items()]
             # Welche Stile gezeichnet sind, entscheidet der Katalog. Die Seite
             # rechnet sonst mit einer zweiten Liste, die auseinanderlaeuft.
             info["gezeichnet"] = sorted(GEZEICHNET)
@@ -497,6 +499,12 @@ class Handler(BaseHTTPRequestHandler):
                 "welt": str(params.get("welt") or ""),
                 "alter": str(params.get("alter") or ""),
                 "fiktion": params.get("fiktion"),
+                # Wer die Prosa schreibt. Fehlt die Angabe, bleibt es beim
+                # neutralen Erzaehler -- so wie es bisher war.
+                "erzaehler": chat.erzaehlerstimme(
+                    params.get("erzaehler"),
+                    str(params.get("erzaehler_wer") or ""),
+                    str(params.get("erzaehler_text") or "")),
                 "modell": str(params.get("modell") or "") or None})
             return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 

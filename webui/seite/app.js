@@ -82,6 +82,7 @@ fetch("/api/info").then(r => r.json()).then(info => {
   STILLISTE = info.styles || [];
   fill("gsStil", info.styles);
   fill("gsFreigabe", info.freigaben);
+  fill("gsErzaehler", info.erzaehler);
   fill("bsWesen", info.wesen);
   WESENLISTE = info.wesen || [];
   $("bsStil").innerHTML = `<option value="">— Stil der Geschichte —</option>`
@@ -925,6 +926,13 @@ function zeigeBausteine(liste) {
       </div>`;
     }).join("")
     : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
+  // Aus wessen Sicht erzaehlt wird: nur Personen kommen dafuer infrage.
+  // Die Liste waechst mit den Bausteinen, deshalb steht sie hier.
+  const wer = $("gsErzaehlerWer").value;
+  $("gsErzaehlerWer").innerHTML = `<option value="">— niemand bestimmtes —</option>`
+    + liste.filter(b => b.art === "person").map(b =>
+        `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join("");
+  $("gsErzaehlerWer").value = wer;
   zeigeWahl();
   zeigeSelbstszenen();
 }
@@ -2044,6 +2052,9 @@ function gsStand() {
           kapitel: GSRAHMEN.kapitel,
           stil: $("gsStil").value, welt: $("gsWelt").value,
           fiktion: +$("gsFiktion").value, alter: $("gsFreigabe").value,
+          erzaehler: $("gsErzaehler").value,
+          erzaehler_wer: $("gsErzaehlerWer").value,
+          erzaehler_text: $("gsErzaehlerText").value,
           modell: $("gsModell").value,
           idee: $("gsIdee").value, kurz: $("gsKurz").value,
           zeilen: gsZeilen,
@@ -2106,6 +2117,11 @@ async function gsOeffnen(schluessel, nr) {
   if (g.modell) $("gsModell").value = g.modell;
   if (g.fiktion !== null && g.fiktion !== undefined) $("gsFiktion").value = g.fiktion;
   if (g.alter) $("gsFreigabe").value = g.alter;
+  // Aeltere Geschichten haben die drei Felder nicht -- dann bleibt es beim
+  // neutralen Erzaehler, so wie sie geschrieben wurden.
+  $("gsErzaehler").value = g.erzaehler || "";
+  $("gsErzaehlerWer").value = g.erzaehler_wer || "";
+  $("gsErzaehlerText").value = g.erzaehler_text || "";
   zeigeGrad();
   // Inhalt des Bandes
   const band = baende.find(x => x.nr === gsBandNr) || {};
@@ -2275,6 +2291,7 @@ $("gsProsaSchreiben").onclick = async e => {
                           welt: $("gsWelt").value,
                           alter: $("gsFreigabe").value,
                           fiktion: +$("gsFiktion").value,
+                          ...erzaehlerFelder(),
                           modell: $("gsModell").value})
   }).catch(() => null);
   if (!res || !res.ok) {
@@ -2285,6 +2302,14 @@ $("gsProsaSchreiben").onclick = async e => {
   poll();
   say(`Der Text zu ${zeilen.length} Szenen wird geschrieben …`);
 };
+
+// Wer die Prosa schreibt. An einer Stelle gebaut, weil zwei Aufrufe sie
+// brauchen -- die ganze Geschichte und die einzelne Szene.
+function erzaehlerFelder() {
+  return {erzaehler: $("gsErzaehler").value,
+          erzaehler_wer: $("gsErzaehlerWer").value,
+          erzaehler_text: $("gsErzaehlerText").value};
+}
 
 // Dieselben drei Schritte, aber nur fuer eine Szene: Text, Bausteine, Bild.
 // Wer eine Zeile geaendert hat, will nicht die ganze Geschichte neu rechnen.
@@ -2297,6 +2322,7 @@ async function prosaFuerSzene(i) {
                           kurz: $("gsKurz").value, welt: $("gsWelt").value,
                           alter: $("gsFreigabe").value,
                           fiktion: +$("gsFiktion").value,
+                          ...erzaehlerFelder(),
                           modell: $("gsModell").value})
   }).catch(() => null);
   if (!res || !res.ok) {

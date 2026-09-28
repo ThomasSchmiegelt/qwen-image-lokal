@@ -20,7 +20,11 @@ import time
 import projekte
 
 # Was zur Geschichte gehoert und fuer jeden Band gilt.
-GLOBAL = ("stil", "welt", "fiktion", "alter", "modell")
+GLOBAL = ("stil", "welt", "fiktion", "alter", "modell",
+          # Wer die Prosa schreibt: Art der Stimme, aus wessen Sicht, und
+          # eine frei geschriebene Beschreibung. Fehlen sie, erzaehlt
+          # niemand Bestimmtes -- so wie in allen Geschichten bisher.
+          "erzaehler", "erzaehler_wer", "erzaehler_text")
 # Was je Band eigen ist.
 BAND = ("idee", "kurz", "titel", "zeilen", "prompts",
         # Anfang und Ende stehen fest, bevor die Mitte entsteht; die
