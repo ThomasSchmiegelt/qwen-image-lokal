@@ -190,6 +190,13 @@ def gliederung(zeilen: list[str], stil: str = "", welt: str = "",
                 frage += ("\nDer Text dieser Szene:\n" + h["prosa"].strip()[:1200]
                           + "\nNimm daraus, was im Bild sichtbar ist -- kein "
                             "Gedanke, kein Gespräch, nur was man sieht.")
+            if (h.get("unsichtbar") or "").strip():
+                # Wer hinter der Kamera steht, darf im Bild nicht auftauchen
+                # -- auch nicht als zweite Gestalt am Rand.
+                frage += ("\nNicht im Bild, sondern hinter der Kamera: "
+                          + h["unsichtbar"].strip()
+                          + ". Diese Figur ist nicht zu sehen; beschreibe nur, "
+                            "was sie sieht.")
             if (h.get("erwartung") or "").strip():
                 frage += ("\nDas muss in diesem Bild zu sehen sein: "
                           + h["erwartung"].strip())

@@ -92,14 +92,17 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     # Alle genannten Bausteine, nicht nur der erste je Art. Vorher fiel eine
     # zweite Person still unter den Tisch: die Szene sagte "sie sehen
     # einander an" und beschrieb nur eine von beiden.
+    # Wer hinter der Kamera steht, gehoert nicht ins Bild: er schaut ja
+    # hindurch. Im Prompt waere er eine zweite Figur.
+    weg = set(szene.get("unsichtbar") or [])
     alle = [nach_kennung[k] for k in (szene.get("teile") or [])
-            if k in nach_kennung]
+            if k in nach_kennung and k not in weg]
     if not alle:
         # Aeltere Szenen kennen nur je einen je Art.
         alle = [nach_kennung[k] for k in (szene.get("person"),
                                           szene.get("gegenstand"),
                                           szene.get("ort"))
-                if k in nach_kennung]
+                if k in nach_kennung and k not in weg]
 
     def welche(art, hoechstens):
         return [b for b in alle if b.get("art") == art][:hoechstens]
@@ -233,7 +236,13 @@ def startbild(szenen: list[dict], teile: list[dict]) -> str:
 # Stil fuer die ganze Folge. Erst danach schreibt das Sprachmodell die
 # Prompts -- es hat dann nur noch eine Aufgabe statt drei.
 
-VERWEIS = re.compile(r"/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})")
+# Ein Minus vor dem Namen heisst: die Figur gehoert zur Szene, ist aber
+# nicht im Bild. Wer durch eine Scheibe schaut oder aus einer Luke heraus,
+# steht hinter der Kamera -- er kam bisher trotzdem ins Bild, weil sein
+# Baustein in den Prompt wanderte. Die Prosa behaelt ihn: dort ist er die
+# Figur, die schaut.
+#   /-Susi blickt durch eine Scheibe auf /Malva
+VERWEIS = re.compile(r"/(-?)([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})")
 
 
 # Ein Baustein laesst sich gleich in der Szene erklaeren:
@@ -266,29 +275,34 @@ def definitionen(zeile: str) -> tuple[str, dict]:
     return re.sub(r"\s{2,}", " ", ohne).strip(), gefunden
 
 
-def verweise(zeile: str, teile: list[dict]) -> tuple[str, list[dict]]:
+def verweise(zeile: str, teile: list[dict]) -> tuple[str, list[dict], list[str]]:
     """Loest /Name gegen die Bausteine auf.
 
     Zurueck kommt die Zeile ohne die Schraegstriche -- damit sie sich lesen
-    laesst -- und die gefundenen Bausteine. Ein Name, den es nicht gibt,
+    laesst --, die gefundenen Bausteine und die Kennungen derer, die mit
+    /-Name als unsichtbar gekennzeichnet sind. Ein Name, den es nicht gibt,
     bleibt als Wort stehen; stillschweigend verschlucken waere schlimmer als
     ihn im Text zu lassen.
     """
     # Auch die Zweitnamen treffen den Baustein: dieselbe Figur heisst in
     # Szene drei anders als in Szene zwoelf.
     nach_name = {n.lower(): b for b in teile for n in bausteine.namen(b) if n}
-    gefunden, gesehen = [], set()
+    gefunden, gesehen, unsichtbar = [], set(), []
 
     def ersatz(treffer):
-        b = nach_name.get(treffer.group(1).lower())
+        b = nach_name.get(treffer.group(2).lower())
         if not b:
-            return treffer.group(0)
+            # Das Minus gehoert zur Anweisung, nicht zum Text -- auch wenn
+            # der Name noch keinen Baustein hat.
+            return "/" + treffer.group(2)
         if b["id"] not in gesehen:
             gesehen.add(b["id"])
             gefunden.append(b)
-        return b.get("name") or treffer.group(1)
+        if treffer.group(1) and b["id"] not in unsichtbar:
+            unsichtbar.append(b["id"])
+        return b.get("name") or treffer.group(2)
 
-    return VERWEIS.sub(ersatz, zeile or "").strip(), gefunden
+    return VERWEIS.sub(ersatz, zeile or "").strip(), gefunden, unsichtbar
 
 
 def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
@@ -327,6 +341,7 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             # Alle Bausteine der Zeile, in ihrer Reihenfolge. Die drei Felder
             # darueber bleiben fuer das Startbild und aeltere Staende.
             "teile": list(benutzt),
+            "unsichtbar": list(zeile.get("unsichtbar") or []),
             "mimik": p.get("mimik") or "",
             "kleidung": p.get("kleidung") or "",
             "stil": stil,
@@ -490,10 +505,18 @@ def besetzung(roh: list[dict], alle: list[dict],
     zeilen = zeilen_lesen(roh, alle, eigene)
     gesehen, raus = set(), []
     for z in zeilen:
+        weg = set(z.get("unsichtbar") or [])
         for b in z["teile"]:
             if b["id"] in gesehen:
                 continue
             gesehen.add(b["id"])
+            if b["id"] in weg:
+                # Im Bild nicht zu sehen, im Text sehr wohl: sie ist die,
+                # die schaut.
+                art = ARTEN.get(b.get("art") or "", b.get("art") or "")
+                raus.append(f"  {b.get('name')} ({art}, schaut zu -- steht "
+                            "hinter der Kamera und ist im Bild nicht zu sehen)")
+                continue
             art = ARTEN.get(b.get("art") or "", b.get("art") or "")
             wesen = (WESEN.get(b.get("wesen") or "") or ("", ""))[0]
             was = f"{art}, {wesen}" if wesen and b.get("wesen") != "mensch" else art
@@ -738,7 +761,7 @@ def zeilen_lesen(roh: list[dict], alle: list[dict],
         ohne_raute, will, nicht = hinweise_von(str(z.get("text") or ""))
         ohne_def, erklaert = definitionen(ohne_raute)
         roh_text, einst, spieg = einstellung_von(ohne_def, eigene)
-        text, teile = verweise(roh_text, alle)
+        text, teile, unsichtbar = verweise(roh_text, alle)
         if not text:
             continue
         zeilen.append({"text": text, "ort": str(z.get("ort") or ""),
@@ -747,7 +770,10 @@ def zeilen_lesen(roh: list[dict], alle: list[dict],
                        # Die Prosa sagt oft mehr ueber das Bild als die
                        # Stichzeile. Sie geht deshalb mit ans Sprachmodell.
                        "prosa": str(z.get("prosa") or ""),
-                       "definitionen": erklaert, "teile": teile})
+                       "definitionen": erklaert, "teile": teile,
+                       # Wer hinter der Kamera steht: in der Prosa dabei,
+                       # im Bild nicht.
+                       "unsichtbar": unsichtbar})
     return zeilen
 
 

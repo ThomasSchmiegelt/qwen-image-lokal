@@ -680,9 +680,16 @@ def run_prompts(params: dict) -> None:
         def fortschritt(nr, gesamt):
             melden(f"Prompt {nr} von {gesamt}", nr - 1, gesamt)
 
+        # Wer unsichtbar ist, wird beim Namen genannt: das Sprachmodell soll
+        # ihn nicht ins Bild schreiben.
+        nach_id = {b["id"]: b.get("name") or ""
+                   for z in roh for b in (z.get("teile") or [])}
         hinweise = [{"erwartung": z.get("erwartung") or "",
                      "ausschluss": z.get("ausschluss") or "",
-                     "prosa": z.get("prosa") or ""} for z in roh]
+                     "prosa": z.get("prosa") or "",
+                     "unsichtbar": ", ".join(
+                         nach_id.get(k, "") for k in (z.get("unsichtbar") or [])
+                         if nach_id.get(k))} for z in roh]
         szenen = chat.gliederung(zeilen, hinweise=hinweise,
                                  alter=params.get("alter") or "",
                                  stil=params.get("stil") or "",

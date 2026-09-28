@@ -566,6 +566,13 @@ async function starteDemo() {
 // ---------- Start ----------
 function say(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
 
+// Wie voll die Grafikkarte ist. Ein Auftrag, der eine Minute nichts sagt,
+// sieht aus wie ein haengender -- hier sieht man, dass gerechnet wird.
+function karteText(s) {
+  const k = (s || {}).karte || {};
+  return k.gesamt ? ` · Karte ${k.belegt}/${k.gesamt} GB` : "";
+}
+
 // ---------- Puls ----------
 // Ein Sprachmodell braucht fuer einen Prompt fuenf bis dreissig Sekunden.
 // Stille vor einem Knopf sieht in dieser Zeit aus wie ein Fehler. Also sagt
@@ -584,12 +591,16 @@ function pulsAn(text) {
     // Was der Server von sich aus meldet, geht vor: "Baustein 2 von 5" sagt
     // mehr als "wird geschrieben".
     const st = await fetch("/api/status").then(r => r.json()).catch(() => null);
-    if (st && st.stage) {
-      was = st.stage;
-      const f = st.fortschritt || {};
-      if (f.von) $("fill").style.width = (100 * f.ist / f.von) + "%";
+    let karte = "";
+    if (st) {
+      karte = karteText(st);
+      if (st.stage) {
+        was = st.stage;
+        const f = st.fortschritt || {};
+        if (f.von) $("fill").style.width = (100 * f.ist / f.von) + "%";
+      }
     }
-    if (pulsUhr) say(`${was} · ${s} s`);
+    if (pulsUhr) say(`${was} · ${s} s${karte}`);
   };
   schlag();
   pulsUhr = setInterval(schlag, 1000);
@@ -1462,16 +1473,40 @@ const VORWORT = "durch|in|an|auf|zu|zum|zur|bei|mit|über|unter|vor|hinter"
 const ARTIKEL = "der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines"
               + "|sein|seine|ihr|ihre|ihren|seinen";
 
+// Steht ein Minus vor dem Namen, gehoert die Figur zur Szene, aber nicht
+// ins Bild: sie ist die, die hindurchschaut.
+function blickwinkel(text, name) {
+  return new RegExp("/-" + name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                    + "\\b", "i").test(text || "");
+}
+
+function bausteinWahl(i, name, wahl) {
+  if (wahl === "__weg") return bausteinInZeile(i, name, "");
+  if (wahl === "__blick") return blickUmschalten(i, name);
+  bausteinInZeile(i, name, wahl);
+}
+
+function blickUmschalten(i, name) {
+  const z = gsZeilen[i];
+  const roh = name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+  z.text = blickwinkel(z.text, name)
+    ? z.text.replace(new RegExp("/-" + roh + "\\b", "gi"), "/" + name)
+    : z.text.replace(new RegExp("/" + roh + "\\b", "gi"), "/-" + name);
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
 function bausteinInZeile(i, alt, neu) {
   const z = gsZeilen[i];
   const roh = alt.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
   if (neu) {
-    z.text = z.text.replace(new RegExp("/" + roh + "\\b", "gi"), "/" + neu);
+    z.text = z.text.replace(new RegExp("/(-?)" + roh + "\\b", "gi"),
+                            "/$1" + neu);
   } else {
     // Beim Entfernen faellt der Artikel davor mit, und ein Vorwort davor
     // auch: aus "rennt durch die /Halle" bliebe sonst "rennt durch die".
     z.text = z.text.replace(
-      new RegExp(`(?:\\b(?:${VORWORT})\\s+)?(?:\\b(?:${ARTIKEL})\\s+)?/${roh}\\b`,
+      new RegExp(`(?:\\b(?:${VORWORT})\\s+)?(?:\\b(?:${ARTIKEL})\\s+)?/-?${roh}\\b`,
                  "gi"), "");
   }
   z.text = z.text.replace(/\s{2,}/g, " ").replace(/\s+([,.;!?])/g, "$1").trim();
@@ -1571,7 +1606,8 @@ function zeigeSelbstszenen() {
     // Eingeklappt steht nur, was gesetzt ist. Mit zwanzig Szenen waeren
     // zwanzig volle Menues untereinander nicht mehr zu ueberblicken, und
     // meistens will man nur den Text lesen.
-    const kurz = [drin.map(b => b.name).join(" · "),
+    const kurz = [drin.map(b => (blickwinkel(z.text, b.name) ? "◌ " : "")
+                                + b.name).join(" · "),
                   fest ? fest.label : (e ? "\\" + e.key : ""),
                   (z.prosa || "").trim() ? "Prosa" : "",
                   (z.bilder || 1) > 1 ? `${z.bilder} Bilder` : ""]
@@ -1624,12 +1660,16 @@ function zeigeSelbstszenen() {
           onclick="bausteineAktualisierenSzene(${i});return false">aktualisieren</a></h4>
         <div class="szleiste">
           ${drin.map(b => `
-            <select class="gsdrin" title="tauschen oder entfernen"
-              onchange="bausteinInZeile(${i}, '${esc(b.name)}',
-                        this.value === '__weg' ? '' : this.value)">
+            <select class="gsdrin${blickwinkel(z.text, b.name) ? " blick" : ""}"
+              title="tauschen, verstecken oder entfernen"
+              onchange="bausteinWahl(${i}, '${esc(b.name)}', this.value)">
               ${BAUSTEINE.filter(x => x.art === b.art).map(x =>
                 `<option value="${esc(x.name)}"${
-                  x.id === b.id ? " selected" : ""}>/${esc(x.name)}</option>`).join("")}
+                  x.id === b.id ? " selected" : ""}>${
+                  blickwinkel(z.text, b.name) && x.id === b.id ? "◌ " : ""
+                  }/${esc(x.name)}</option>`).join("")}
+              <option value="__blick">${blickwinkel(z.text, b.name)
+                ? "● wieder zeigen" : "◌ nur Blickwinkel, nicht im Bild"}</option>
               <option value="__weg">⨯ entfernen</option>
             </select>`).join("")}
           <select class="gsfolge" title="Folge von Szenen darunter anlegen"
@@ -2947,7 +2987,7 @@ function poll() {
     }
 
     if (s.busy) return say((s.stage ? s.stage + " · " : "") + s.message
-                          + " · " + fmt(s.elapsed));
+                          + " · " + fmt(s.elapsed) + karteText(s));
 
     clearInterval(polling);
     if (s.error) { buttonState("idle"); $("fill").style.width = "0"; return say(s.error, "err"); }

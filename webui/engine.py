@@ -103,6 +103,24 @@ def _free() -> None:
         torch.cuda.empty_cache()
 
 
+def _karte() -> dict:
+    """Wie voll die Grafikkarte ist, in Gigabyte.
+
+    Steht in jeder Statusmeldung. Ein Auftrag, der eine Minute nichts sagt,
+    sieht aus wie ein haengender -- an der belegten Karte sieht man, dass
+    gerechnet wird. `mem_get_info` zaehlt alle Prozesse mit, nicht nur
+    diesen: auch Ollama liegt dort.
+    """
+    if not torch.cuda.is_available():
+        return {}
+    try:
+        frei, gesamt = torch.cuda.mem_get_info()
+    except Exception:                       # eine Anzeige darf nie stoeren
+        return {}
+    return {"belegt": round((gesamt - frei) / 2**30, 1),
+            "gesamt": round(gesamt / 2**30, 1)}
+
+
 def build_prompt(text: str, view=None, style=None, light=None, camera=None,
                  paint=None, palette=None, scene=None, angle=None, device=None,
                  scenario=None, material=None, haltung=None, kleidung=None,
@@ -182,6 +200,7 @@ class Engine:
         if s["started"] and s["state"] not in ("idle", "error"):
             s["elapsed"] = round(time.time() - s["started"], 1)
         s["busy"] = self.lock.locked()
+        s["karte"] = _karte()
         return s
 
     def cancel(self) -> None:
