@@ -1512,6 +1512,47 @@ function einstellungSchreiben(i, key, angabe) {
   gsMerken();
 }
 
+// Drei Zustaende, drei Farben. Gruen ist von Hand gesetzt: fertig heisst,
+// jemand hat es angesehen und fuer gut befunden -- das kann kein Programm
+// entscheiden. Blau und Orange rechnet die Seite aus, mit denselben Regeln
+// wie das Durchsehen, nur ohne Server: sie muessen bei jedem Tastendruck
+// stimmen.
+function szeneStand(i, drin, fest, p) {
+  const z = gsZeilen[i];
+  if (z.fertig) {
+    return {klasse: "fertig", wort: "fertig",
+            warum: "von Hand als fertig gekennzeichnet"};
+  }
+  const fehlt = [];
+  if (!z.text.trim()) fehlt.push("die Zeile ist leer");
+  const offen = offeneNamen(z.text);
+  if (offen.length) fehlt.push(offen.map(n => "/" + n).join(", ")
+                               + " nicht angelegt");
+  if (!offen.length && !drin.length) fehlt.push("kein Baustein");
+  if (!drin.some(b => b.art === "ort")) fehlt.push("kein Ort");
+  if (fest && fest.luecke === "spiegelung" && drin.length
+      && !drin.some(b => b.art === "person")) fehlt.push("keine Person");
+  if (fest && fest.nur_gesicht) {
+    const ohne = drin.filter(b => b.art === "person"
+                             && !(b.gesicht || "").trim());
+    if (ohne.length) fehlt.push(ohne.map(b => b.name).join(", ")
+                                + " ohne Gesichtsbeschreibung");
+  }
+  if (!(z.prosa || "").trim()) fehlt.push("keine Prosa");
+  if (!p || !(p.prompt || "").trim()) fehlt.push("kein Bildprompt");
+  else if (veraltet(i)) fehlt.push("der Prompt passt nicht mehr zur Szene");
+  return fehlt.length
+    ? {klasse: "offen", wort: "offen", warum: "Es fehlt: " + fehlt.join(" · ")}
+    : {klasse: "voll", wort: "vollständig",
+       warum: "Bausteine, Ort, Prosa und Bildprompt stehen"};
+}
+
+function szeneFertig(i) {
+  gsZeilen[i].fertig = !gsZeilen[i].fertig;
+  zeigeSelbstszenen();
+  gsMerken();
+}
+
 function zeigeSelbstszenen() {
   $("gsSelbst").innerHTML = gsZeilen.map((z, i) => {
     const e = einstellungInZeile(z.text);
@@ -1536,11 +1577,16 @@ function zeigeSelbstszenen() {
                   (z.bilder || 1) > 1 ? `${z.bilder} Bilder` : ""]
       .filter(Boolean).join(" · ") || "nichts gesetzt";
     const p = ((GESCHICHTE && GESCHICHTE.prompts) || []).find(x => x.nr === i + 1);
+    const stand = szeneStand(i, drin, fest, p);
     return `
-    <div class="selbstszene${e ? " mitkamera" : ""}">
+    <div class="selbstszene ${stand.klasse}${e ? " mitkamera" : ""}">
       <div class="szkopf"><span class="nr">${i + 1}</span>
         <textarea class="gszeile" data-i="${i}" rows="2"
           placeholder="was in diesem Bild zu sehen ist">${esc(z.text)}</textarea>
+        <span class="knopf haken${z.fertig ? " an" : ""}"
+          onclick="szeneFertig(${i})"
+          title="${z.fertig ? "doch noch nicht fertig"
+                            : "diese Szene als fertig kennzeichnen"}">✓</span>
         <span class="knopf" onclick="gsSchieben(${i}, -1)" title="nach oben">▲</span>
         <span class="knopf" onclick="gsSchieben(${i}, 1)" title="nach unten">▼</span>
         <span class="knopf" onclick="gsSzeneDazu(${i})"
@@ -1551,6 +1597,8 @@ function zeigeSelbstszenen() {
         <span class="pfeil" onclick="szeneKlappen(${i})">${
           z.offen ? "▾" : "▸"}</span>
         <span onclick="szeneKlappen(${i})" style="flex:1">${esc(kurz)}</span>
+        <span class="ampel ${stand.klasse}" title="${esc(stand.warum)}">${
+          esc(stand.wort)}</span>
         ${veraltet(i) ? `<span class="wink">geändert</span>` : ""}
         <a href="#" class="szprompt"
            title="Diese Szene ganz nachziehen: Bausteine und Bildprompt"

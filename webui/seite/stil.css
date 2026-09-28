@@ -382,8 +382,22 @@
   margin-bottom: 8px; padding: 6px 6px 4px; border-radius: 7px;
   background: var(--sunk); border: 1px solid var(--line);
 }
-/* Eine Szene mit gesetzter Kamera ist auf den ersten Blick zu erkennen. */
-.selbstszene.mitkamera { border-left: 3px solid var(--accent); }
+/* Drei Zustaende, drei Farben am linken Rand: gruen von Hand als fertig
+   gekennzeichnet, blau vollstaendig, orange es fehlt etwas. Der Rand ist
+   breiter als der Kamerastrich von frueher -- er soll aus zwanzig Szenen
+   herausstechen, ohne dass man lesen muss. */
+.selbstszene { border-left: 4px solid var(--line); }
+.selbstszene.fertig { border-left-color: var(--ok); }
+.selbstszene.voll   { border-left-color: var(--accent); }
+.selbstszene.offen  { border-left-color: var(--busy); }
+/* Die Kamera steht jetzt im Text der Kurzzeile, nicht mehr am Rand. */
+.selbstszene.mitkamera { }
+.ampel { font-size: 11px; padding: 1px 6px; border-radius: 8px; }
+.ampel.fertig { color: var(--ok); border: 1px solid var(--ok); }
+.ampel.voll   { color: var(--accent); border: 1px solid var(--accent); }
+.ampel.offen  { color: var(--busy); border: 1px solid var(--busy); }
+.szkopf .haken { color: var(--line); }
+.szkopf .haken.an { color: var(--ok); }
 .szkopf { display: flex; align-items: flex-start; gap: 6px; }
 /* Eingeklappt: eine Zeile, die sagt, was gesetzt ist. Ausgeklappt drei
    Bereiche -- Prosa, Bausteine, was man sieht. */
