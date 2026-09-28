@@ -40,7 +40,7 @@ import ablauf  # noqa: E402
 import demo  # noqa: E402
 from kataloge import (  # noqa: E402
     AXIS_OFF, EFFECTS, EINSTELLUNGEN, GEZEICHNET, GROUP_ACTIONS, MIMIK,
-    PAINT_TARGET,
+    PAINT_TARGET, WESEN,
     catalog, overrides,
     parse_command,
 )
@@ -239,6 +239,7 @@ class Handler(BaseHTTPRequestHandler):
             info["source"] = {"stale": bool(changed), "changed": changed}
             info["projekte"] = projekte.liste()
             info["bausteine"] = bausteine.liste(projekte.aktiv())
+            info["wesen"] = [{"key": k, "label": v[0]} for k, v in WESEN.items()]
             info["bausteinarten"] = [{"key": k, "label": v}
                                      for k, v in bausteine.ARTEN.items()]
             info["mimik"] = [{"key": k, "label": v[0]} for k, v in MIMIK.items()]

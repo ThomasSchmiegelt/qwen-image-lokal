@@ -24,7 +24,7 @@ import shutil
 import time
 
 import projekte
-from kataloge import EINSTELLUNGEN, GEZEICHNET, NICHT_FOTO, STYLES
+from kataloge import EINSTELLUNGEN, GEZEICHNET, NICHT_FOTO, STYLES, WESEN
 
 # "szene" entsteht nicht von Hand, sondern beim Zusammenstellen: die fertige
 # Mischung aus Person, Gegenstand und Ort, mit ihren Luecken, ihrem Bild und
@@ -197,6 +197,9 @@ def speichern(projekt: str, baustein: dict) -> dict:
            # beides: Ganzbild und Grossaufnahme. Als Text in zwei Prompts
            # liefen sie auseinander, und dann war es ein anderer Mensch.
            "haut": (baustein.get("haut") or "").strip(),
+           # Mensch, Androide, Roboter: steht vor allem anderen und gilt
+           # fuer Ganzbild und Grossaufnahme. Leer heisst Mensch.
+           "wesen": (baustein.get("wesen") or "").strip(),
            # Der Stil gehoert zum Musterbild, nicht zum Baustein: er sagt,
            # wie das Bild entstanden ist. Der Prompt selbst bleibt stilfrei,
            # damit dieselbe Person in der naechsten Geschichte als Manga
@@ -216,7 +219,7 @@ def speichern(projekt: str, baustein: dict) -> dict:
         if vorher.get("id") != kennung:
             continue
         for feld in ("bild", "bild_augen", "gesicht", "kleidung", "haut",
-                     "stil"):
+                     "wesen", "stil"):
             if not neu[feld]:
                 neu[feld] = vorher.get(feld) or ""
         if not neu["alias"]:
@@ -241,7 +244,7 @@ def zusammenfuehren(projekt: str, von: str, nach: str) -> dict:
     if not a or not b or von == nach:
         return {}
     ziel = dict(b)
-    for feld in ("prompt", "gesicht", "kleidung", "haut", "bild",
+    for feld in ("prompt", "gesicht", "kleidung", "haut", "wesen", "bild",
                  "bild_augen", "stil"):
         if not (ziel.get(feld) or "").strip():
             ziel[feld] = a.get(feld) or ""
@@ -451,10 +454,18 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
     # Der Hautton steht in beiden Faellen dabei -- das ist der ganze Zweck
     # des eigenen Feldes: er kann nicht mehr auseinanderlaufen.
     haut = _klein((b.get("haut") or "").strip().rstrip("."))
+    # Was die Figur ist, steht vorn: es bestimmt, wie Haut, Augen und
+    # Gesicht ueberhaupt aussehen. Ein Androide mit "warm brown skin" hat
+    # synthetische braune Haut, kein menschliches Gesicht mit Farbe darauf.
+    wesen = (WESEN.get(b.get("wesen") or "") or ("", ""))[1]
     if nur_gesicht and (b.get("gesicht") or "").strip():
         gesicht = einsetzen(b["gesicht"], werte).rstrip(".")
-        return ", ".join(t for t in (gesicht, haut) if t)
-    stuecke = [einsetzen(b.get("prompt") or "", werte).rstrip(".")]
+        return ", ".join(t for t in (wesen, gesicht, haut) if t)
+    stuecke = [t for t in (wesen,) if t]
+    stuecke.append(einsetzen(b.get("prompt") or "", werte).rstrip("."))
+    stuecke = [s for s in stuecke if s]
+    if wesen and len(stuecke) > 1:
+        stuecke[1] = _klein(stuecke[1])
     if haut:
         stuecke.append(haut)
     if not nur_gesicht:

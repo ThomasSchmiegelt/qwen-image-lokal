@@ -170,6 +170,31 @@ NICHT_FOTO = ("This is a drawn illustration, not a photograph: no camera "
               "grain, no lens blur, no photographic lighting.")
 
 
+# Was eine Figur ist. Steht vor allem anderen im Prompt, denn es bestimmt,
+# wie Haut, Augen und Gesicht ueberhaupt aussehen -- und es gilt fuer das
+# Ganzbild wie fuer die Grossaufnahme. Leer heisst Mensch; dann steht nichts
+# davon im Prompt, so wie es bisher war.
+WESEN = {
+    "mensch": ("Mensch", ""),
+    "androide": ("Androide",
+                 "an android built to pass for human: matte synthetic skin "
+                 "with a faint seam along the jaw and behind the ear, irises "
+                 "that hold a low inner light, pupils a shade too perfect"),
+    "roboter": ("Roboter",
+                "a humanoid robot with no skin: plated metal shell, visible "
+                "joints and cabling, glowing optical sensors instead of eyes"),
+    "cyborg": ("Cyborg",
+               "part human, part machine: metal plating over one side of the "
+               "face and one arm, a lens where one eye used to be, scarred "
+               "skin at the seams"),
+    "fremdwesen": ("Fremdwesen",
+                   "a humanoid alien, clearly not human: unusual skin "
+                   "texture and colouring, eyes of a shape no human has"),
+    "fabelwesen": ("Fabelwesen",
+                   "a mythical being in human shape, clearly not human"),
+}
+
+
 # Kameraeinstellungen fuer Szenen. Etwas anderes als CAMERAS: dort steht das
 # Objektiv, hier steht die ganze Anordnung von Kamera, Figuren und was sie
 # sehen. In einer Geschichte wird sie mit \Name gesetzt.

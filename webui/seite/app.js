@@ -82,6 +82,8 @@ fetch("/api/info").then(r => r.json()).then(info => {
   STILLISTE = info.styles || [];
   fill("gsStil", info.styles);
   fill("gsFreigabe", info.freigaben);
+  fill("bsWesen", info.wesen);
+  WESENLISTE = info.wesen || [];
   $("bsStil").innerHTML = `<option value="">— Stil der Geschichte —</option>`
     + (info.styles || []).map(x =>
         `<option value="${x.key}">${esc(x.label)}</option>`).join("");
@@ -833,7 +835,7 @@ $("chat").addEventListener("keydown", e => {
 // Personen, Orte und Gegenstaende zum Wiederverwenden. Was sich aendern darf,
 // steht als Luecke in geschweiften Klammern und wird beim Benutzen gefuellt.
 let BAUSTEINE = [], BSARTEN = [], MIMIKLISTE = [], STILLISTE = [],
-    EINSTELLUNGEN = [], GEZEICHNET = [];
+    EINSTELLUNGEN = [], GEZEICHNET = [], WESENLISTE = [];
 const LUECKE = /\{([a-zA-Z][a-zA-Z0-9_]{0,29})\}/g;
 
 function luecken(text) {
@@ -861,7 +863,9 @@ function zeigeBausteine(liste) {
       const offen = BSOFFEN.has(b.id);
       const person = b.art === "person";
       // Was die Kopfzeile sagt, wenn alles zu ist.
+      const wesenname = k => (WESENLISTE.find(x => x.key === k) || {}).label || k;
       const kurz = [label(b.art),
+                    b.wesen && b.wesen !== "mensch" ? wesenname(b.wesen) : "",
                     (b.alias || []).length ? "= " + b.alias.join(", ") : "",
                     b.bild ? "Bild" : "",
                     b.bild_augen ? "Augen" : "",
@@ -892,6 +896,9 @@ function zeigeBausteine(liste) {
         </div>
         ${!offen ? "" : `<div class="bsdetail">
           <code>${esc(b.prompt)}</code>
+          ${person && b.wesen && b.wesen !== "mensch"
+            ? `<div><span class="art">Wesen</span> ${esc(wesenname(b.wesen))}</div>`
+            : ""}
           ${person ? `<div class="hautzeile"><span class="art">Haut</span> ${
             (b.haut || "").trim() ? esc(b.haut)
               : `<i>noch nicht gesetzt — gilt für Ganzbild und Großaufnahme</i>`
@@ -1031,7 +1038,8 @@ function bausteinAusFeldern() {
   return {id: $("bsPrompt").dataset.id || "", art: $("bsArt").value,
           name: $("bsName").value, prompt: $("bsPrompt").value,
           gesicht: $("bsGesicht").value, kleidung: $("bsKleidung").value,
-          haut: $("bsHaut").value, alias: $("bsAlias").value,
+          haut: $("bsHaut").value, wesen: $("bsWesen").value,
+          alias: $("bsAlias").value,
           stil: musterStil(), variablen: lueckenWerte("bsVariablen")};
 }
 
@@ -1073,10 +1081,11 @@ $("bsBild").onclick = async e => {
                                stil: musterStil()});
   if (!g) return;
   await einreihenEinfach({prompt: g.prompt, baustein: b.id, aspect: "3:4"});
+  const dazu = await augenDazu(b, musterStil());
   // Aufraeumen nicht vergessen: bleibt die Kennung stehen, ueberschreibt der
   // naechste Baustein diesen hier. Genau das ist passiert.
   bausteinLeeren();
-  say(`„${b.name}“ gespeichert, Bild dazu eingereiht.`, "ok");
+  say(`„${b.name}“ gespeichert, Bild dazu eingereiht${dazu}.`, "ok");
 };
 
 // Zwei Bausteine, eine Figur. Passiert, wenn das Sprachmodell erst "Frau"
@@ -1119,7 +1128,22 @@ async function bausteinBild(id) {
     await bausteinRuf({tu: "speichern", baustein: {...b, stil}});
   }
   await einreihenEinfach({prompt: g.prompt, baustein: id, aspect: "3:4"});
-  say(`Bild zu „${b.name}“ eingereiht.`, "ok");
+  const dazu = await augenDazu(b, stil);
+  say(`Bild zu „${b.name}“ eingereiht${dazu}.`, "ok");
+}
+
+// Zu einer Person gehoeren zwei Bilder: die ganze Gestalt und der Blick in
+// die Augen. Sie entstehen zusammen -- beide sind schlichte Text-zu-Bild-
+// Auftraege, laufen also in einem Ladevorgang durch und kosten kaum mehr
+// als einer. Ohne Gesichtsbeschreibung entfaellt der zweite.
+async function augenDazu(b, stil) {
+  if (b.art !== "person" || !(b.gesicht || "").trim()) return "";
+  const a = await bausteinRuf({tu: "zusammensetzen", ids: [b.id], augen: true,
+                               werte: b.variablen, stil});
+  if (!a) return "";
+  await einreihenEinfach({prompt: a.prompt, baustein: b.id,
+                          baustein_feld: "bild_augen", aspect: "1:1"});
+  return " samt Blick in die Augen";
 }
 
 // Personen aus der Zeit vor der Trennung nachziehen. Eine Geschichte, die
@@ -1165,6 +1189,7 @@ function bausteinLeeren() {
   ["bsName", "bsText", "bsPrompt", "bsGesicht", "bsKleidung", "bsHaut"]
     .forEach(id => $(id).value = "");
   $("bsStil").value = "";
+  $("bsWesen").value = "";
   $("bsAlias").value = "";
   personFelder();
   $("bsPrompt").dataset.id = "";
@@ -1192,6 +1217,7 @@ function bausteinLaden(id) {
   $("bsGesicht").value = b.gesicht || "";
   $("bsKleidung").value = b.kleidung || "";
   $("bsHaut").value = b.haut || "";
+  $("bsWesen").value = b.wesen || "";
   $("bsStil").value = b.stil || "";
   $("bsAlias").value = (b.alias || []).join(", ");
   $("bsPrompt").dataset.id = b.id;
