@@ -423,8 +423,16 @@
 }
 .szsicht {
   display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.45; padding-left: 7px; border-left: 2px solid var(--line);
 }
+/* Was noch nicht zusammengesetzt ist, ist der Text des Sprachmodells -- in
+   dem steht der Name der Figur. Er sieht anders aus als der fertige. */
+.szsicht.roh { border-left-style: dotted; font-style: italic; }
+.szsicht.lang { border-left-color: var(--busy); }
+.szsicht .zeichen {
+  display: block; margin-top: 2px; font-size: 10.5px; color: var(--line);
+}
+.szsicht.lang .zeichen { color: var(--busy); }
 .szleiste { display: flex; align-items: center; gap: 6px; margin-top: 4px;
             padding-left: 1.9em; }
 .szleiste .fuell { flex: 1; }

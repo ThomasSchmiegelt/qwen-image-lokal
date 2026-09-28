@@ -566,9 +566,14 @@ class Handler(BaseHTTPRequestHandler):
             stil = str(params.get("stil") or "")
             szenen = geschichte.gliederung_zu_szenen(
                 zeilen, params.get("prompts") or [], list(alle.values()), stil)
-            benutzt = [alle[k] for k in {s["person"] for s in szenen} | \
-                       {s["ort"] for s in szenen} | {s["gegenstand"] for s in szenen}
-                       if k in alle]
+            # Alle Bausteine der Szenen, nicht nur je einer pro Art: eine
+            # zweite Person fiel sonst still heraus, und die Szene beschrieb
+            # nur eine von zweien, die einander ansehen.
+            gebraucht = []
+            for s in szenen:
+                gebraucht += (s.get("teile")
+                              or [s["person"], s["ort"], s["gegenstand"]])
+            benutzt = [alle[k] for k in dict.fromkeys(gebraucht) if k in alle]
             bloecke = geschichte.zu_bloecken(szenen, benutzt, gemerkt)
             je_szene = [int(z.get("bilder") or 1)
                         for z in (params.get("zeilen") or [])]
@@ -577,6 +582,11 @@ class Handler(BaseHTTPRequestHandler):
                                         int(params.get("seed") or 42))
             return self._json(200, {
                 "szenen": szenen, "bloecke": bloecke,
+                # Was jede Szene an fertigem Bildprompt ergibt -- mit der
+                # Beschreibung der Figur statt ihres Namens. Die Oberflaeche
+                # zeigte bisher den Text des Sprachmodells, und in dem steht
+                # der Name; das sah aus wie ein Fehler und war keiner.
+                "je_szene": geschichte.je_szene(szenen, benutzt, gemerkt),
                 "bilder": sum(len(b["bausteine"]) for b in bloecke),
                 "startbild": geschichte.startbild(szenen, benutzt)})
 

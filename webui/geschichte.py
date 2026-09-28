@@ -61,10 +61,18 @@ def _ohne_namen(text: str, teile) -> str:
     for b in teile:
         if b.get("art") != "person":
             continue
-        name = (b.get("name") or "").strip()
-        if len(name) < 3:
-            continue
-        text = re.sub(rf"\b{re.escape(name)}\b\s*", "", text, flags=re.I)
+        for name in bausteine.namen(b):
+            name = (name or "").strip()
+            if len(name) < 3:
+                continue
+            # Das Bindewort davor faellt mit: aus "a shot of Malva standing"
+            # bliebe sonst "a shot of standing". Dasselbe bei "with", "and"
+            # und dem englischen Genitiv.
+            text = re.sub(rf"\b(?:of|with|and|by|for|to)\s+{re.escape(name)}"
+                          rf"(?:'s)?\b\s*", "", text, flags=re.I)
+            text = re.sub(rf"\b{re.escape(name)}(?:'s)?\b\s*", "", text,
+                          flags=re.I)
+    text = re.sub(r"\s+([,.;!?])", r"\1", text)
     return re.sub(r"\s{2,}", " ", text).strip().lstrip(",").strip()
 
 
@@ -81,9 +89,25 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     e = EINSTELLUNGEN.get(szene.get("einstellung") or "") or {}
     nur_gesicht = bool(e.get("nur_gesicht"))
 
+    # Alle genannten Bausteine, nicht nur der erste je Art. Vorher fiel eine
+    # zweite Person still unter den Tisch: die Szene sagte "sie sehen
+    # einander an" und beschrieb nur eine von beiden.
+    alle = [nach_kennung[k] for k in (szene.get("teile") or [])
+            if k in nach_kennung]
+    if not alle:
+        # Aeltere Szenen kennen nur je einen je Art.
+        alle = [nach_kennung[k] for k in (szene.get("person"),
+                                          szene.get("gegenstand"),
+                                          szene.get("ort"))
+                if k in nach_kennung]
+
+    def welche(art, hoechstens):
+        return [b for b in alle if b.get("art") == art][:hoechstens]
+
     stuecke = []
-    person = nach_kennung.get(szene.get("person"))
-    if person:
+    # Bis zu drei Personen: was darueber hinausgeht, verwaessert den Prompt
+    # mehr, als es dem Bild nuetzt.
+    for person in welche("person", 3):
         stuecke.append(bausteine.person_text(
             person, person.get("variablen") or {}, nur_gesicht=nur_gesicht,
             kleidung=szene.get("kleidung") or ""))
@@ -99,14 +123,15 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     if handlung:
         stuecke.append(handlung)
 
-    gegenstand = nach_kennung.get(szene.get("gegenstand"))
-    if gegenstand and not nur_gesicht:
-        stuecke.append(bausteine.einsetzen(gegenstand.get("prompt") or "",
-                                           gegenstand.get("variablen") or {}))
-    ort = nach_kennung.get(szene.get("ort"))
-    if ort and not nur_gesicht:
-        stuecke.append(bausteine.einsetzen(ort.get("prompt") or "",
-                                           ort.get("variablen") or {}))
+    if not nur_gesicht:
+        for gegenstand in welche("gegenstand", 2):
+            stuecke.append(bausteine.einsetzen(
+                gegenstand.get("prompt") or "",
+                gegenstand.get("variablen") or {}))
+        # Nur ein Ort: ein Bild spielt an einer Stelle.
+        for ort in welche("ort", 1):
+            stuecke.append(bausteine.einsetzen(ort.get("prompt") or "",
+                                               ort.get("variablen") or {}))
     stil = _stil(szene.get("stil") or "")
     if stil:
         stuecke.append(stil)
@@ -115,6 +140,32 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     if not sauber:
         return ""
     return ", ".join([sauber[0]] + [bausteine._klein(t) for t in sauber[1:]])
+
+
+def je_szene(szenen: list[dict], teile: list[dict],
+             eigene: dict | None = None) -> list[dict]:
+    """Was jede Szene an fertigen Bildprompts ergibt.
+
+    Dasselbe wie `zu_bloecken`, nur nach Szenen sortiert statt nach Stil.
+    Die Oberflaeche zeigte bisher den Text, den das Sprachmodell geschrieben
+    hat -- in dem steht der Name der Figur. Was das Bildmodell bekommt, ist
+    ein anderer Text: dort steht die Beschreibung, und der Name ist weg. Wer
+    das eine sieht und das andere erwartet, haelt es fuer einen Fehler.
+    """
+    nach_kennung = {b["id"]: b for b in teile}
+    raus = []
+    for szene in szenen:
+        text = szene_zu_text(szene, nach_kennung)
+        if not text:
+            continue
+        if (szene.get("ausschluss") or "").strip():
+            text = torwache.torwaechter(text, szene["ausschluss"])[0]
+        raus.append({"nr": szene.get("nr"),
+                     "texte": mit_einstellung(text,
+                                              szene.get("einstellung") or "",
+                                              szene.get("spiegelung") or "",
+                                              eigene)})
+    return raus
 
 
 def zu_bloecken(szenen: list[dict], teile: list[dict],
@@ -258,6 +309,9 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
         def erster(art):
             return next((k for k, b in benutzt.items() if b.get("art") == art), "")
         szenen.append({
+            # Die Nummer der Zeile, damit die Oberflaeche den fertigen
+            # Prompt der richtigen Szene zuordnen kann.
+            "nr": i,
             "einstellung": zeile.get("einstellung") or "",
             # Die uebersetzte Fassung schlaegt die getippte: beim Schreiben
             # der Prompts wurde sie schon ins Englische gebracht.
@@ -270,6 +324,9 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             "ort": zeile.get("ort") or erster("ort"),
             "gegenstand": erster("gegenstand"),
             "handlung": text,
+            # Alle Bausteine der Zeile, in ihrer Reihenfolge. Die drei Felder
+            # darueber bleiben fuer das Startbild und aeltere Staende.
+            "teile": list(benutzt),
             "mimik": p.get("mimik") or "",
             "kleidung": p.get("kleidung") or "",
             "stil": stil,

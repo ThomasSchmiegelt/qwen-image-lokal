@@ -1578,6 +1578,11 @@ function zeigeSelbstszenen() {
       .filter(Boolean).join(" · ") || "nichts gesetzt";
     const p = ((GESCHICHTE && GESCHICHTE.prompts) || []).find(x => x.nr === i + 1);
     const stand = szeneStand(i, drin, fest, p);
+    // Was das Bildmodell wirklich bekommt -- mit der Beschreibung der Figur
+    // statt ihres Namens. Der Text des Sprachmodells steht nur da, solange
+    // es den fertigen noch nicht gibt.
+    const fertig = ((GESCHICHTE && GESCHICHTE.je_szene) || [])
+      .filter(x => x.nr === i + 1).flatMap(x => x.texte || []);
     return `
     <div class="selbstszene ${stand.klasse}${e ? " mitkamera" : ""}">
       <div class="szkopf"><span class="nr">${i + 1}</span>
@@ -1671,7 +1676,12 @@ function zeigeSelbstszenen() {
              title="diese Szene erzeugen und daraus ein Video bauen"
              onclick="szeneErzeugen(${i}, true);return false">Video</a>
         </div>
-        ${p && p.prompt ? `<code class="szsicht">${esc(p.prompt)}</code>` : ""}
+        ${fertig.length ? fertig.map(t => `<code class="szsicht${
+            t.length > 800 ? " lang" : ""}">${esc(t)}<span class="zeichen">${
+            t.length} Zeichen</span></code>`).join("")
+          : (p && p.prompt
+             ? `<code class="szsicht roh">${esc(p.prompt)}<span class="zeichen"
+                 >noch nicht zusammengesetzt</span></code>` : "")}
       </div>`}
     </div>`;
   }).join("")
