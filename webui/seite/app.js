@@ -892,10 +892,12 @@ function zeigeBausteine(liste) {
         </div>
         ${!offen ? "" : `<div class="bsdetail">
           <code>${esc(b.prompt)}</code>
+          ${person ? `<div class="hautzeile"><span class="art">Haut</span> ${
+            (b.haut || "").trim() ? esc(b.haut)
+              : `<i>noch nicht gesetzt — gilt für Ganzbild und Großaufnahme</i>`
+            }</div>` : ""}
           ${person && (b.gesicht || "").trim()
             ? `<div><span class="art">Gesicht</span> ${esc(b.gesicht)}</div>` : ""}
-          ${person && (b.haut || "").trim()
-            ? `<div><span class="art">Haut</span> ${esc(b.haut)}</div>` : ""}
           ${person && (b.kleidung || "").trim()
             ? `<div><span class="art">Kleidung</span> ${esc(b.kleidung)}</div>` : ""}
           ${Object.keys(b.variablen || {}).length

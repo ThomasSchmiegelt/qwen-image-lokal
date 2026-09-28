@@ -255,6 +255,13 @@
 }
 .bsdetail code { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
 .bsdetail .art { margin-left: 0; margin-right: 6px; }
+/* Der Hautton gilt fuer beide Bilder und steht deshalb zuoberst und
+   abgesetzt -- auch wenn er fehlt, denn dann fehlt er in beiden. */
+.bsdetail .hautzeile {
+  padding: 3px 6px; border-radius: 4px; background: #232833;
+  border-left: 2px solid var(--accent);
+}
+.bsdetail .hautzeile i { color: var(--muted); }
 .bsdetail .augenbild {
   width: 120px; height: 120px; object-fit: cover; border-radius: 5px;
   cursor: pointer; display: block; margin-top: 3px;
