@@ -840,34 +840,78 @@ function luecken(text) {
   return [...new Set([...(text || "").matchAll(LUECKE)].map(m => m[1]))];
 }
 
+// Aufgeklappte Bausteine. Wie bei den Szenen: zu steht eine Zeile da, auf
+// steht alles. Mit dreissig Bausteinen war die volle Liste nicht mehr zu
+// ueberblicken.
+const BSOFFEN = new Set();
+
+function bausteinKlappen(id) {
+  if (BSOFFEN.has(id)) BSOFFEN.delete(id);
+  else BSOFFEN.add(id);
+  zeigeBausteine(BAUSTEINE);
+}
+
 function zeigeBausteine(liste) {
   if (!Array.isArray(liste)) return;
   BAUSTEINE = liste;
   const label = k => (BSARTEN.find(a => a.key === k) || {}).label || k;
+  const stilname = k => (STILLISTE.find(x => x.key === k) || {}).label || k;
   $("bausteinListe").innerHTML = liste.length
-    ? liste.map(b => `<div class="baustein">
-        ${b.bild ? `<img src="/outputs/${b.bild}" alt="${esc(b.name)}"
-             onclick="show('${b.bild}')">` : `<span class="ohnebild">?</span>`}
-        <div class="bstext"><b>${esc(b.name)}</b>
-          <span class="art">${esc(label(b.art))}</span>
-          ${(b.alias || []).length
-              ? `<span class="art">= ${esc(b.alias.join(", "))}</span>` : ""}
-          ${b.stil ? `<span class="art">Bild: ${esc(
-              (STILLISTE.find(x => x.key === b.stil) || {}).label || b.stil)}</span>` : ""}
-          <br><code>${esc(b.prompt)}</code></div>
-        ${liste.filter(x => x.id !== b.id && x.art === b.art).length
-          ? `<select class="verschmelzen"
+    ? liste.map(b => {
+      const offen = BSOFFEN.has(b.id);
+      const person = b.art === "person";
+      // Was die Kopfzeile sagt, wenn alles zu ist.
+      const kurz = [label(b.art),
+                    (b.alias || []).length ? "= " + b.alias.join(", ") : "",
+                    b.bild ? "Bild" : "",
+                    b.bild_augen ? "Augen" : "",
+                    person && !(b.gesicht || "").trim() ? "ohne Gesicht" : "",
+                    person && !(b.kleidung || "").trim() ? "ohne Kleidung" : "",
+                    b.stil ? stilname(b.stil) : ""].filter(Boolean).join(" · ");
+      const andere = liste.filter(x => x.id !== b.id && x.art === b.art);
+      return `<div class="baustein${offen ? " auf" : ""}">
+        <div class="bskopf">
+          <span class="pfeil" onclick="bausteinKlappen('${b.id}')">${
+            offen ? "▾" : "▸"}</span>
+          ${b.bild ? `<img src="/outputs/${b.bild}" alt="${esc(b.name)}"
+               onclick="show('${b.bild}')">` : `<span class="ohnebild">?</span>`}
+          <div class="bstext" onclick="bausteinKlappen('${b.id}')">
+            <b>${esc(b.name)}</b><br><span class="art">${esc(kurz)}</span>
+          </div>
+          <span class="knopf" onclick="bausteinLaden('${b.id}')"
+            title="bearbeiten">✎</span>
+          <span class="knopf" onclick="bausteinBild('${b.id}')"
+            title="${b.bild ? "Musterbild neu erzeugen und ersetzen"
+                            : "Musterbild dazu erzeugen"}">▣</span>
+          ${person ? `<span class="knopf" onclick="bausteinAugen('${b.id}')"
+            title="${b.bild_augen ? "Blick in die Augen neu erzeugen"
+                                  : "Blick in die Augen erzeugen"}">◉</span>` : ""}
+          <span class="knopf" onclick="bausteinWeg('${b.id}')"
+            title="löschen">×</span>
+        </div>
+        ${!offen ? "" : `<div class="bsdetail">
+          <code>${esc(b.prompt)}</code>
+          ${person && (b.gesicht || "").trim()
+            ? `<div><span class="art">Gesicht</span> ${esc(b.gesicht)}</div>` : ""}
+          ${person && (b.kleidung || "").trim()
+            ? `<div><span class="art">Kleidung</span> ${esc(b.kleidung)}</div>` : ""}
+          ${Object.keys(b.variablen || {}).length
+            ? `<div><span class="art">Lücken</span> ${esc(
+                Object.entries(b.variablen).map(([k, v]) => k + ": " + v)
+                  .join(" · "))}</div>` : ""}
+          ${b.bild_augen ? `<div><span class="art">Augen</span>
+              <img class="augenbild" src="/outputs/${b.bild_augen}"
+                alt="Blick in die Augen" onclick="show('${b.bild_augen}')"></div>`
+            : ""}
+          ${andere.length ? `<select class="verschmelzen"
                onchange="bausteineVerschmelzen('${b.id}', this)">
               <option value="">↦ aufgehen in …</option>
-              ${liste.filter(x => x.id !== b.id && x.art === b.art).map(x =>
+              ${andere.map(x =>
                 `<option value="${x.id}">${esc(x.name)}</option>`).join("")}
             </select>` : ""}
-        <span class="knopf" onclick="bausteinLaden('${b.id}')" title="bearbeiten">✎</span>
-        <span class="knopf" onclick="bausteinBild('${b.id}')"
-          title="${b.bild ? "Musterbild neu erzeugen und ersetzen"
-                          : "Musterbild dazu erzeugen"}">▣</span>
-        <span class="knopf" onclick="bausteinWeg('${b.id}')" title="löschen">×</span>
-      </div>`).join("")
+        </div>`}
+      </div>`;
+    }).join("")
     : `<p class="hint">Noch keine Bausteine in diesem Projekt.</p>`;
   zeigeWahl();
   zeigeSelbstszenen();
@@ -1080,6 +1124,29 @@ $("bsAuffrischen").onclick = async e => {
   await bausteineHolen();
   say(`Aufgefrischt: ${g.neu.map(b => b.name).join(", ")}.`, "ok");
 };
+
+// Zu einer Person gehoert ein zweites Bild: die Grossaufnahme der Augen.
+// Sie zeigt, was bei \augen entsteht -- und deckt auf, wenn Gesicht und
+// Koerper nicht denselben Menschen beschreiben.
+async function bausteinAugen(id) {
+  const b = BAUSTEINE.find(x => x.id === id);
+  if (!b) return;
+  if (!(b.gesicht || "").trim()) {
+    bausteinLaden(id);
+    return say("Erst eine Gesichtsbeschreibung eintragen — "
+               + "daraus entsteht die Großaufnahme.", "err");
+  }
+  if (b.bild_augen && !confirm(`Den Blick in die Augen von „${b.name}“ neu `
+                               + "erzeugen? Das bisherige Bild wird ersetzt."))
+    return;
+  const stil = $("bsStil").value || b.stil || $("gsStil").value || "";
+  const g = await bausteinRuf({tu: "zusammensetzen", ids: [id], augen: true,
+                               werte: b.variablen, stil});
+  if (!g) return;
+  await einreihenEinfach({prompt: g.prompt, baustein: id,
+                          baustein_feld: "bild_augen", aspect: "1:1"});
+  say(`Blick in die Augen von „${b.name}“ eingereiht.`, "ok");
+}
 
 $("bsLeeren").onclick = e => { e.preventDefault(); bausteinLeeren(); };
 

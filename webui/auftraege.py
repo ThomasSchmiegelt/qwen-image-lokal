@@ -261,8 +261,10 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
                       else current["files"][i:i + 1])
             kennung = (a.get("params") or {}).get("baustein")
             if kennung and eigene:
-                bausteine.bild_setzen(a.get("projekt") or projekte.ALLGEMEIN,
-                                      str(kennung), eigene[0])
+                bausteine.bild_setzen(
+                    a.get("projekt") or projekte.ALLGEMEIN, str(kennung),
+                    eigene[0],
+                    str((a.get("params") or {}).get("baustein_feld") or "bild"))
             a["bilder"] = len(eigene)
             a["fehler"] = current["error"]
             a["zustand"] = zustand

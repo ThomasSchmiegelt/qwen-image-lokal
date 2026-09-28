@@ -395,6 +395,25 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
 
 # Woran man Kleidung im allgemeinen Prompt erkennt. Keine Wissenschaft, nur
 # die Stuecke, die das Sprachmodell dort immer wieder unterbringt.
+# Hauttoene, Haar- und Augenfarben. Stehen im allgemeinen Prompt andere als
+# im Gesicht, zeigt das Ganzbild einen anderen Menschen als die
+# Grossaufnahme -- und niemand merkt es, bis beide Bilder nebeneinander
+# liegen.
+HAUTWORT = ("pale", "fair", "light-skinned", "olive", "tan", "tanned",
+            "brown-skinned", "dark-skinned", "black", "ebony", "freckled",
+            "sun-darkened", "weathered", "ruddy", "sallow")
+HAARWORT = ("blonde", "blond", "brown", "dark", "black", "red", "ginger",
+            "grey", "gray", "white", "auburn", "silver")
+AUGENWORT = ("blue", "green", "brown", "grey", "gray", "hazel", "amber",
+             "dark")
+
+
+def _woerter(text: str, liste) -> set:
+    """Welche der Woerter im Text vorkommen, klein geschrieben."""
+    klein = (text or "").lower()
+    return {w for w in liste if re.search(rf"\b{re.escape(w)}\b", klein)}
+
+
 KLEIDUNGSWORT = ("jacket", "coat", "dress", "shirt", "blouse", "trousers",
                  "pants", "jeans", "boot", "shoe", "hat", "cap", "uniform",
                  "suit", "jumper", "sweater", "hoodie", "skirt", "scarf",
@@ -489,6 +508,19 @@ def pruefen(roh: list[dict], alle: list[dict],
                               ("kleidung", "keine Kleidung")):
                 if not (b.get(feld) or "").strip():
                     fund(0, "hinweis", f"/{b['name']} hat {was}.")
+            # Hautton und Haarfarbe muessen in beiden Texten dieselben
+            # sein. Die Grossaufnahme zeigt sonst einen anderen Menschen als
+            # das Ganzbild.
+            gesicht = (b.get("gesicht") or "").strip()
+            if gesicht:
+                for liste, was in ((HAUTWORT, "Hautton"),
+                                   (HAARWORT, "Haarfarbe")):
+                    a, c = _woerter(text, liste), _woerter(gesicht, liste)
+                    if a and c and not (a & c):
+                        fund(0, "fehler",
+                             f"/{b['name']}: {was} „{', '.join(sorted(a))}“ im "
+                             f"Prompt, „{', '.join(sorted(c))}“ im Gesicht — "
+                             "die Grossaufnahme zeigt sonst jemand anderen.")
             # Kleidung an zwei Stellen widerspricht sich im Bild: der
             # allgemeine Prompt sagt Arbeitsjacke, das Kleidungsfeld Mantel.
             if (b.get("kleidung") or "").strip():

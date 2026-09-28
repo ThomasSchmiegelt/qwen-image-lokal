@@ -239,12 +239,26 @@
 .projektleiste a { color: var(--muted); }
 .projektleiste a:hover { color: var(--link); }
 
-/* Bausteine: Bild, Name und Prompt nebeneinander, Knoepfe rechts. */
+/* Bausteine wie die Szenen: zugeklappt eine Zeile, aufgeklappt alles.
+   Mit dreissig Bausteinen war die volle Liste nicht zu ueberblicken. */
 .baustein {
-  display: flex; align-items: center; gap: 10px; padding: 6px 8px;
-  border-radius: 6px; background: #1b1f27; margin-bottom: 5px;
+  padding: 6px 8px; border-radius: 6px; background: #1b1f27;
+  margin-bottom: 5px;
 }
-.baustein { align-items: flex-start; }
+.baustein.auf { background: #1e232c; }
+.bskopf { display: flex; align-items: center; gap: 9px; }
+.bskopf .pfeil { color: var(--accent); cursor: pointer; user-select: none; }
+.bskopf .bstext { cursor: pointer; }
+.bsdetail {
+  margin: 6px 0 2px 1.4em; font-size: 12px; display: flex;
+  flex-direction: column; gap: 4px;
+}
+.bsdetail code { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.bsdetail .art { margin-left: 0; margin-right: 6px; }
+.bsdetail .augenbild {
+  width: 120px; height: 120px; object-fit: cover; border-radius: 5px;
+  cursor: pointer; display: block; margin-top: 3px;
+}
 .baustein img, .baustein .ohnebild {
   width: 44px; height: 44px; object-fit: cover; border-radius: 5px;
   flex: 0 0 auto; cursor: pointer; background: #262b36;
@@ -254,6 +268,7 @@
   color: var(--muted); cursor: default;
 }
 .bstext { flex: 1; min-width: 0; font-size: 12px; }
+.bskopf .bstext b { font-weight: 600; }
 .bstext code {
   /* Zwei Zeilen statt einer abgeschnittenen: ein Prompt mit Luecken sagt
      erst etwas, wenn man die Luecken sieht. */

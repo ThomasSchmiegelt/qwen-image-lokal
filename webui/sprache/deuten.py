@@ -246,7 +246,10 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 "gesicht"    Nur das Gesicht, auf ENGLISCH, ein kurzer Satz: Form, Augen,
              Haut, Mund, Brauen, der Ansatz der Haare. Nichts vom Körper,
              nichts von der Kleidung -- dieser Text steht allein im Bild,
-             wenn die Kamera dicht an die Augen geht.
+             wenn die Kamera dicht an die Augen geht. Hautton, Haarfarbe
+             und Augenfarbe müssen mit "prompt" übereinstimmen, Wort für
+             Wort: zwei verschiedene Hauttöne ergeben zwei verschiedene
+             Menschen, einen im Ganzbild und einen in der Großaufnahme.
 "kleidung"   Was die Person üblicherweise trägt, auf ENGLISCH, ein kurzer
              Satz mit Schuhen. HIER gehört die Kleidung hin, und hier muss
              etwas stehen: benenne wirkliche Kleidungsstücke. Sagt die
@@ -321,7 +324,9 @@ TEIL_SYSTEM = {
 Antworte ausschließlich mit JSON: {"text": "…"}.
 
 Eine kurze englische Aufzählung, nur das Gesicht: Form, Augen, Haut, Mund,
-Brauen, der Ansatz der Haare. Nichts vom Körper, nichts von der Kleidung,
+Brauen, der Ansatz der Haare. Nennt die Beschreibung der Person einen
+Hautton, eine Haarfarbe oder eine Augenfarbe, übernimm genau diese --
+zwei verschiedene Hauttöne ergeben zwei verschiedene Menschen. Nichts vom Körper, nichts von der Kleidung,
 keine Umgebung -- dieser Text steht allein im Bild, wenn die Kamera dicht an
 die Augen geht. Ein Charakterzug wird zu etwas Sichtbarem: "misstrauisch"
 zu "narrowed eyes and a set jaw", nicht zu "suspicious".
@@ -368,8 +373,10 @@ Antworte ausschließlich mit JSON und genau diesen Schlüsseln:
 
 "prompt"   Alles zur Person selbst OHNE Kleidung: Alter, Statur, Haare,
            Haltung, Blick.
-"gesicht"  Nur das Gesicht: Form, Augen, Haut, Mund, Brauen. Steht davon
-           nichts im Text, leite es aus Alter, Statur und Haaren ab und
+"gesicht"  Nur das Gesicht: Form, Augen, Haut, Mund, Brauen. Hautton, Haar-
+           und Augenfarbe genau so, wie sie in "prompt" stehen -- zwei
+           verschiedene Hauttöne ergeben zwei verschiedene Menschen. Steht
+           davon nichts im Text, leite es aus Alter, Statur und Haaren ab und
            nenne trotzdem Form, Augen und Haut -- dieser Text steht allein
            im Bild, wenn die Kamera dicht an die Augen geht, und "alert
            expression" allein ergibt dort kein Gesicht.

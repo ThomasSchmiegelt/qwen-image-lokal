@@ -855,6 +855,17 @@ class Handler(BaseHTTPRequestHandler):
             if was == "zusammensetzen":
                 alle = {b["id"]: b for b in bausteine.liste(projekt)}
                 teile = [alle[k] for k in (params.get("ids") or []) if k in alle]
+                if params.get("augen") and len(teile) == 1:
+                    # Die Grossaufnahme der Augen: allein aus dem Gesicht,
+                    # ohne Kleidung, ohne Ort, ohne Freistellung.
+                    fertig = bausteine.augen_prompt(teile[0],
+                                                    params.get("werte") or {})
+                    fertig = bausteine.mit_stil(fertig,
+                                                str(params.get("stil") or ""))
+                    if not fertig:
+                        return self._json(400, {"error":
+                            "Erst eine Gesichtsbeschreibung eintragen."})
+                    return self._json(200, {"prompt": fertig, "vorlage": ""})
                 fertig = bausteine.zusammensetzen(teile, params.get("werte") or {})
                 # Das Musterbild eines einzelnen Bausteins zeigt ihn ganz und
                 # vor nichts. Sobald mehrere zusammenkommen, ist es eine Szene

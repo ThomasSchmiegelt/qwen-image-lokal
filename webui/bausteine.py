@@ -24,7 +24,7 @@ import shutil
 import time
 
 import projekte
-from kataloge import GEZEICHNET, NICHT_FOTO, STYLES
+from kataloge import EINSTELLUNGEN, GEZEICHNET, NICHT_FOTO, STYLES
 
 # "szene" entsteht nicht von Hand, sondern beim Zusammenstellen: die fertige
 # Mischung aus Person, Gegenstand und Ort, mit ihren Luecken, ihrem Bild und
@@ -201,13 +201,17 @@ def speichern(projekt: str, baustein: dict) -> dict:
            # Zweitnamen: dieselbe Figur heisst in Szene drei "die Frau" und
            # in Szene zwoelf "Nora". Beides soll denselben Baustein treffen.
            "alias": aliasse(baustein.get("alias")),
+           # Zweites Bild einer Person: die Grossaufnahme der Augen. Sie
+           # zeigt, was bei \\augen entsteht, und deckt auf, wenn Gesicht
+           # und Koerper nicht zusammenpassen.
+           "bild_augen": baustein.get("bild_augen") or "",
            "variablen": vorgaben, "bild": baustein.get("bild") or ""}
 
     # Nichts verlieren, was der Aufrufer nicht mitschickt.
     for vorher in daten:
         if vorher.get("id") != kennung:
             continue
-        for feld in ("bild", "gesicht", "kleidung", "stil"):
+        for feld in ("bild", "bild_augen", "gesicht", "kleidung", "stil"):
             if not neu[feld]:
                 neu[feld] = vorher.get(feld) or ""
         if not neu["alias"]:
@@ -232,7 +236,7 @@ def zusammenfuehren(projekt: str, von: str, nach: str) -> dict:
     if not a or not b or von == nach:
         return {}
     ziel = dict(b)
-    for feld in ("prompt", "gesicht", "kleidung", "bild", "stil"):
+    for feld in ("prompt", "gesicht", "kleidung", "bild", "bild_augen", "stil"):
         if not (ziel.get(feld) or "").strip():
             ziel[feld] = a.get(feld) or ""
     # Vorgaben zu Luecken, die der bleibende Prompt hat, aber nicht kennt.
@@ -255,13 +259,20 @@ def loeschen(projekt: str, kennung: str) -> bool:
     return True
 
 
-def bild_setzen(projekt: str, kennung: str, datei: str) -> bool:
+def bild_setzen(projekt: str, kennung: str, datei: str,
+                feld: str = "bild") -> bool:
     """Haengt das erzeugte Bild an den Baustein. Ruft der Auftragslauf auf,
-    wenn ein Auftrag mit einer Bausteinkennung fertig geworden ist."""
+    wenn ein Auftrag mit einer Bausteinkennung fertig geworden ist.
+
+    `feld` ist "bild" fuer das Musterbild und "bild_augen" fuer die
+    Grossaufnahme -- eine Person hat beides, und beides soll bleiben.
+    """
+    if feld not in ("bild", "bild_augen"):
+        return False
     daten = liste(projekt)
     for b in daten:
         if b.get("id") == kennung:
-            b["bild"] = datei
+            b[feld] = datei
             _schreiben(projekt, daten)
             return True
     return False
@@ -344,6 +355,24 @@ def mit_stil(prompt: str, stil: str) -> str:
     if stil in GEZEICHNET:
         text += f" {NICHT_FOTO}"
     return text
+
+
+def augen_prompt(b: dict, werte: dict | None = None) -> str:
+    """Die Grossaufnahme der Augen zu einer Person.
+
+    Nimmt allein die Gesichtsbeschreibung -- eine Hose im Prompt zoege die
+    Kamera wieder zurueck -- und setzt die erprobte Makro-Formulierung davor.
+    """
+    if b.get("art") != "person":
+        return ""
+    gesicht = person_text(b, werte, nur_gesicht=True).strip().rstrip(".")
+    if not gesicht:
+        return ""
+    e = EINSTELLUNGEN["augen"]
+    anordnung = e["text"]
+    for name, wert in (e.get("vorgabe") or {}).items():
+        anordnung = anordnung.replace("{" + name + "}", wert)
+    return f"{anordnung.rstrip('. ')}. {gesicht}."
 
 
 def freigestellt(prompt: str, art: str) -> str:
