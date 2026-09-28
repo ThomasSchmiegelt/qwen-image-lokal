@@ -458,7 +458,7 @@ def offene_verweise(zeilen, teile: list[dict]) -> list[str]:
     offen, gesehen = [], set()
     for z in zeilen or []:
         text = z if isinstance(z, str) else (z.get("text") or "")
-        for name in VERWEIS.findall(text):
+        for _, name in VERWEIS.findall(text):
             klein = name.lower()
             if klein not in bekannt and klein not in gesehen:
                 gesehen.add(klein)
@@ -557,7 +557,8 @@ def pruefen(roh: list[dict], alle: list[dict],
         ohne_raute, _, _ = hinweise_von(getippt)
         ohne_def, _ = definitionen(ohne_raute)
         text, einst, _ = einstellung_von(ohne_def, eigene)
-        namen = VERWEIS.findall(text)
+        # findall liefert (Minus, Name) -- das Minus interessiert hier nicht.
+        namen = [n for _, n in VERWEIS.findall(text)]
         fehlend = [n for n in dict.fromkeys(namen) if n.lower() not in nach_name]
         teile = [nach_name[n.lower()] for n in namen if n.lower() in nach_name]
         benutzt |= {b["id"] for b in teile}

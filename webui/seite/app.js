@@ -1494,6 +1494,7 @@ function blickUmschalten(i, name) {
     : z.text.replace(new RegExp("/" + roh + "\\b", "gi"), "/-" + name);
   zeigeSelbstszenen();
   gsMerken();
+  gsVorschau();
 }
 
 function bausteinInZeile(i, alt, neu) {
@@ -1512,6 +1513,7 @@ function bausteinInZeile(i, alt, neu) {
   z.text = z.text.replace(/\s{2,}/g, " ").replace(/\s+([,.;!?])/g, "$1").trim();
   zeigeSelbstszenen();
   gsMerken();
+  gsVorschau();
 }
 
 function einstellungBekannt(name) {
@@ -1745,7 +1747,11 @@ function zeigeSelbstszenen() {
           ).join(" · ") + `</p>`
         : "");
   $("gsSelbst").querySelectorAll(".gszeile").forEach(el => {
-    el.oninput = () => { gsZeilen[+el.dataset.i].text = el.value; mitwachsen(el); };
+    el.oninput = () => {
+      gsZeilen[+el.dataset.i].text = el.value;
+      mitwachsen(el);
+      gsVorschau();
+    };
     el.onfocus = () => gsLetzteNr = +el.dataset.i;
     mitwachsen(el);
   });
@@ -1852,6 +1858,7 @@ function vorschlagNehmen(i, name) {
   z.text = (z.text.trim() + " " + verweisText(name)).trim();
   zeigeSelbstszenen();
   gsMerken();
+  gsVorschau();
 }
 
 function vorschlagAlle(i) {
@@ -1942,12 +1949,15 @@ function gsSchieben(i, wohin) {
   gsLetzteNr = ziel;
   zeigeSelbstszenen();
   gsMerken();
+  gsVorschau();
 }
 
 function gsZeileWeg(i) {
   gsZeilen.splice(i, 1);
   if (!gsZeilen.length) gsZeilen = [{text: "", bilder: 1}];
   zeigeSelbstszenen();
+  gsMerken();
+  gsVorschau();
 }
 
 // Die Bausteine genau dieser Szene anlegen. Derselbe Weg wie fuer die ganze
@@ -2709,6 +2719,32 @@ $("gsErzeugen").onclick = async e => {
 };
 
 let gsLetztePrompts = "";
+
+// Der fertige Prompt haengt nicht nur an den geschriebenen Prompts, sondern
+// auch an den Bausteinen der Zeile. Wer einen herausnimmt, will ihn sofort
+// verschwinden sehen -- bisher blieb er stehen, bis irgendwann ein Prompt
+// neu geschrieben wurde. Kurz verzoegert, damit nicht jeder Tastendruck
+// einen Rundlauf ausloest.
+let gsVorschauUhr = null;
+
+function gsVorschau() {
+  clearTimeout(gsVorschauUhr);
+  gsVorschauUhr = setTimeout(gsVorschauHolen, 400);
+}
+
+async function gsVorschauHolen() {
+  const prompts = (GESCHICHTE && GESCHICHTE.prompts) || [];
+  if (!prompts.length) return;
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  if (!zeilen.length) return;
+  const g = await fetch("/api/szenen", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zeilen, prompts, stil: $("gsStil").value})
+  }).then(r => r.json()).catch(() => null);
+  if (!g) return;
+  GESCHICHTE = {...g, prompts};
+  zeigeSelbstszenen();
+}
 
 async function zeigeGliederung(prompts) {
   if (!prompts || !prompts.length) return;
