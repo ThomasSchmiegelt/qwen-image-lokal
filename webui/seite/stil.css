@@ -530,3 +530,14 @@
    nicht darunter wie bei den uebrigen Beschriftungen. */
 .mithaken { display: flex; align-items: center; gap: 8px; font-weight: 400; }
 .mithaken input { width: auto; margin: 0; }
+
+/* Die Stufen eines Szenenaufbaus. Die Art faerbt den Punkt davor: Raum,
+   Figur, Spiegelbild, Zusammensetzen -- so sieht man die Kette. */
+.baustufen { margin: 6px 0 0; padding-left: 22px; font-size: 12px;
+             color: var(--muted); }
+.baustufen li { margin: 2px 0; }
+.baustufen li.kulisse { list-style-type: square; }
+.baustufen li.figur { list-style-type: disc; }
+.baustufen li.spiegelung { list-style-type: circle; }
+.baustufen li.setzen { list-style-type: "→ "; }
+.baustufen li.ergebnis { color: var(--ok); font-weight: 600; }

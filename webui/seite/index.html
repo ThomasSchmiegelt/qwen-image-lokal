@@ -455,8 +455,15 @@
           <input type="checkbox" id="ausBildern"> aus ihren Musterbildern bauen
         </label>
         <div id="ausBildernWahl" style="display:none">
-          <label for="ausBildernAktion">Was soll geschehen?</label>
-          <select id="ausBildernAktion"></select>
+          <label for="ausBildernWeg">Wie?</label>
+          <select id="ausBildernWeg">
+            <option value="stufen">in Stufen aufbauen</option>
+            <option value="sofort">alles auf einmal</option>
+          </select>
+          <div id="ausBildernAktionZeile">
+            <label for="ausBildernAktion">Was soll geschehen?</label>
+            <select id="ausBildernAktion"></select>
+          </div>
         </div>
         <p class="hint" id="ausBildernNote"></p>
       </div>
@@ -727,6 +734,7 @@
         im Prompt steht (unscharf, sechs Finger), hilft das Häkchen — dann
         läuft jeder Schritt zweimal.</p>
       <p class="hint" id="torNote"></p>
+      <div id="bauStufen"></div>
     </fieldset>
 
     <button id="go">Erzeugen</button>

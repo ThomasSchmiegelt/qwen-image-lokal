@@ -400,8 +400,10 @@ function ausBildernZeigen() {
   $("ausBildernListe").innerHTML = plan.teile.map(b =>
     `<code>/${esc(b.name)}</code>${b.bild ? "" : " <b>ohne Bild</b>"}`)
     .join(" · ");
+  const stufen = $("ausBildernWeg").value === "stufen";
+  $("ausBildernAktionZeile").style.display = stufen ? "none" : "block";
   const wahl = ACTIONS.find(a => a.key === $("ausBildernAktion").value);
-  const noetig = wahl ? wahl.min : 2;
+  const noetig = stufen ? 1 : (wahl ? wahl.min : 2);
   const teile = [];
   if (plan.ohne.length) {
     teile.push("Ohne Musterbild geht es nicht: "
@@ -409,22 +411,29 @@ function ausBildernZeigen() {
       + " — erst im Reiter Bausteine mit ▣ eines erzeugen.");
   }
   if (plan.reihe.length < noetig) {
-    teile.push(`Diese Aktion braucht ${noetig} Bilder, vorhanden sind ${
+    teile.push(`Dieser Weg braucht ${noetig} Bild(er), vorhanden sind ${
       plan.reihe.length}.`);
+  } else if (stufen) {
+    teile.push("Erst liest das Sprachmodell aus deinem Prompt heraus, wer "
+      + "welche Haltung einnimmt. Dann entsteht der Raum, danach jede Figur "
+      + "einzeln in dieser Haltung, zuletzt wird eins ins andere gesetzt. "
+      + "Dauert länger und trifft die Beschreibung besser. Die Posen bleiben "
+      + "liegen und hängen sich an ihren Baustein.");
   } else if (plan.reihe.length > maxRefs) {
     teile.push(`Das Modell nimmt höchstens ${maxRefs} Vorlagen, hier sind es ${
-      plan.reihe.length}. Nimm einen Baustein heraus — oder lass den Ort weg `
-      + "und beschreib ihn im Prompt, dann bleiben die Figuren als Bilder.");
+      plan.reihe.length}. Nimm einen Baustein heraus — oder bau in Stufen auf, `
+      + "das kennt die Grenze nicht.");
   } else {
     teile.push("Reihenfolge: "
       + plan.reihe.map((b, n) => `${n + 1}. ${b.name}`).join(", ")
-      + ". Der Prompt sagt, was geschieht; wie die Figuren aussehen, steht "
-      + "in ihren Bildern.");
+      + ". Die Musterbilder gehen unverändert hinein — steht die Figur "
+      + "darauf, steht sie auch im Bild.");
   }
   $("ausBildernNote").textContent = teile.join(" ");
 }
 $("ausBildern").addEventListener("change", ausBildernZeigen);
 $("ausBildernAktion").addEventListener("change", ausBildernZeigen);
+$("ausBildernWeg").addEventListener("change", ausBildernZeigen);
 $("ausBildernLeeren").onclick = e => {
   e.preventDefault();
   promptTeile = [];
@@ -727,6 +736,32 @@ function buttonState(state) {
   }
 }
 
+// Eine Szene Stufe um Stufe bauen. Der Server zerlegt den Satz, erzeugt
+// den Raum, jede Figur einzeln in ihrer Haltung und das Spiegelbild, und
+// setzt dann eins ins andere. Laenger als ein Zug, aber die Haltung stimmt:
+// ein Musterbild zeigt die Figur stehend, und stehend bleibt sie sonst
+// auch dann, wenn die Szene sie liegend haben will.
+async function stufenAufbau(text, ids, stil) {
+  if (!text.trim()) return say("Bitte beschreiben, was zu sehen ist.", "err");
+  let seed = parseInt($("seed").value, 10);
+  if (isNaN(seed) || seed < 0) seed = Math.floor(Math.random() * 2 ** 31);
+  buttonState("busy");
+  const res = await fetch("/api/szenenbau", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      text: text, bausteine: ids, stil: stil || "",
+      aspect: $("aspect").value, base: parseInt($("base").value, 10),
+      steps: parseInt($("steps").value, 10), seed: seed,
+      modell: $("gsModell").value})
+  }).then(r => r.json()).catch(() => null);
+  if (!res || res.error) {
+    buttonState("idle");
+    return say(res ? res.error : "Der Server ist nicht erreichbar.", "err");
+  }
+  say("Die Szene wird in Stufen aufgebaut …", "ok");
+  poll();
+}
+
 async function start() {
   const prompt = $("prompt").value.trim();
   const need = mode === "gruppe" ? aktion().min : MODES[mode].refs;
@@ -735,6 +770,12 @@ async function start() {
   // der Server selbst aus den Bausteinen -- hochladen muss hier niemand.
   const ausBild = mode === "t2i" && $("ausBildern").checked
                   && promptTeile.length > 0;
+  // Der Stufenweg ist kein Auftrag an das Bildmodell, sondern eine Kette
+  // davon. Er geht deshalb an einen eigenen Endpunkt und verlaesst start()
+  // gleich wieder.
+  if (ausBild && $("ausBildernWeg").value === "stufen") {
+    return stufenAufbau(prompt, promptTeile, $("style").value);
+  }
   const plan = ausBild ? ausBildernPlan(promptTeile) : null;
   if (plan) {
     const wahl = ACTIONS.find(a => a.key === $("ausBildernAktion").value);
@@ -1872,8 +1913,8 @@ function zeigeSelbstszenen() {
           <a href="#" class="szprompt" title="nur diese Szene erzeugen"
              onclick="szeneErzeugen(${i}, false);return false">Bild</a>
           <a href="#" class="szprompt"
-             title="aus den Musterbildern der Bausteine zusammensetzen — die Figuren sehen dann aus wie ihr Baustein, nicht wie der Prompt sie beschreibt"
-             onclick="szeneAusBildern(${i});return false">Bild ⧉</a>
+             title="Stufe um Stufe aufbauen: erst der Raum, dann jede Figur einzeln in ihrer Haltung, dann das Spiegelbild, zuletzt alles ineinander"
+             onclick="szeneAusBildern(${i});return false">Aufbau ⧉</a>
           <a href="#" class="szprompt"
              title="diese Szene erzeugen und daraus ein Video bauen"
              onclick="szeneErzeugen(${i}, true);return false">Video</a>
@@ -2110,33 +2151,15 @@ async function szeneAusBildern(i) {
     return say("Ohne Musterbild: " + plan.ohne.map(b => b.name).join(", ")
       + " — erst bei Bausteine mit ▣ eines erzeugen.", "err");
   }
-  if (plan.reihe.length < 2) {
-    return say("Zum Zusammensetzen braucht es mindestens zwei Musterbilder.",
-               "err");
+  if (!plan.reihe.length) {
+    return say("Kein Baustein der Szene hat ein Musterbild.", "err");
   }
-  if (plan.reihe.length > maxRefs) {
-    return say(`Die Szene hat ${plan.reihe.length} Bausteine mit Musterbild, `
-      + `das Modell nimmt höchstens ${maxRefs} Vorlagen. Nimm einen heraus `
-      + "— den Ort etwa, der lässt sich im Prompt beschreiben.", "err");
-  }
-  let seed = parseInt($("seed").value, 10);
-  if (isNaN(seed) || seed < 0) seed = Math.floor(Math.random() * 2 ** 31);
-  const res = await fetch("/api/generate", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      mode: "gruppe", action: plan.aktion, prompt: fertig[0],
-      bausteine: plan.reihe.map(b => b.id),
-      aspect: $("aspect").value, base: parseInt($("base").value, 10),
-      steps: parseInt($("steps").value, 10), seed: seed, count: 1,
-      true_cfg_scale: parseFloat($("cfg").value)})
-  }).then(r => r.json()).catch(() => null);
-  if (!res || res.error) {
-    return say(res ? res.error : "Der Server ist nicht erreichbar.", "err");
-  }
-  const wahl = ACTIONS.find(a => a.key === plan.aktion);
-  say(`Szene ${i + 1} wird aus ${plan.reihe.length} Musterbildern gebaut (${
-    wahl ? wahl.label : plan.aktion}) …`, "ok");
-  poll();
+  // Die getippte Zeile, nicht der fertige Prompt: aus ihr liest das
+  // Sprachmodell die Haltungen heraus, und dort stehen sie im Klartext.
+  // Der fertige Prompt hat die Namen laengst durch Beschreibungen ersetzt.
+  const text = gsZeilen[i].text;
+  await stufenAufbau(text, plan.reihe.map(b => b.id), $("gsStil").value);
+  say(`Szene ${i + 1} wird in Stufen aufgebaut …`, "ok");
 }
 
 // Die Reihenfolge aendern. Eine Szene an die falsche Stelle zu schreiben
@@ -3219,6 +3242,7 @@ function poll() {
       zeigeWarteschlange(s);
       zeigeExpose(s.expose);
       zeigeGliederung(s.gliederung);
+      zeigeBau(s.bau);
       laufendeArbeit = !!(s.busy && s.titel);
       wartendeAnzahl = (s.wartend || []).length;
       // Wechselt der laufende Auftrag, ist der vorige fertig -- seine Bilder
@@ -3243,6 +3267,32 @@ function poll() {
     loadGallery();
   }, 900);
 }
+// Die Stufen eines Szenenaufbaus, waehrend sie entstehen. Ohne diese Liste
+// sieht ein Aufbau aus wie ein haengender Auftrag: acht Bilder lang
+// passiert scheinbar nichts, und das Ergebnis kommt erst ganz zum Schluss.
+function zeigeBau(bau) {
+  const stufen = (bau || {}).stufen || [];
+  if (!stufen.length) { $("bauStufen").innerHTML = ""; return; }
+  const plan = bau.plan || {};
+  const spiegel = plan.spiegelung || {};
+  const kopf = [];
+  if ((plan.kulisse || "").trim()) kopf.push("Raum: " + plan.kulisse);
+  (plan.figuren || []).forEach(f => {
+    if ((f.pose || "").trim()) kopf.push(`${f.name}: ${f.pose}`);
+  });
+  if ((spiegel.wo || "").trim()) {
+    kopf.push(`Spiegelung${spiegel.name ? " von " + spiegel.name : ""}: ${
+      spiegel.wo}`);
+  }
+  $("bauStufen").innerHTML =
+    `<p class="hint">So hat das Sprachmodell die Szene gelesen — ${
+      esc(kopf.join(" · "))}</p>`
+    + `<ol class="baustufen">` + stufen.map(st =>
+      `<li class="${esc(st.art)}${st.ergebnis ? " ergebnis" : ""}">${
+        esc(st.titel)}${st.ergebnis ? " — das fertige Bild" : ""}</li>`)
+      .join("") + `</ol>`;
+}
+
 // Der laufende Auftrag und die wartenden darunter. Wartende lassen sich
 // verschieben und herausnehmen; der laufende nur abbrechen, er hat schon
 // Rechenzeit verbraucht.

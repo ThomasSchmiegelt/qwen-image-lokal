@@ -35,6 +35,7 @@ import demo  # noqa: E402
 import projekte  # noqa: E402
 import bausteine  # noqa: E402
 import baender  # noqa: E402
+import szenenbau  # noqa: E402
 from torwache import torwaechter  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +56,10 @@ engine = Engine()
 current = {"files": [], "error": None, "translated": {}, "stage": "",
            "video": None, "gelesen": {}, "nummer": 0, "titel": "", "tor": [],
            "gliederung": [], "expose": {},
+           # Die Stufen eines Szenenaufbaus: was in welcher Reihenfolge
+           # entsteht. Eigenes Feld, weil "gliederung" die Szenenprompts
+           # der Geschichte fuehrt und die Oberflaeche daraus nachlaedt.
+           "bau": {},
            # Zaehlstand fuer den Balken, wenn keine Bilder entstehen: das
            # Sprachmodell schreibt Prompt 3 von 8, und das soll man sehen.
            "fortschritt": {"ist": 0, "von": 0}}
@@ -94,6 +99,9 @@ def _titel(art: str, params: dict) -> str:
                 else f"Szenen schreiben, {len(params.get('kapitel') or [])} Abschnitte")
     if art == "prompts":
         return f"Prompts schreiben, {len(params.get('zeilen') or [])} Szenen"
+    if art == "szenenbau":
+        text = (params.get("text") or "").strip()
+        return f"Szene aufbauen: {text[:44]}" if text else "Szene aufbauen"
     if art == "demo":
         if params.get("bloecke"):
             return f"Ablauf, {len(params['bloecke'])} Bloecke"
@@ -234,13 +242,15 @@ def _abarbeiten(auftrag: dict, weitere: list[dict] | None = None) -> None:
                  else f"{len(alle)} Auftraege zusammen")
         current.update(files=[], error=None, translated={}, video=None,
                        gelesen={}, tor=[], gliederung=[], expose={},
+                       bau={},
                        stage="wird vorbereitet",
                        fortschritt={"ist": 0, "von": 0},
                        nummer=auftrag["nummer"], titel=titel)
         if len(alle) == 1:
             laeufe = {"demo": run_demo, "prompts": run_prompts,
                       "expose": run_expose, "ergaenzen": run_ergaenzen,
-                      "aufbau": run_aufbau, "prosa": run_prosa}
+                      "aufbau": run_aufbau, "prosa": run_prosa,
+                      "szenenbau": run_szenenbau}
             laeufe.get(auftrag["art"], run_job)(auftrag["params"])
         else:
             # Ein Ladevorgang fuer alle: die fertigen Prompts gehen als Liste
@@ -810,6 +820,126 @@ def _demo_ohne_basis(params, stamp, fest, seed, sammler, pruefe,
         current["video"] = os.path.basename(ziel_datei)
     melden("")
     engine.note("idle", f"Szene fertig: {len(gesammelt)} Bild(er)")
+
+
+def run_szenenbau(params: dict) -> None:
+    """Eine Szene Stufe um Stufe bauen statt in einem Zug.
+
+    Erst der Raum, dann jede Figur einzeln in ihrer Haltung, dann das
+    Spiegelbild, zuletzt alles ineinander. Jedes Zwischenbild bleibt liegen
+    und haengt sich an seinen Baustein -- eine Pose, die einmal stimmt,
+    soll wiederverwendbar sein.
+    """
+    try:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        projekt = _projekt_des_laufs
+        alle = {b["id"]: b for b in bausteine.liste(projekt)}
+        teile = [alle[k] for k in (params.get("bausteine") or []) if k in alle]
+        if not teile:
+            raise RuntimeError("Kein Baustein fuer den Aufbau")
+
+        melden("Die Szene wird zerlegt …")
+        plan = params.get("plan")
+        if not isinstance(plan, dict) or not plan.get("figuren"):
+            plan = chat.bauplan(params.get("text") or "",
+                                [b["name"] for b in teile],
+                                params.get("modell") or None)
+        current["bau"] = {"plan": plan, "stufen": []}
+        folge = szenenbau.schritte(plan, teile, params.get("stil") or "")
+        if not folge:
+            raise RuntimeError("Aus der Szene laesst sich kein Aufbau bilden")
+        current["bau"] = {"plan": plan,
+                          "stufen": szenenbau.uebersicht(folge)}
+
+        fest = {"base": int(params.get("base", 1024)),
+                "steps": int(params.get("steps", 24)),
+                "aspect": params.get("aspect") or "3:2"}
+        seed = int(params.get("seed") or 42)
+        dateien: dict[int, str] = {}
+
+        def laden(datei):
+            bild = Image.open(os.path.join(ziel(), datei))
+            bild.load()
+            return bild
+
+        def vorlagen_von(schritt):
+            """Die Bilder, auf denen eine Stufe aufsetzt. Eine Zahl meint
+            eine fruehere Stufe, "musterbild:<id>" das Bild des Bausteins."""
+            raus = []
+            for quelle in schritt.get("vorlagen") or []:
+                if isinstance(quelle, int):
+                    if quelle in dateien:
+                        raus.append(laden(dateien[quelle]))
+                    continue
+                kennung = str(quelle).split(":", 1)[-1]
+                datei = (alle.get(kennung) or {}).get("bild") or ""
+                pfad = os.path.join(ziel(), datei)
+                if datei and os.path.isfile(pfad):
+                    raus.append(laden(datei))
+            return raus
+
+        for schritt in folge:
+            if engine.aborted:
+                break
+            melden(schritt["titel"], schritt["nr"], len(folge))
+            # Eine Stufe, die ein fertiges Bild meint statt eines neuen:
+            # eine Figur ohne eigene Haltung steht schon freigestellt im
+            # Katalog. Sie noch einmal zu rechnen kostet anderthalb Minuten
+            # und ergibt dasselbe.
+            vorhanden = str(schritt.get("vorhanden") or "")
+            if vorhanden:
+                kennung = vorhanden.split(":", 1)[-1]
+                datei = (alle.get(kennung) or {}).get("bild") or ""
+                if not datei or not os.path.isfile(os.path.join(ziel(), datei)):
+                    raise RuntimeError(f"„{schritt['titel']}“ fehlt das Bild")
+                dateien[schritt["nr"]] = datei
+                continue
+            refs = vorlagen_von(schritt)
+            text = schritt["prompt"]
+            art = ("gruppe" if schritt.get("aktion")
+                   else "edit" if refs else "t2i")
+            gemacht: list[str] = []
+
+            def sammler(meta, image, _titel=schritt["titel"]):
+                name = _save({**meta, "prompt": meta.get("prompt") or _titel},
+                             image, stamp, "bau",
+                             nummer=len(current["files"]) + 1)
+                current["files"].append(name)
+                gemacht.append(name)
+
+            engine.run_series(**_series_kwargs(
+                {**fest, "mode": art, "prompt": text, "count": 1,
+                 "seed": seed + schritt["nr"],
+                 "action": schritt.get("aktion") or "zusammen",
+                 # Beim Zusammensetzen bestimmt die Kulisse das Format --
+                 # ein Hochformat aus dem Posenbild wuerde den Raum
+                 # beschneiden.
+                 "follow_reference": art != "gruppe"},
+                refs, art, sammler))
+            if not gemacht:
+                if engine.aborted:
+                    break
+                raise RuntimeError(f"„{schritt['titel']}“ ergab kein Bild")
+            dateien[schritt["nr"]] = gemacht[-1]
+
+            # Das Zwischenbild an seinen Baustein. Es bleibt damit auch dann
+            # auffindbar, wenn das fertige Bild laengst weiterverarbeitet ist.
+            if schritt.get("baustein") and schritt.get("feld"):
+                bausteine.bild_anhaengen(
+                    projekt, schritt["baustein"], schritt["feld"],
+                    gemacht[-1], wozu=(params.get("text") or "")[:120],
+                    prompt=text)
+
+        melden("")
+        fertig = len(current["files"])
+        engine.note("idle", f"Aufbau fertig: {fertig} Bild(er)"
+                    if fertig else "abgebrochen")
+    except Exception:
+        err = traceback.format_exc()
+        print(err, file=sys.stderr)
+        current["error"] = err.strip().splitlines()[-1]
+        melden("")
+        engine.note("idle", "Aufbau fehlgeschlagen")
 
 
 def run_demo(params: dict) -> None:

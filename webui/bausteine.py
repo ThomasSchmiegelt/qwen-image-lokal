@@ -172,6 +172,51 @@ def namen(b: dict) -> list[str]:
     return [b.get("name") or ""] + aliasse(b.get("alias"))
 
 
+# Die weiteren Bilder eines Bausteins. Je Eintrag die Datei und wozu sie
+# entstanden ist -- ohne den Anlass ist eine Liste von Dateinamen nach zwei
+# Wochen nicht mehr zu deuten.
+BILDFELDER = ("posen", "spiegelbilder")
+
+
+def _bildliste(roh) -> list[dict]:
+    """Eine Bildliste auf ihre Form bringen. Aeltere Staende haben keine."""
+    raus = []
+    for eintrag in (roh or []):
+        if isinstance(eintrag, str):
+            eintrag = {"datei": eintrag}
+        if not isinstance(eintrag, dict):
+            continue
+        datei = str(eintrag.get("datei") or "").strip()
+        if not datei:
+            continue
+        raus.append({"datei": datei,
+                     "wozu": str(eintrag.get("wozu") or "")[:120],
+                     "prompt": str(eintrag.get("prompt") or "")[:600]})
+    # Zwanzig je Feld reichen. Darueber ist es kein Vorrat mehr, sondern
+    # eine Halde, und die Auswahl in der Oberflaeche wird unbrauchbar.
+    return raus[-20:]
+
+
+def bild_anhaengen(projekt: str, kennung: str, feld: str, datei: str,
+                   wozu: str = "", prompt: str = "") -> bool:
+    """Ein weiteres Bild an einen Baustein haengen, ohne die uebrigen
+    Felder anzufassen. Der Szenenaufbau legt so seine Zwischenbilder ab."""
+    if feld not in BILDFELDER or not datei:
+        return False
+    daten = liste(projekt)
+    for b in daten:
+        if b.get("id") != kennung:
+            continue
+        vorhanden = _bildliste(b.get(feld))
+        if any(e["datei"] == datei for e in vorhanden):
+            return True
+        b[feld] = _bildliste(vorhanden + [{"datei": datei, "wozu": wozu,
+                                           "prompt": prompt}])
+        _schreiben(projekt, daten)
+        return True
+    return False
+
+
 def speichern(projekt: str, baustein: dict) -> dict:
     """Legt einen Baustein an oder ersetzt einen vorhandenen."""
     art = baustein.get("art") if baustein.get("art") in ARTEN else "person"
@@ -212,6 +257,12 @@ def speichern(projekt: str, baustein: dict) -> dict:
            # zeigt, was bei \\augen entsteht, und deckt auf, wenn Gesicht
            # und Koerper nicht zusammenpassen.
            "bild_augen": baustein.get("bild_augen") or "",
+           # Weitere Bilder derselben Figur: Posen aus einem Szenenaufbau
+           # und Spiegelbilder. Sie loeschen sich nicht mit dem Bild, das
+           # sie hervorgebracht hat -- wer Malva einmal liegend hat, soll
+           # sie beim naechsten Mal nicht neu rechnen muessen.
+           "posen": _bildliste(baustein.get("posen")),
+           "spiegelbilder": _bildliste(baustein.get("spiegelbilder")),
            "variablen": vorgaben, "bild": baustein.get("bild") or ""}
 
     # Nichts verlieren, was der Aufrufer nicht mitschickt.
@@ -222,6 +273,9 @@ def speichern(projekt: str, baustein: dict) -> dict:
                      "wesen", "stil"):
             if not neu[feld]:
                 neu[feld] = vorher.get(feld) or ""
+        for feld in ("posen", "spiegelbilder"):
+            if not neu[feld]:
+                neu[feld] = _bildliste(vorher.get(feld))
         if not neu["alias"]:
             neu["alias"] = aliasse(vorher.get("alias"))
     rest = [b for b in daten if b.get("id") != kennung]

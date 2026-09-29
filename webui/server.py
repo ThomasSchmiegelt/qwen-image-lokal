@@ -248,6 +248,7 @@ class Handler(BaseHTTPRequestHandler):
             status["tor"] = list(current["tor"])
             status["gliederung"] = list(current["gliederung"])
             status["expose"] = dict(current["expose"])
+            status["bau"] = dict(current["bau"])
             status["nummer"] = current["nummer"]
             status["titel"] = current["titel"]
             status.update(uebersicht())
@@ -894,6 +895,26 @@ class Handler(BaseHTTPRequestHandler):
                     # Szene gespeichert und bleibt wiederverwendbar.
                     "vorlage": bausteine.vorlage(teile)})
             return self._json(400, {"error": "unbekannte Aktion"})
+
+        if path == "/api/szenenbau":
+            # Eine Szene in Stufen bauen: Kulisse, Posen, Spiegelung,
+            # Zusammensetzen. Der Bauplan entsteht im Auftrag selbst -- das
+            # Sprachmodell braucht ein paar Sekunden, und die gehoeren in
+            # den Fortschritt, nicht in eine haengende Antwort.
+            params = self._body()
+            if params is None:
+                return self._json(400, {"error": "ungueltiges JSON"})
+            if not (params.get("text") or "").strip():
+                return self._json(400, {"error": "Keine Beschreibung"})
+            projekt = projekte.aktiv()
+            alle = {b["id"] for b in bausteine.liste(projekt)}
+            gewaehlt = [k for k in (params.get("bausteine") or []) if k in alle]
+            if not gewaehlt:
+                return self._json(400, {"error":
+                    "Erst Bausteine angeben, die vorkommen sollen"})
+            params["bausteine"] = gewaehlt
+            auftrag = einreihen("szenenbau", params)
+            return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
 
         if path == "/api/projekt":
             # Anlegen, wechseln, umbenennen, loeschen. Alles am eigenen
