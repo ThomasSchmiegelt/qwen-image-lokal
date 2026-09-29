@@ -113,6 +113,11 @@ fetch("/api/info").then(r => r.json()).then(info => {
   ACTIONS = info.group_actions;
   $("action").innerHTML = ACTIONS.map(
     a => `<option value="${a.key}">${esc(a.label)}</option>`).join("");
+  $("ausBildernAktion").innerHTML = $("action").innerHTML;
+  $("t2iEinst").innerHTML = `<option value="">— keine —</option>`
+    + EINSTELLUNGEN.map(e => `<option value="${e.key}">${esc(e.label)}${
+        e.paar ? " (zwei Bilder)" : ""}</option>`).join("");
+  t2iEinstChanged();
   PAINTS = info.paints;
   paintPreview();
   $("cmdHint").innerHTML = "Direkt tippbar im Prompt: "
@@ -289,6 +294,8 @@ function setMode(next) {
   demoDauer();
   const istVarianten = next === "varianten";
   $("gruppeBox").style.display = next === "gruppe" ? "block" : "none";
+  $("aufbauBox").style.display = next === "t2i" ? "block" : "none";
+  if (next === "t2i") ausBildernZeigen();
   groupSizeSichtbar();
   paintPreview();
   $("variantenBox").style.display = istVarianten ? "block" : "none";
@@ -341,6 +348,88 @@ function aktion() {
   return ACTIONS.find(a => a.key === $("action").value) || {min: 2, hint: ""};
 }
 $("action").addEventListener("change", () => { setMode(mode); refresh(); });
+
+// ---------- Kameraeinstellung in Text->Bild ----------
+// Dieselben Einstellungen wie hinter dem Rueckwaertsschraegstrich in einer
+// Szene. Was sich spiegelt, bekommt eine eigene Zeile: im Prompt
+// dazwischengeschrieben landet es irgendwo im Satz, und das Modell bezieht
+// es dann auf das falsche.
+function t2iEintrag() {
+  return EINSTELLUNGEN.find(e => e.key === $("t2iEinst").value) || null;
+}
+function t2iEinstChanged() {
+  const e = t2iEintrag();
+  const luecke = e ? e.luecke : "";
+  $("t2iSpiegelZeile").style.display = luecke ? "block" : "none";
+  $("t2iSpiegelLabel").textContent = luecke === "hoehe"
+    ? "Wie hoch die Kamera hängt" : "Was sich spiegelt";
+  $("t2iSpiegel").placeholder = luecke === "hoehe"
+    ? "z. B. fünf Meter" : "z. B. das brennende Schiff";
+}
+$("t2iEinst").addEventListener("change", t2iEinstChanged);
+
+// ---------- Bild aus den Musterbildern der Bausteine ----------
+// Die Kennungen der Bausteine, die ueber -> in den Prompt gewandert sind.
+// Aus ihren Musterbildern laesst sich das Bild zusammensetzen, statt die
+// Personen im Prompt zu beschreiben und zu hoffen -- bei mehr als zwei
+// Figuren ist das der verlaesslichere Weg.
+let promptTeile = [];
+
+// Welche Aktion zu einer Menge Bausteine passt und was davon ein Bild hat.
+// Ein Ort mit Musterbild ist die Szene und gehoert nach vorn: "Figur in
+// eine Szene setzen" liest das erste Bild als Kulisse.
+function ausBildernPlan(ids) {
+  const teile = ids.map(id => BAUSTEINE.find(b => b.id === id))
+                   .filter(b => b);
+  const ohne = teile.filter(b => !b.bild);
+  const orte = teile.filter(b => b.bild && b.art === "ort");
+  const rest = teile.filter(b => b.bild && b.art !== "ort");
+  const reihe = orte.slice(0, 1).concat(rest);
+  return {teile: teile, ohne: ohne, reihe: reihe,
+          aktion: orte.length ? "einsetzen" : "zusammen"};
+}
+
+function ausBildernZeigen() {
+  const an = promptTeile.length > 0;
+  $("ausBildernBox").style.display = an ? "block" : "none";
+  if (!an) { $("ausBildern").checked = false; }
+  $("ausBildernWahl").style.display =
+    an && $("ausBildern").checked ? "block" : "none";
+  if (!an) return;
+  const plan = ausBildernPlan(promptTeile);
+  $("ausBildernListe").innerHTML = plan.teile.map(b =>
+    `<code>/${esc(b.name)}</code>${b.bild ? "" : " <b>ohne Bild</b>"}`)
+    .join(" · ");
+  const wahl = ACTIONS.find(a => a.key === $("ausBildernAktion").value);
+  const noetig = wahl ? wahl.min : 2;
+  const teile = [];
+  if (plan.ohne.length) {
+    teile.push("Ohne Musterbild geht es nicht: "
+      + plan.ohne.map(b => b.name).join(", ")
+      + " — erst im Reiter Bausteine mit ▣ eines erzeugen.");
+  }
+  if (plan.reihe.length < noetig) {
+    teile.push(`Diese Aktion braucht ${noetig} Bilder, vorhanden sind ${
+      plan.reihe.length}.`);
+  } else if (plan.reihe.length > maxRefs) {
+    teile.push(`Das Modell nimmt höchstens ${maxRefs} Vorlagen, hier sind es ${
+      plan.reihe.length}. Nimm einen Baustein heraus — oder lass den Ort weg `
+      + "und beschreib ihn im Prompt, dann bleiben die Figuren als Bilder.");
+  } else {
+    teile.push("Reihenfolge: "
+      + plan.reihe.map((b, n) => `${n + 1}. ${b.name}`).join(", ")
+      + ". Der Prompt sagt, was geschieht; wie die Figuren aussehen, steht "
+      + "in ihren Bildern.");
+  }
+  $("ausBildernNote").textContent = teile.join(" ");
+}
+$("ausBildern").addEventListener("change", ausBildernZeigen);
+$("ausBildernAktion").addEventListener("change", ausBildernZeigen);
+$("ausBildernLeeren").onclick = e => {
+  e.preventDefault();
+  promptTeile = [];
+  ausBildernZeigen();
+};
 function groupSizeSichtbar() {
   $("groupSizeBox").style.display = $("action").value === "ergaenzen" ? "block" : "none";
 }
@@ -641,6 +730,28 @@ function buttonState(state) {
 async function start() {
   const prompt = $("prompt").value.trim();
   const need = mode === "gruppe" ? aktion().min : MODES[mode].refs;
+  // Text->Bild aus den Musterbildern: nach aussen bleibt es der Reiter
+  // Text->Bild, der Auftrag laeuft aber als Gruppenbild. Die Bilder holt
+  // der Server selbst aus den Bausteinen -- hochladen muss hier niemand.
+  const ausBild = mode === "t2i" && $("ausBildern").checked
+                  && promptTeile.length > 0;
+  const plan = ausBild ? ausBildernPlan(promptTeile) : null;
+  if (plan) {
+    const wahl = ACTIONS.find(a => a.key === $("ausBildernAktion").value);
+    if (plan.ohne.length) {
+      return say("Ohne Musterbild: "
+        + plan.ohne.map(b => b.name).join(", ")
+        + " — erst bei Bausteine mit ▣ eines erzeugen.", "err");
+    }
+    if (plan.reihe.length < (wahl ? wahl.min : 2)) {
+      return say(`„${wahl ? wahl.label : "Diese Aktion"}“ braucht ${
+        wahl ? wahl.min : 2} Musterbilder.`, "err");
+    }
+    if (plan.reihe.length > maxRefs) {
+      return say(`Höchstens ${maxRefs} Vorlagen — hier sind es ${
+        plan.reihe.length}.`, "err");
+    }
+  }
   // Ein Effekt bringt seine eigene Anweisung mit -- /upscale, /removebg und
   // die uebrigen brauchen kein Wort Eingabe. Der Server sieht das genauso.
   if (!prompt && !templates[mode] && !$("effect").value)
@@ -655,7 +766,14 @@ async function start() {
   if (isNaN(seed) || seed < 0) { seed = Math.floor(Math.random() * 2 ** 31); $("seed").value = seed; }
 
   const body = {
-    mode, prompt, negative_prompt: $("negative").value,
+    mode: plan ? "gruppe" : mode, prompt,
+    negative_prompt: $("negative").value,
+    // Die Musterbilder nennt die Seite nur bei der Kennung; laden tut sie
+    // der Server aus dem Projekt. Base64 durch den Browser zu schicken,
+    // was ohnehin schon auf der Platte liegt, waere unnoetig.
+    bausteine: plan ? plan.reihe.map(b => b.id) : [],
+    einstellung: mode === "t2i" ? $("t2iEinst").value : "",
+    spiegelung: mode === "t2i" ? $("t2iSpiegel").value : "",
     images: need ? refs : [],
     image_prompts: mode === "gruppe" ? refs.map((_, i) => refPrompts[i] || "") : [],
     aspect: $("aspect").value, base: parseInt($("base").value, 10),
@@ -664,7 +782,8 @@ async function start() {
     seed, count: parseInt($("count").value, 10) || 1,
     sweep: $("sweep").value, lock_seed: $("lockSeed").checked,
     view: $("view").value, effect: $("effect").value, form: $("form").value,
-    keep: $("keep").value, action: $("action").value, scenario: $("scenario").value,
+    keep: $("keep").value, scenario: $("scenario").value,
+    action: plan ? $("ausBildernAktion").value : $("action").value,
     group_size: parseInt($("groupSize").value, 10) || 2,
     paint: $("paint").value, palette: $("palette").value,
     scene: $("scene").value,
@@ -1202,6 +1321,8 @@ async function bausteinInPrompt(id) {
   const da = $("prompt").value.trim();
   $("prompt").value = da ? `${da}, ${g.prompt}` : g.prompt;
   $("prompt").focus();
+  if (!promptTeile.includes(id)) promptTeile.push(id);
+  ausBildernZeigen();
   say(`„${b.name}“ in den Prompt übernommen.`, "ok");
 }
 
@@ -1751,6 +1872,9 @@ function zeigeSelbstszenen() {
           <a href="#" class="szprompt" title="nur diese Szene erzeugen"
              onclick="szeneErzeugen(${i}, false);return false">Bild</a>
           <a href="#" class="szprompt"
+             title="aus den Musterbildern der Bausteine zusammensetzen — die Figuren sehen dann aus wie ihr Baustein, nicht wie der Prompt sie beschreibt"
+             onclick="szeneAusBildern(${i});return false">Bild ⧉</a>
+          <a href="#" class="szprompt"
              title="diese Szene erzeugen und daraus ein Video bauen"
              onclick="szeneErzeugen(${i}, true);return false">Video</a>
         </div>
@@ -1959,6 +2083,60 @@ async function szeneErzeugen(i, mitVideo) {
   ohneVideo = false;
   say(mitVideo ? `Szene ${i + 1} wird erzeugt, danach das Video …`
                : `Szene ${i + 1} wird erzeugt …`);
+}
+
+// Dieselbe Szene, aber aus den Musterbildern der beteiligten Bausteine
+// zusammengesetzt. Bei mehr als zwei Figuren ist das der verlaesslichere
+// Weg: ein Prompt kann Kleidung und Gesicht nicht an einzelne Personen
+// binden, ein Referenzbild je Figur schon. Der Ort kommt nach vorn -- bei
+// "Figur in eine Szene setzen" ist das erste Bild die Kulisse.
+async function szeneAusBildern(i) {
+  const z = gsZeilen[i];
+  if (!z || !z.text.trim()) return say("Die Szene ist leer.", "err");
+  const g = await fetch("/api/szenen", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      zeilen: [z], stil: $("gsStil").value,
+      prompts: [{nr: 1, ...(((GESCHICHTE && GESCHICHTE.prompts) || [])
+                 .find(p => p.nr === i + 1) || {}), nr: 1}]})
+  }).then(r => r.json()).catch(() => null);
+  const fertig = g && g.je_szene && g.je_szene.length ? g.je_szene[0].texte : [];
+  if (!fertig.length) {
+    return say("Für diese Szene gibt es noch keinen Prompt — erst „Prompt“.",
+               "err");
+  }
+  const plan = ausBildernPlan((g.szenen[0] || {}).teile || []);
+  if (plan.ohne.length) {
+    return say("Ohne Musterbild: " + plan.ohne.map(b => b.name).join(", ")
+      + " — erst bei Bausteine mit ▣ eines erzeugen.", "err");
+  }
+  if (plan.reihe.length < 2) {
+    return say("Zum Zusammensetzen braucht es mindestens zwei Musterbilder.",
+               "err");
+  }
+  if (plan.reihe.length > maxRefs) {
+    return say(`Die Szene hat ${plan.reihe.length} Bausteine mit Musterbild, `
+      + `das Modell nimmt höchstens ${maxRefs} Vorlagen. Nimm einen heraus `
+      + "— den Ort etwa, der lässt sich im Prompt beschreiben.", "err");
+  }
+  let seed = parseInt($("seed").value, 10);
+  if (isNaN(seed) || seed < 0) seed = Math.floor(Math.random() * 2 ** 31);
+  const res = await fetch("/api/generate", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      mode: "gruppe", action: plan.aktion, prompt: fertig[0],
+      bausteine: plan.reihe.map(b => b.id),
+      aspect: $("aspect").value, base: parseInt($("base").value, 10),
+      steps: parseInt($("steps").value, 10), seed: seed, count: 1,
+      true_cfg_scale: parseFloat($("cfg").value)})
+  }).then(r => r.json()).catch(() => null);
+  if (!res || res.error) {
+    return say(res ? res.error : "Der Server ist nicht erreichbar.", "err");
+  }
+  const wahl = ACTIONS.find(a => a.key === plan.aktion);
+  say(`Szene ${i + 1} wird aus ${plan.reihe.length} Musterbildern gebaut (${
+    wahl ? wahl.label : plan.aktion}) …`, "ok");
+  poll();
 }
 
 // Die Reihenfolge aendern. Eine Szene an die falsche Stelle zu schreiben

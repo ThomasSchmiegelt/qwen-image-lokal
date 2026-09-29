@@ -4,6 +4,7 @@ Start:  ./start.sh          bzw.  ./qwen_bild/bin/python webui/server.py
 Dann:   http://127.0.0.1:7860
 """
 
+import base64
 import hashlib
 import io
 import json
@@ -115,6 +116,40 @@ class Handler(BaseHTTPRequestHandler):
         bleibt deshalb dem eigenen Rechner vorbehalten.
         """
         return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+    def _bausteinbilder(self, params: dict):
+        """Die Musterbilder der genannten Bausteine als Datenzeilen.
+
+        Zurueck kommt die Liste, oder ein Fehlerpaar fuer `_json`, wenn ein
+        Baustein noch kein Bild hat -- ohne Bild ist nichts zusammenzusetzen,
+        und ein stillschweigend ausgelassener Baustein faellt erst im
+        fertigen Bild auf.
+        """
+        kennungen = [str(k) for k in (params.get("bausteine") or []) if k]
+        if not kennungen:
+            return []
+        projekt = projekte.aktiv()
+        ordner = projekte.bilder(projekt)
+        nach_id = {b["id"]: b for b in bausteine.liste(projekt)}
+        # "bild" ist das Musterbild, "bild_augen" die Grossaufnahme.
+        feld = "bild_augen" if params.get("baustein_feld") == "bild_augen" \
+            else "bild"
+        geladen, fehlt = [], []
+        for kennung in kennungen:
+            b = nach_id.get(kennung) or {}
+            datei = str(b.get(feld) or "")
+            pfad = os.path.join(ordner, datei)
+            if not SAFE_NAME.fullmatch(datei) or not os.path.isfile(pfad):
+                fehlt.append(b.get("name") or kennung)
+                continue
+            with open(pfad, "rb") as fh:
+                geladen.append("data:image/png;base64,"
+                               + base64.b64encode(fh.read()).decode())
+        if fehlt:
+            return (400, {"error": "Noch kein Musterbild bei: "
+                          + ", ".join(fehlt)
+                          + " \u2014 erst mit \u25a3 eines erzeugen."})
+        return geladen
 
     def _bild_aus_anfrage(self):
         """Das Bild aus dem Anfragerumpf, als PNG-Bytes fuers Sprachmodell.
@@ -1048,6 +1083,18 @@ class Handler(BaseHTTPRequestHandler):
 
         refs = params.get("images") or []
 
+        # Musterbilder von Bausteinen als Vorlage. Wer mehrere Personen in
+        # einem Bild will, hat sie meist schon als Baustein mit Musterbild
+        # angelegt -- dieselben Bilder noch einmal von Hand hochzuladen ist
+        # Arbeit ohne Gewinn. Sie stehen vor den hochgeladenen: bei "Figur in
+        # eine Szene setzen" ist das erste Bild die Szene.
+        holen = self._bausteinbilder(params)
+        if isinstance(holen, tuple):
+            return self._json(*holen)
+        if holen:
+            refs = holen + list(refs)
+            params["images"] = refs
+
         # Getippter Kurzbefehl: Er ist die ausdrueckliche Absicht, seine
         # Einstellungen setzen sich deshalb gegen die Regler durch. Wird ein
         # Effekt dagegen im Menue gewaehlt, hat die Oberflaeche die Regler
@@ -1079,8 +1126,25 @@ class Handler(BaseHTTPRequestHandler):
             if params.get("action") == "entfernen" and not has_text:
                 return self._json(400, {"error": "Bitte beschreiben, wer entfernt werden soll"})
 
-        auftrag = einreihen("generate", params)
-        return self._json(202, {"ok": True, "nummer": auftrag["nummer"]})
+        # Kameraeinstellung und Spiegelung, dieselben wie hinter dem
+        # Rueckwaertsschraegstrich in der Geschichte -- hier als eigene
+        # Felder, damit sich in Text->Bild sauber angeben laesst, was zu
+        # sehen ist und was sich darin spiegelt. Ein Paar wie "Blick hinaus"
+        # ergibt zwei Prompts und damit zwei Auftraege; die laufen in einem
+        # Ladevorgang durch, weil sie sich sonst in nichts unterscheiden.
+        texte = [params.get("prompt", "")]
+        if str(params.get("einstellung") or "") and has_text:
+            texte = geschichte.mit_einstellung(
+                params["prompt"], str(params["einstellung"]),
+                str(params.get("spiegelung") or ""),
+                bewertung.nach_namen(projekte.aktiv()))
+
+        nummern = []
+        for text in texte:
+            eigener = dict(params, prompt=text)
+            nummern.append(einreihen("generate", eigener)["nummer"])
+        return self._json(202, {"ok": True, "nummer": nummern[0],
+                                "nummern": nummern})
 
 
 def main():

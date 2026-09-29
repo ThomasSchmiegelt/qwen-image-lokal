@@ -432,6 +432,36 @@
     <p class="hint" id="transNote" style="display:none"></p>
     <p class="hint" id="tplHint" style="display:none"></p>
 
+    <fieldset id="aufbauBox" style="display:none">
+      <legend>Aufbau</legend>
+
+      <label for="t2iEinst">Kameraeinstellung</label>
+      <select id="t2iEinst"></select>
+      <div id="t2iSpiegelZeile" style="display:none">
+        <label for="t2iSpiegel" id="t2iSpiegelLabel">Was sich spiegelt</label>
+        <input type="text" id="t2iSpiegel" placeholder="das brennende Schiff">
+      </div>
+      <p class="hint" id="t2iEinstNote">Dasselbe wie <code>\augen</code> in
+        einer Szene, hier als Feld. Die Anordnung steht <b>vor</b> deinem
+        Prompt — nur dort bestimmt sie die Bildaufteilung. Was sich spiegelt,
+        gehört in die eigene Zeile darunter und wird sauber eingesetzt;
+        leer heißt: die Vorgabe der Einstellung gilt. <b>Blick hinaus</b> und
+        sein Gegenstück ergeben zwei Bilder in einem Ladevorgang.</p>
+
+      <div id="ausBildernBox" style="display:none">
+        <label>Bausteine im Prompt <a href="#" id="ausBildernLeeren">leeren</a></label>
+        <p class="hint" id="ausBildernListe"></p>
+        <label class="mithaken" for="ausBildern">
+          <input type="checkbox" id="ausBildern"> aus ihren Musterbildern bauen
+        </label>
+        <div id="ausBildernWahl" style="display:none">
+          <label for="ausBildernAktion">Was soll geschehen?</label>
+          <select id="ausBildernAktion"></select>
+        </div>
+        <p class="hint" id="ausBildernNote"></p>
+      </div>
+    </fieldset>
+
     <fieldset id="demoBox" style="display:none">
       <legend>Ablauf</legend>
 

@@ -525,3 +525,8 @@
 .regler { display: flex; align-items: center; gap: 10px; }
 .regler span { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .regler input[type=range] { flex: 1; width: auto; padding: 0; accent-color: var(--accent); }
+
+/* Kasten mit Haken davor: der Text steht in einer Zeile mit dem Kaestchen,
+   nicht darunter wie bei den uebrigen Beschriftungen. */
+.mithaken { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.mithaken input { width: auto; margin: 0; }
