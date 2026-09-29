@@ -480,21 +480,26 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
     # Gesicht ueberhaupt aussehen. Ein Androide mit "warm brown skin" hat
     # synthetische braune Haut, kein menschliches Gesicht mit Farbe darauf.
     wesen = (WESEN.get(b.get("wesen") or "") or ("", ""))[1]
+    # Steht der Hautton im eigenen Feld, gehoert er nur dorthin. Aus Koerper
+    # und Gesicht faellt jede Haut-, Haar- und Augenfarbe heraus -- sonst
+    # steht sie zweimal da und widerspricht sich frueher oder spaeter.
+    farben_weg = bool(haut)
     if nur_gesicht and (b.get("gesicht") or "").strip():
         gesicht = einsetzen(b["gesicht"], werte).rstrip(".")
+        if farben_weg:
+            gesicht = ohne_farben(gesicht).rstrip(" .")
         return ", ".join(t for t in (wesen, gesicht, haut) if t)
     stuecke = [t for t in (wesen,) if t]
     allgemein = einsetzen(b.get("prompt") or "", werte).rstrip(".")
+    if farben_weg:
+        # Nach dem Streichen kann ein Satzpunkt am Ende freiliegen -- die
+        # Kleidung haengt sich sonst hinter "… shiny hair., " an.
+        allgemein = ohne_farben(allgemein).rstrip(" .")
     stuecke.append(_erster_satz(allgemein) if kurz else allgemein)
     stuecke = [s for s in stuecke if s]
     if wesen and len(stuecke) > 1:
         stuecke[1] = _klein(stuecke[1])
-    # Steht der Hautton schon im allgemeinen Prompt, kommt er nicht noch
-    # einmal dazu. Gemessen an einem echten Baustein: "... dark brown eyes,
-    # black hair, lawless deep black skin with a radiant oily glow, dark
-    # brown eyes, black hair" -- alles zweimal, weil beide Felder dasselbe
-    # sagen.
-    if haut and not _steckt_drin(haut, allgemein):
+    if haut:
         stuecke.append(_erster_satz(haut, 90) if kurz else haut)
     if not nur_gesicht:
         was = (kleidung or b.get("kleidung") or "").strip()
@@ -505,6 +510,88 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
             if not _steckt_drin(was, allgemein):
                 stuecke.append(_erster_satz(was, 120) if kurz else was)
     return ", ".join(t for t in stuecke if t)
+
+
+# Farbwoerter, die vor Haut, Haar oder Augen stehen koennen. Keine
+# Wissenschaft -- die Handvoll, die in Bildprompts vorkommt.
+FARBWORT = ("black", "white", "brown", "blue", "green", "grey", "gray",
+            "hazel", "amber", "red", "ginger", "blonde", "blond", "auburn",
+            "silver", "golden", "dark", "light", "pale", "fair", "olive",
+            "tan", "tanned", "ebony", "deep", "warm", "cool", "bronze",
+            "copper", "chestnut", "platinum", "jet-black", "snow-white")
+_FARBEN = "|".join(sorted(FARBWORT, key=len, reverse=True))
+# Das Wort darf nicht Teil eines Bindestrichworts sein: "skin-tight" ist
+# Kleidung, "hairband" ein Gegenstand.
+_NOMEN = r"(skin|hair|eyes|eye|complexion)(?![-\w])"
+# Ein Beiwort unmittelbar vor der Farbe gehoert mit dazu: "lawless deep
+# black skin" laesst sonst ein "lawless" ohne Hauptwort zurueck.
+_BEIWORT = r"(?:\b(?!and\b|with\b|a\b|an\b|the\b|her\b|his\b)\w+\s+)?"
+# "deep black skin with a radiant, oily glow" -- der Zusatz gehoert zur Haut
+# und faellt mit, auch wenn ein Komma darin steht. Deshalb laeuft dieser
+# Durchgang ueber den ganzen Text, nicht ueber die Satzglieder.
+_MIT_ZUSATZ = re.compile(
+    rf"{_BEIWORT}(?:(?:{_FARBEN})(?:-(?:{_FARBEN}))?\s+){{1,3}}{_NOMEN}"
+    rf"\s+with\s+[^;.]{{0,60}}(?=\s*(?:;|\.|$)|,\s*(?:and\s+)?\w+\s+\w)", re.I)
+# "Her eyes are a rare, piercing pale ice-blue" -- die Farbe steht hinten.
+_NACHGESTELLT = re.compile(
+    rf"\b(?:her|his|their|the)\s+{_NOMEN}\s+(?:is|are)\s+[^;.]{{0,70}}"
+    rf"(?=\s*(?:;|\.|$))", re.I)
+_FARBIG = re.compile(
+    rf"\b(?:(?:{_FARBEN})(?:-(?:{_FARBEN}))?\s+){{1,3}}{_NOMEN}", re.I)
+# "skin-tight" ist Kleidung, keine Hautfarbe.
+_KEIN_TREFFER = re.compile(r"skin-tight|hair\s*band|hairband", re.I)
+
+
+def ohne_farben(text: str) -> str:
+    """Haut-, Haar- und Augenfarbe aus einem Text streichen.
+
+    Sie stehen im eigenen Feld und gelten dort fuer Ganzbild und
+    Grossaufnahme zugleich. Ein zweites Mal im allgemeinen Prompt oder im
+    Gesicht macht sie nicht deutlicher, sondern widerspricht sich
+    frueher oder spaeter -- und laenger wird der Prompt auch.
+
+    Was sonst in dem Satzglied steht, bleibt: aus "glossy black hair pulled
+    back into a high ponytail" wird "glossy hair pulled back into a high
+    ponytail", nicht ein Loch.
+    """
+    if not (text or "").strip():
+        return text
+    # Erst die langen Formen ueber den ganzen Text, denn ihr Zusatz darf
+    # Kommas enthalten.
+    text = _MIT_ZUSATZ.sub("", text)
+    text = _NACHGESTELLT.sub("", text)
+    glieder = []
+    for glied in re.split(r"([,;])", text):
+        if glied in (",", ";"):
+            glieder.append(glied)
+            continue
+        if _KEIN_TREFFER.search(glied):
+            glieder.append(glied)
+            continue
+        sauber = _FARBIG.sub(lambda m: m.group(1), glied)
+        # Steht das Wort danach nackt da -- "with skin", "and hair" oder
+        # allein --, war das Glied nichts als Farbe und faellt ganz.
+        sauber = re.sub(r"\b(?:with|and|has|have)\s+(?:a\s+)?"
+                        r"(?:skin|hair|eyes|eye|complexion)\s*(?=[,;.]|$)",
+                        "", sauber, flags=re.I)
+        if re.fullmatch(r"\s*(?:and\s+)?(?:a\s+)?"
+                        r"(?:skin|hair|eyes|eye|complexion)\s*",
+                        sauber, re.I):
+            sauber = ""
+        glieder.append(sauber)
+    zusammen = "".join(glieder)
+    # Aufraeumen: doppelte Kommas, haengende Bindewoerter, Reste am Rand.
+    # "with skin and long hair" -- das nackte Wort mitten im Satzglied.
+    zusammen = re.sub(r"\b(with|and)\s+(?:skin|complexion)\s+and\s+",
+                      r"\1 ", zusammen, flags=re.I)
+    zusammen = re.sub(r"\b(?:and|with)\s*(?=[,;])", "", zusammen)
+    zusammen = re.sub(r"\.\s*(?=,)", "", zusammen)
+    zusammen = re.sub(r"\s*,\s*(?=,)", "", zusammen)
+    zusammen = re.sub(r",\s*(?:and|with)\s*(?=[,;]|$)", "", zusammen)
+    zusammen = re.sub(r"\s+(?:and|with)\s*$", "", zusammen)
+    zusammen = re.sub(r"\s+([,;.])", r"\1", zusammen)
+    zusammen = re.sub(r"\s{2,}", " ", zusammen)
+    return zusammen.strip().strip(",;").strip()
 
 
 def _steckt_drin(teil: str, ganz: str) -> bool:
