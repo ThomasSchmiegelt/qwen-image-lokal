@@ -455,7 +455,12 @@ def _erster_satz(text: str, hoechstens: int = 170) -> str:
         if trenner in text[:hoechstens + 40]:
             text = text.split(trenner, 1)[0]
             break
-    return text[:hoechstens].rstrip(" ,.;")
+    if len(text) > hoechstens:
+        # An der Wortgrenze abschneiden, nicht mitten im Wort: "covering the
+        # arms up to just be" stand so im Prompt.
+        schnitt = text.rfind(" ", 0, hoechstens)
+        text = text[:schnitt if schnitt > hoechstens // 2 else hoechstens]
+    return text.rstrip(" ,.;-")
 
 
 def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
@@ -484,7 +489,12 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
     stuecke = [s for s in stuecke if s]
     if wesen and len(stuecke) > 1:
         stuecke[1] = _klein(stuecke[1])
-    if haut:
+    # Steht der Hautton schon im allgemeinen Prompt, kommt er nicht noch
+    # einmal dazu. Gemessen an einem echten Baustein: "... dark brown eyes,
+    # black hair, lawless deep black skin with a radiant oily glow, dark
+    # brown eyes, black hair" -- alles zweimal, weil beide Felder dasselbe
+    # sagen.
+    if haut and not _steckt_drin(haut, allgemein):
         stuecke.append(_erster_satz(haut, 90) if kurz else haut)
     if not nur_gesicht:
         was = (kleidung or b.get("kleidung") or "").strip()
@@ -492,5 +502,18 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
             # Die Kleidung haengt mitten im Satz -- ein grosses "Worn wool
             # coat" dort liest sich wie ein neuer Anfang.
             was = _klein(einsetzen(was, werte).rstrip("."))
-            stuecke.append(_erster_satz(was, 120) if kurz else was)
+            if not _steckt_drin(was, allgemein):
+                stuecke.append(_erster_satz(was, 120) if kurz else was)
     return ", ".join(t for t in stuecke if t)
+
+
+def _steckt_drin(teil: str, ganz: str) -> bool:
+    """Steht `teil` schon so aehnlich in `ganz`?
+
+    Verglichen wird ueber die Woerter, nicht Zeichen fuer Zeichen: "black
+    hair" und "black hair." sollen als dasselbe gelten. Ab drei Vierteln
+    Deckung gilt es als schon gesagt.
+    """
+    worte = lambda t: {w for w in re.findall(r"[a-zA-ZäöüÄÖÜß]{3,}", (t or "").lower())}
+    a, b = worte(teil), worte(ganz)
+    return bool(a) and len(a & b) >= 0.75 * len(a)

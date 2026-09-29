@@ -36,6 +36,10 @@ from kataloge import (  # noqa: F401
 # Wie die Person bewahrt wird, waehrend Ort, Handlung und Stil wechseln.
 BLEIBT = "the person's face, hair and build"
 
+# Zahlwoerter fuer die Aufzaehlung mehrerer Personen. "two people" trifft das
+# Modell zuverlaessiger als "2 people".
+ZAHLWORT_EN = {2: "two", 3: "three", 4: "four", 5: "five"}
+
 
 def _stil(schluessel: str) -> str:
     eintrag = STYLES.get(schluessel)
@@ -108,16 +112,30 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
         return [b for b in alle if b.get("art") == art][:hoechstens]
 
     stuecke = []
-    # Bis zu drei Personen: was darueber hinausgeht, verwaessert den Prompt
-    # mehr, als es dem Bild nuetzt. Ab der zweiten steht von jeder nur noch
-    # der erste Satz -- drei volle Beschreibungen mit je drei
-    # Kleidungssaetzen ergaben zweitausend Zeichen, in denen sich alles
-    # widersprach.
-    personen = welche("person", 3)
-    for person in personen:
-        stuecke.append(bausteine.person_text(
-            person, person.get("variablen") or {}, nur_gesicht=nur_gesicht,
-            kleidung=szene.get("kleidung") or "", kurz=len(personen) > 1))
+    # Bis zu vier Personen. Mehr bekommt das Bildmodell nicht auseinander --
+    # schon bei vieren teilt es Kleidung zwischen ihnen auf.
+    personen = welche("person", 4)
+    beschreibungen = [bausteine.person_text(
+        p, p.get("variablen") or {}, nur_gesicht=nur_gesicht,
+        kleidung=szene.get("kleidung") or "", kurz=len(personen) > 1)
+        for p in personen]
+    beschreibungen = [t for t in beschreibungen if t.strip()]
+    if len(beschreibungen) == 1:
+        stuecke.append(beschreibungen[0])
+    elif beschreibungen:
+        # Mehrere Personen einzeln benennen statt aneinanderreihen. Als
+        # Komma-Kette verschmilzt das Bildmodell sie: gemessen an vier
+        # Figuren bekamen zwei den orangen Overall, zwei die neongruenen
+        # Stiefel, und keine sah aus wie ihr Baustein. Eine Aufzaehlung mit
+        # Platz im Bild gibt dem Modell wenigstens einen Anhalt.
+        wieviel = ZAHLWORT_EN.get(len(beschreibungen), str(len(beschreibungen)))
+        stellen = ("on the left", "in the middle", "on the right",
+                   "at the edge")
+        teile = [f"{stellen[i] if i < len(stellen) else 'beside them'} "
+                 f"{bausteine._klein(t)}"
+                 for i, t in enumerate(beschreibungen)]
+        stuecke.append(f"{wieviel} clearly different people side by side, "
+                       "each with their own look: " + "; ".join(teile))
     ausdruck = _mimik(szene.get("mimik") or "")
     if ausdruck:
         stuecke.append(ausdruck)
