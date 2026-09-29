@@ -222,7 +222,38 @@ def verweis_umbenennen(projekt: str, alt: str, neu: str) -> int:
     """
     if not alt or not neu or alt.lower() == neu.lower():
         return 0
-    muster = re.compile(r"/" + re.escape(alt) + r"\b", re.I)
+    return _in_allen_zeilen(
+        projekt, re.compile(r"/(-?)" + re.escape(alt) + r"\b", re.I),
+        r"/\g<1>" + neu)
+
+
+# Ein Vorwort und ein Artikel davor fallen beim Entfernen mit: aus "rennt
+# durch die /Halle" bliebe sonst "rennt durch die". Dieselbe Liste wie in
+# der Seite -- dort wird ein Baustein aus einer einzelnen Szene genommen,
+# hier aus allen.
+VORWORT = ("durch|in|an|auf|zu|zum|zur|bei|mit|über|unter|vor|hinter|neben"
+           "|aus|nach|von|gegen|um|ohne|entlang")
+ARTIKEL = ("der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines"
+           "|sein|seine|ihr|ihre|ihren|seinen")
+
+
+def verweis_entfernen(projekt: str, name: str) -> int:
+    """`/Name` aus allen Geschichten des Projekts streichen.
+
+    Gehoert zum Loeschen eines Bausteins: sonst bliebe sein Name als blosses
+    Wort in der Zeile stehen, liefe ins Leere und stuende beim naechsten
+    Durchsehen als "noch anzulegen" da.
+    """
+    if not name:
+        return 0
+    muster = re.compile(
+        rf"(?:\b(?:{VORWORT})\s+)?(?:\b(?:{ARTIKEL})\s+)?/-?{re.escape(name)}\b",
+        re.I)
+    return _in_allen_zeilen(projekt, muster, "")
+
+
+def _in_allen_zeilen(projekt: str, muster, ersatz: str) -> int:
+    """Ein Muster in allen Szenenzeilen aller Geschichten ersetzen."""
     geaendert = 0
     for eintrag in liste(projekt):
         g = lesen(projekt, eintrag["schluessel"])
@@ -230,9 +261,12 @@ def verweis_umbenennen(projekt: str, alt: str, neu: str) -> int:
         for band in g.get("baende") or []:
             for z in band.get("zeilen") or []:
                 text = str(z.get("text") or "")
-                ersetzt = muster.sub("/" + neu, text)
-                if ersetzt != text:
-                    z["text"] = ersetzt
+                neu_text = muster.sub(ersatz, text)
+                if ersatz == "":
+                    neu_text = re.sub(r"\s+([,.;!?])", r"\1", neu_text)
+                    neu_text = re.sub(r"\s{2,}", " ", neu_text).strip()
+                if neu_text != text:
+                    z["text"] = neu_text
                     geaendert += 1
                     beruehrt = True
         if beruehrt:

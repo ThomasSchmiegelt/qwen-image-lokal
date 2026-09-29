@@ -626,8 +626,19 @@ class Handler(BaseHTTPRequestHandler):
             if was == "speichern":
                 return self._json(200, bausteine.speichern(projekt, params.get("baustein") or {}))
             if was == "loeschen":
-                gut = bausteine.loeschen(projekt, str(params.get("id") or ""))
-                return self._json(200 if gut else 404, {"ok": gut})
+                kennung = str(params.get("id") or "")
+                # Vor dem Loeschen die Namen holen: danach gibt es sie nicht
+                # mehr, und in den Szenen stuende der Verweis weiter da --
+                # als blosses Wort, das ins Leere zeigt.
+                weg = next((bausteine.namen(b) for b in bausteine.liste(projekt)
+                            if b.get("id") == kennung), [])
+                gut = bausteine.loeschen(projekt, kennung)
+                zeilen = 0
+                if gut:
+                    for name in weg:
+                        zeilen += baender.verweis_entfernen(projekt, name)
+                return self._json(200 if gut else 404,
+                                  {"ok": gut, "zeilen": zeilen})
             if was == "prompt":
                 # Deutsche Beschreibung -> englischer Prompt mit Luecken.
                 if engine.lock.locked():
@@ -702,97 +713,6 @@ class Handler(BaseHTTPRequestHandler):
                                         "szenen": len([z for z in zeilen
                                                        if str(z.get("text") or "").strip()])})
 
-            if was == "empfehlen":
-                # Je Szene sagen, welche Bausteine sie braucht. Was es schon
-                # gibt, wird beim Namen genannt; der Rest ist ein Vorschlag,
-                # den der Benutzer abaendert, bevor er ihn anlegen laesst.
-                if engine.lock.locked():
-                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
-                zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
-                          for z in (params.get("zeilen") or [])]
-                if not any(z.strip() for z in zeilen):
-                    return self._json(400, {"error": "Keine Szene"})
-                da = bausteine.liste(projekt)
-                bekannt = {(b.get("name") or "").lower() for b in da}
-                def weit(ist, von):
-                    melden(f"Szene {ist} von {von} gelesen", ist, von)
-
-                weit(0, len(zeilen))
-                erg = chat.bausteine_empfehlen(zeilen, da, fortschritt=weit)
-                melden("")
-                for e in erg:
-                    for t in e["teile"]:
-                        t["da"] = t["name"].lower() in bekannt
-                return self._json(200, {"empfehlungen": erg})
-
-            if was == "aktualisieren":
-                # Was in den Anfuehrungszeichen hinter einem /Namen steht,
-                # wird zur Beschreibung des Bausteins -- auch wenn es ihn
-                # schon gibt. Der Benutzer hat es gerade hingeschrieben, also
-                # gilt es und nicht der alte Prompt.
-                if engine.lock.locked():
-                    return self._json(409, {"error": "Es laeuft gerade ein Auftrag"})
-                zeilen = [str(z.get("text") or "") if isinstance(z, dict) else str(z)
-                          for z in (params.get("zeilen") or [])]
-                # Zuerst die Zweitnamen aufloesen: steht ein Alias noch als
-                # eigener Baustein da, geht er im Hauptbaustein auf. Genau
-                # dafuer traegt man ihn ein.
-                verschmolzen = []
-                liste = bausteine.liste(projekt)
-                nach_name = {n.lower(): b for b in liste
-                             for n in bausteine.namen(b) if n}
-                for haupt in liste:
-                    for zweit in bausteine.aliasse(haupt.get("alias")):
-                        doppelt = next((x for x in bausteine.liste(projekt)
-                                        if (x.get("name") or "").lower()
-                                        == zweit.lower()
-                                        and x.get("id") != haupt.get("id")), None)
-                        if not doppelt:
-                            continue
-                        erg = bausteine.zusammenfuehren(
-                            projekt, doppelt["id"], haupt["id"])
-                        if erg:
-                            verschmolzen.append(erg["alter_name"])
-
-                erklaert = {}
-                for z in zeilen:
-                    for name, text in geschichte.definitionen(z)[1].items():
-                        erklaert[name.lower()] = (name, text)
-                if not erklaert:
-                    return self._json(200, {"neu": [], "weg": verschmolzen,
-                        "hinweis": "Keine Erklärung in Anführungszeichen."
-                                   if not verschmolzen else ""})
-                nach_name = {n.lower(): b for b in bausteine.liste(projekt)
-                             for n in bausteine.namen(b) if n}
-                frisch = []
-                for i, (klein, (name, text)) in enumerate(erklaert.items(), 1):
-                    melden(f"Baustein {i} von {len(erklaert)}: {name}",
-                           i, len(erklaert))
-                    da = nach_name.get(klein)
-                    # Wurde ueber einen Zweitnamen gesucht, bleibt der
-                    # Hauptname stehen -- sonst hiesse die Figur ploetzlich
-                    # anders.
-                    if da and (da.get("name") or "").lower() != klein:
-                        name = da["name"]
-                    art = (da or {}).get("art") or ""
-                    if not art:
-                        geraten = chat.bausteine_raten([name], "\n".join(zeilen))
-                        art = (geraten[0]["art"] if geraten else "person")
-                    fertig = chat.baustein_prompt(text, art)
-                    if not fertig.get("prompt"):
-                        continue
-                    sauber, werte = bausteine.ohne_leere_luecken(
-                        fertig["prompt"], fertig.get("variablen") or {})
-                    frisch.append(bausteine.speichern(projekt, {
-                        **(da or {}), "art": art, "name": name,
-                        "prompt": sauber,
-                        "gesicht": fertig.get("gesicht") or "",
-                        "kleidung": fertig.get("kleidung") or "",
-                        "variablen": werte}))
-                melden("")
-                return self._json(200, {"neu": frisch, "weg": verschmolzen,
-                                        "hinweis": ""})
-
             if was == "vorschlagen":
                 # Alles, was die Geschichte mit /Name verlangt und noch nicht
                 # gibt, gleich anlegen -- mit einem geschriebenen Prompt, den
@@ -816,10 +736,15 @@ class Handler(BaseHTTPRequestHandler):
                         erklaert[name.lower()] = text
                 melden(f"{len(offen)} Bausteine werden eingeordnet", 0, len(offen) + 1)
                 geraten = chat.bausteine_raten(offen, "\n".join(zeilen))
-                neu = []
+                neu, unklar = [], []
                 for i, e in enumerate(geraten, 1):
                     melden(f"Baustein {i} von {len(geraten)}: {e['name']}",
                            i, len(geraten) + 1)
+                    if not e["art"]:
+                        # Lieber nichts anlegen als das Falsche: ein
+                        # Gegenstand als Person bekaeme Gesicht und Kleidung.
+                        unklar.append(e["name"])
+                        continue
                     e["beschreibung"] = (erklaert.get(e["name"].lower())
                                          or e["beschreibung"])
                     fertig = chat.baustein_prompt(e["beschreibung"] or e["name"],
@@ -837,7 +762,9 @@ class Handler(BaseHTTPRequestHandler):
                         "kleidung": fertig.get("kleidung") or "",
                         "variablen": werte}))
                 melden("")
-                return self._json(200, {"neu": neu, "hinweis": ""})
+                return self._json(200, {"neu": neu, "unklar": unklar,
+                    "hinweis": ("Nicht eingeordnet, bitte von Hand anlegen: "
+                                + ", ".join(unklar)) if unklar else ""})
 
             if was == "teilprompt":
                 # Gesicht oder Kleidung einzeln: der Benutzer hat das Feld

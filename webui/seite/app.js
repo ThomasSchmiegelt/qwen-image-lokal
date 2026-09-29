@@ -523,8 +523,9 @@ function demoDauer() {
 }
 ["demoSteps", "demoBase", "demoDuration"].forEach(id => $(id).addEventListener("input", demoDauer));
 
-// Gilt nur fuer den naechsten Start: "Bild" statt "Video" an einer Szene.
-let ohneVideo = false;
+// Gelten nur fuer den naechsten Start: "Bild" statt "Video" an einer Szene,
+// und eine Szene ohne Startbild.
+let ohneVideo = false, ohneBasis = false;
 
 async function starteDemo() {
   const laeuftSchon = $("go").classList.contains("busy");
@@ -540,7 +541,8 @@ async function starteDemo() {
       duration: parseInt($("demoDuration").value, 10) || 20,
       // Ohne Video, wenn nur die Bilder gewollt sind: das Zusammenbauen
       // kostet Zeit und bei einem einzigen Bild ergibt es ohnehin nichts.
-      ohne_video: !!ohneVideo
+      ohne_video: !!ohneVideo,
+      ohne_basis: !!ohneBasis
     })
   }).catch(() => null);
   if (!res || !res.ok) {
@@ -987,7 +989,6 @@ const LANGSAM = {
   prompt: "Der Prompt wird geschrieben",
   teilprompt: "Der Prompt wird geschrieben",
   luecken: "Vorschläge werden gesucht",
-  empfehlen: "Die Gliederung wird gelesen",
   vorschlagen: "Die Bausteine werden geschrieben",
 };
 
@@ -1256,10 +1257,15 @@ function bausteinLaden(id) {
 
 async function bausteinWeg(id) {
   const b = BAUSTEINE.find(x => x.id === id);
-  if (!confirm(`„${b ? b.name : id}“ löschen?`)) return;
-  if (!await bausteinRuf({tu: "loeschen", id})) return;
+  if (!confirm(`„${b ? b.name : id}“ löschen? Der Verweis verschwindet auch `
+               + "aus allen Szenen dieses Projekts.")) return;
+  const g = await bausteinRuf({tu: "loeschen", id});
+  if (!g) return;
   await bausteineHolen();
-  say("Baustein gelöscht.", "ok");
+  // Die Geschichte neu laden: ihre Zeilen stehen jetzt anders in der Datei.
+  if (GSAKTUELL) await gsOeffnen(GSAKTUELL, gsBandNr);
+  say("Baustein gelöscht"
+      + (g.zeilen ? `, aus ${g.zeilen} Szenenzeile(n) entfernt.` : "."), "ok");
 }
 
 // --- Zusammensetzen ---
@@ -1415,13 +1421,18 @@ const EINST_MUSTER =
 
 // Namen mit Schraegstrich, zu denen es noch keinen Baustein gibt. Damit
 // weiss die Szene, ob sie etwas anzulegen hat.
-const VERWEIS_MUSTER = /\/([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})/g;
+// Das Minus gehoert dazu: /-Susi ist derselbe Verweis, nur hinter der
+// Kamera. Ohne es im Muster verschwand ein so gekennzeichneter Baustein aus
+// der Leiste und liess sich nicht mehr zurueckholen.
+const VERWEIS_MUSTER = /\/(-?)([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{1,39})/g;
 
 function offeneNamen(text) {
-  const da = new Set(BAUSTEINE.map(b => (b.name || "").toLowerCase()));
+  const da = new Set(BAUSTEINE.flatMap(b =>
+    [(b.name || "").toLowerCase()].concat(
+      (b.alias || []).map(a => (a || "").toLowerCase()))));
   const raus = [];
   for (const m of String(text || "").matchAll(VERWEIS_MUSTER)) {
-    const n = m[1];
+    const n = m[2];
     if (!da.has(n.toLowerCase()) && !raus.includes(n)) raus.push(n);
   }
   return raus;
@@ -1459,7 +1470,9 @@ function blankZeile(text) {
 function bausteineInZeile(text) {
   const raus = [];
   for (const m of String(text || "").matchAll(VERWEIS_MUSTER)) {
-    const b = BAUSTEINE.find(x => (x.name || "").toLowerCase() === m[1].toLowerCase());
+    const gesucht = m[2].toLowerCase();
+    const b = BAUSTEINE.find(x => (x.name || "").toLowerCase() === gesucht
+      || (x.alias || []).some(a => (a || "").toLowerCase() === gesucht));
     if (b && !raus.includes(b)) raus.push(b);
   }
   return raus;
@@ -1591,6 +1604,13 @@ function szeneFertig(i) {
 }
 
 function zeigeSelbstszenen() {
+  // Wer gerade schreibt, soll weiterschreiben koennen. Die Liste wird ganz
+  // neu gezeichnet, dabei geht das Feld unter dem Zeiger verloren -- also
+  // merken, wo der Zeiger stand, und ihn danach zurueckstellen.
+  const aktiv = document.activeElement;
+  const warI = aktiv && aktiv.classList && aktiv.classList.contains("gszeile")
+    ? aktiv.dataset.i : null;
+  const warPos = warI !== null ? aktiv.selectionStart : 0;
   $("gsSelbst").innerHTML = gsZeilen.map((z, i) => {
     const e = einstellungInZeile(z.text);
     const fest = e ? einstellungEintrag(e.key) : null;
@@ -1692,7 +1712,6 @@ function zeigeSelbstszenen() {
                  onclick="bausteineDerSzene(${i});return false">+ ${
                  offeneNamen(z.text).length} anlegen</a>` : ""}
         </div>
-        ${vorschlagZeile(z, i)}
       </div>
 
       <div class="szgruppe">
@@ -1747,11 +1766,14 @@ function zeigeSelbstszenen() {
           ).join(" · ") + `</p>`
         : "");
   $("gsSelbst").querySelectorAll(".gszeile").forEach(el => {
+    // Beim Tippen NICHT die Vorschau holen: sie zeichnet die Liste neu, das
+    // Feld verschwindet mitten im Wort und der Fokus mit ihm. Nachgezogen
+    // wird, wenn man das Feld verlaesst.
     el.oninput = () => {
       gsZeilen[+el.dataset.i].text = el.value;
       mitwachsen(el);
-      gsVorschau();
     };
+    el.onchange = () => gsVorschau();
     el.onfocus = () => gsLetzteNr = +el.dataset.i;
     mitwachsen(el);
   });
@@ -1768,7 +1790,7 @@ function zeigeSelbstszenen() {
   });
   $("gsSelbst").querySelectorAll(".gsteil").forEach(el => {
     el.onchange = () => {
-      if (el.value) vorschlagNehmen(+el.dataset.i, el.value);
+      if (el.value) bausteinDazu(+el.dataset.i, el.value);
       el.value = "";
     };
   });
@@ -1788,6 +1810,14 @@ function zeigeSelbstszenen() {
       if (alt) einstellungSchreiben(i, alt.key, el.value);
     };
   });
+  if (warI !== null) {
+    const zurueck = $("gsSelbst")
+      .querySelector(`.gszeile[data-i="${warI}"]`);
+    if (zurueck) {
+      zurueck.focus();
+      try { zurueck.setSelectionRange(warPos, warPos); } catch (e) { /* egal */ }
+    }
+  }
   gsSumme();
   gsMerken();
 }
@@ -1820,26 +1850,6 @@ function gsEinfuegen(zeichen, name) {
   gsMerken();
 }
 
-// Die Vorschlaege einer Szene: anklicken schreibt /Name in die Zeile. Was
-// schon drinsteht, ist abgehakt. Sie haengen an der Szene selbst, ziehen
-// also beim Umsortieren mit und stehen nach dem Speichern wieder da.
-function vorschlagZeile(z, i) {
-  const liste = z.vorschlag || [];
-  if (!liste.length) return "";
-  const drin = n => new RegExp("/" + n.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
-                               + "\\b", "i").test(z.text);
-  const offen = liste.filter(t => !drin(t.name));
-  return `<div class="szvorschlag">
-    ${liste.map(t => `<span class="chip ${t.da ? "hat" : "neu"}${
-        drin(t.name) ? " drin" : ""}" title="${
-        t.art}${t.da ? ", gibt es schon" : ", noch anzulegen"}"
-      onclick="vorschlagNehmen(${i}, '${esc(t.name)}')">${
-        drin(t.name) ? "✓ " : ""}${esc(t.name)}</span>`).join("")}
-    ${offen.length > 1
-      ? `<a href="#" onclick="vorschlagAlle(${i});return false">alle</a>` : ""}
-  </div>`;
-}
-
 // Ein uebernommener Baustein bekommt gleich die leeren Anfuehrungszeichen
 // mit: was man dort hineinschreibt, wird beim Aktualisieren zu seiner
 // Beschreibung. Ohne das Angebot faellt niemandem ein, dass es geht.
@@ -1847,29 +1857,21 @@ function verweisText(name) {
   return `/${name} ""`;
 }
 
-function stehtDrin(text, name) {
-  return new RegExp("/" + name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
-                    + "\\b", "i").test(text);
-}
-
-function vorschlagNehmen(i, name) {
+// Einen Baustein in eine Zeile schreiben -- von Hand gewaehlt, nicht
+// vorgeschlagen. Die leeren Anfuehrungszeichen kommen mit: was dort steht,
+// wird beim Aktualisieren zur Beschreibung.
+function bausteinDazu(i, name) {
   const z = gsZeilen[i];
-  if (stehtDrin(z.text, name)) return;        // steht schon drin
+  if (stehtDrin(z.text, name)) return;
   z.text = (z.text.trim() + " " + verweisText(name)).trim();
   zeigeSelbstszenen();
   gsMerken();
   gsVorschau();
 }
 
-function vorschlagAlle(i) {
-  (gsZeilen[i].vorschlag || []).forEach(t => {
-    if (!stehtDrin(gsZeilen[i].text, t.name)) {
-      gsZeilen[i].text = (gsZeilen[i].text.trim() + " "
-                          + verweisText(t.name)).trim();
-    }
-  });
-  zeigeSelbstszenen();
-  gsMerken();
+function stehtDrin(text, name) {
+  return new RegExp("/" + name.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")
+                    + "\\b", "i").test(text);
 }
 
 function szeneKlappen(i) {
@@ -1930,11 +1932,14 @@ async function szeneErzeugen(i, mitVideo) {
   }
   bloecke = JSON.parse(JSON.stringify(g.bloecke));
   blockZeichnen();
-  const vorher = $("demoDuration").value;
+  // Ohne Startbild: der Ablauf baut sonst zuerst ein Bild, das niemand
+  // bestellt hat, und haengt an die Szene "dieselbe Person wie im
+  // Referenzbild" -- mit einer Person, die gar nicht darin vorkommt.
+  ohneBasis = true;
   ohneVideo = !mitVideo;
   await starteDemo();
+  ohneBasis = false;
   ohneVideo = false;
-  $("demoDuration").value = vorher;
   say(mitVideo ? `Szene ${i + 1} wird erzeugt, danach das Video …`
                : `Szene ${i + 1} wird erzeugt …`);
 }
@@ -2073,7 +2078,7 @@ $("gsAktualisieren").onclick = async e => {
   zeigeSelbstszenen();
   const teile = [];
   if ((g.weg || []).length) teile.push(`${g.weg.join(", ")} aufgegangen`);
-  if (g.neu.length) teile.push(`nachgezogen: ${g.neu.map(b => b.name).join(", ")}`);
+  if (g.neu.length) teile.push("nachgezogen: " + mitArt(g.neu));
   say(teile.length ? teile.join(" · ") + "."
                    : (g.hinweis || "Nichts zu übernehmen."), "ok");
 };
@@ -2104,56 +2109,36 @@ $("gsPruefen").onclick = async e => {
 // und was dabei entsteht, laesst sich danach genauso aendern.
 $("gsAllesAnlegen").onclick = async e => {
   e.preventDefault();
-  if (!gsZeilen.some(z => z.text.trim()))
-    return say("Erst das Inhaltsverzeichnis füllen.", "err");
-  const g = await bausteinRuf({tu: "empfehlen", zeilen: gsZeilen});
+  const zeilen = gsZeilen.filter(z => z.text.trim());
+  if (!zeilen.length) return say("Erst das Inhaltsverzeichnis füllen.", "err");
+  // Angelegt wird nur, was in den Zeilen steht. Vorschlaege schreibt das
+  // Programm nicht mehr von selbst hinein -- wer sie will, klickt sie an.
+  // Vorher wanderten sie mit, und dann stand eine Figur im Projekt, die
+  // niemand verlangt hatte.
+  const g = await bausteinRuf({tu: "aktualisieren", zeilen});
   if (!g) return;
-  let genommen = 0;
-  (g.empfehlungen || []).forEach(e2 => {
-    const z = gsZeilen[e2.nr - 1];
-    if (!z) return;
-    z.vorschlag = e2.teile;
-    e2.teile.forEach(t => {
-      if (!stehtDrin(z.text, t.name)) {
-        z.text = (z.text.trim() + " " + verweisText(t.name)).trim();
-        genommen++;
-      }
-    });
-  });
-  zeigeSelbstszenen();
-  gsMerken();
-  const h = await bausteinRuf({tu: "vorschlagen", zeilen: gsZeilen});
+  const h = await bausteinRuf({tu: "vorschlagen", zeilen});
   if (!h) return;
   await bausteineHolen();
   zeigeSelbstszenen();
-  say(`${genommen} Verweise in die Szenen geschrieben, `
-      + `${h.neu.length} Baustein(e) angelegt`
-      + (h.neu.length ? `: ${h.neu.map(b => b.name).join(", ")}` : "")
-      + " — im Reiter Bausteine gegenlesen.", "ok");
+  gsVorschau();
+  const teile = [];
+  if ((g.weg || []).length) teile.push(`${g.weg.join(", ")} aufgegangen`);
+  if (g.neu.length) teile.push("nachgezogen: " + mitArt(g.neu));
+  if (h.neu.length) teile.push("angelegt: " + mitArt(h.neu));
+  if (h.unklar && h.unklar.length)
+    teile.push(`nicht eingeordnet: ${h.unklar.join(", ")}`);
+  say(teile.length ? teile.join(" · ") + "."
+                   : "Alle genannten Bausteine gibt es schon.", "ok");
 };
 
-// Je Szene vorschlagen, welche Bausteine sie braucht. Zwei Schritte statt
-// einem: erst sehen, was gemeint ist, dann entscheiden, was hineinkommt.
-$("gsEmpfehlen").onclick = async e => {
-  e.preventDefault();
-  if (!gsZeilen.some(z => z.text.trim()))
-    return say("Erst das Inhaltsverzeichnis füllen.", "err");
-  say("Die Bausteine werden vorgeschlagen …");
-  const g = await bausteinRuf({tu: "empfehlen", zeilen: gsZeilen});
-  if (!g) return;
-  gsZeilen.forEach(z => delete z.vorschlag);
-  let n = 0;
-  (g.empfehlungen || []).forEach(e2 => {
-    const z = gsZeilen[e2.nr - 1];
-    if (!z || !e2.teile.length) return;
-    z.vorschlag = e2.teile;
-    n += e2.teile.length;
-  });
-  zeigeSelbstszenen();
-  gsMerken();
-  say(n ? `${n} Vorschläge — anklicken übernimmt sie in die Szene.`
-        : "Keine Bausteine erkannt.", n ? "ok" : "err");
-};
+// Immer mit der Art: wer sieht, dass "Kristall (Person)" entstanden ist,
+// merkt den Fehler sofort -- ein blosser Name verrät ihn nicht.
+function mitArt(liste) {
+  const label = k => (BSARTEN.find(a => a.key === k) || {}).label || k;
+  return liste.map(b => `${b.name} (${label(b.art)})`).join(", ");
+}
+
 
 // Alles, was die Geschichte mit /Name verlangt und noch nicht gibt, gleich
 // anlegen -- mit geratener Art und geschriebenem Prompt. Ein Vorschlag zum
@@ -2168,8 +2153,9 @@ $("gsFehlend").onclick = async e => {
   if (!g.neu.length) return say(g.hinweis || "Nichts anzulegen.", "ok");
   await bausteineHolen();
   zeigeSelbstszenen();
-  say(`${g.neu.length} Baustein(e) angelegt: `
-      + g.neu.map(b => b.name).join(", ")
+  say(`${g.neu.length} Baustein(e) angelegt: ` + mitArt(g.neu)
+      + (g.unklar && g.unklar.length
+         ? ` · nicht eingeordnet: ${g.unklar.join(", ")}` : "")
       + " — im Reiter Bausteine gegenlesen und ändern.", "ok");
 };
 
@@ -2497,6 +2483,15 @@ $("gsProsaSchreiben").onclick = async e => {
   say(`Der Text zu ${zeilen.length} Szenen wird geschrieben …`);
 };
 
+// Die Zeilen, wie sie an den Server gehen: mit dem Haken "nur die genannten
+// Figuren". Er gehoert zur Geschichte, gilt aber je Szene -- deshalb wird er
+// hier angehaengt statt in jede Zeile geschrieben.
+function zeilenFuerServer(liste) {
+  const nur = $("gsNurGenannte").checked;
+  return (liste || gsZeilen).filter(z => z.text.trim())
+    .map(z => ({...z, nur_genannte: nur}));
+}
+
 // Wer die Prosa schreibt. An einer Stelle gebaut, weil zwei Aufrufe sie
 // brauchen -- die ganze Geschichte und die einzelne Szene.
 function erzaehlerFelder() {
@@ -2603,8 +2598,8 @@ async function bausteineAktualisierenSzene(i) {
   zeigeSelbstszenen();
   const teile = [];
   if ((g.weg || []).length) teile.push(`${g.weg.join(", ")} aufgegangen`);
-  if (g.neu.length) teile.push(`nachgezogen: ${g.neu.map(b => b.name).join(", ")}`);
-  if (h.neu.length) teile.push(`angelegt: ${h.neu.map(b => b.name).join(", ")}`);
+  if (g.neu.length) teile.push("nachgezogen: " + mitArt(g.neu));
+  if (h.neu.length) teile.push("angelegt: " + mitArt(h.neu));
   say(teile.length ? teile.join(" · ") + "."
                    : `Szene ${i + 1}: nichts zu übernehmen.`, "ok");
 }
@@ -2735,7 +2730,7 @@ function gsVorschau() {
 async function gsVorschauHolen() {
   const prompts = (GESCHICHTE && GESCHICHTE.prompts) || [];
   if (!prompts.length) return;
-  const zeilen = gsZeilen.filter(z => z.text.trim());
+  const zeilen = zeilenFuerServer();
   if (!zeilen.length) return;
   const g = await fetch("/api/szenen", {
     method: "POST", headers: {"Content-Type": "application/json"},
@@ -2744,6 +2739,7 @@ async function gsVorschauHolen() {
   if (!g) return;
   GESCHICHTE = {...g, prompts};
   zeigeSelbstszenen();
+  zeigeSzenenliste();
 }
 
 async function zeigeGliederung(prompts) {
@@ -2754,7 +2750,7 @@ async function zeigeGliederung(prompts) {
   const jetzt = JSON.stringify(prompts);
   if (jetzt === gsLetztePrompts) return;
   gsLetztePrompts = jetzt;
-  const zeilen = gsZeilen.filter(z => z.text.trim());
+  const zeilen = zeilenFuerServer();
   const g = await fetch("/api/szenen", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({zeilen, prompts, stil: $("gsStil").value})
@@ -2769,16 +2765,34 @@ async function zeigeGliederung(prompts) {
   });
   zeigeSelbstszenen();
   gsMerken();
-  const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
-  $("gsSzenen").innerHTML = prompts.map((p, i) => `
-    <div class="szene"><span class="nr">${i + 1}</span>
-      <div class="sztext"><b>${esc(p.zeile)}</b>
-        ${p.mimik ? `<span class="art">${esc(name(MIMIKLISTE, p.mimik))}</span>` : ""}
-        <br><code>${esc(p.prompt)}</code>
-        ${p.prosa ? `<br><i>${esc(p.prosa)}</i>` : ""}</div>
-    </div>`).join("");
+  zeigeSzenenliste();
   $("gsHinweis").textContent = `${g.bilder} Bild(er) entstehen daraus.`;
   $("gsKnoepfe").style.display = "block";
+}
+
+// Die Liste unter Schritt 3. Sie zeigte den Text des Sprachmodells -- darin
+// steht ein Baustein auch dann noch, wenn man ihn aus der Szene genommen
+// hat. Jetzt steht dort derselbe fertige Prompt wie in der Szene selbst,
+// und wo er nicht mehr passt, steht es daneben.
+function zeigeSzenenliste() {
+  const prompts = (GESCHICHTE && GESCHICHTE.prompts) || [];
+  const name = (liste, k) => (liste.find(x => x.key === k) || {}).label || "";
+  $("gsSzenen").innerHTML = prompts.map(p => {
+    const i = (p.nr || 0) - 1;
+    const fertig = ((GESCHICHTE && GESCHICHTE.je_szene) || [])
+      .filter(x => x.nr === p.nr).flatMap(x => x.texte || []);
+    const z = gsZeilen[i] || {};
+    return `
+    <div class="szene"><span class="nr">${p.nr}</span>
+      <div class="sztext"><b>${esc(p.zeile)}</b>
+        ${p.mimik ? `<span class="art">${esc(name(MIMIKLISTE, p.mimik))}</span>` : ""}
+        ${i >= 0 && veraltet(i)
+          ? `<span class="wink">geändert — „Prompt ↻“ in der Szene</span>` : ""}
+        ${(fertig.length ? fertig : [p.prompt]).map(t =>
+            `<br><code>${esc(t)}</code>`).join("")}
+        ${(z.prosa || p.prosa) ? `<br><i>${esc(z.prosa || p.prosa)}</i>` : ""}</div>
+    </div>`;
+  }).join("");
 }
 
 // --- Schritt 4: in den Ablauf oder gleich erzeugen ---

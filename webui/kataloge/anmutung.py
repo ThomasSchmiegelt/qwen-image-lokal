@@ -207,6 +207,16 @@ WESEN = {
 # dazu, gern in einem anderen Stil. Gemeldet fuer die Scheibe, gefunden in
 # fast allen. Deshalb sagt jede Einstellung ausdruecklich, dass nur die eine
 # Person im Bild ist.
+# Gilt fuer jede Szene, nicht nur fuer die mit Kameraeinstellung. Gebraucht
+# wird das vor allem bei den gezeichneten Stilen: "graphic novel panel" und
+# "expressive panel composition" sind Bildsprachen, in denen ueblicherweise
+# mehrere Figuren stehen, und Anime setzt von sich aus gern eine zweite
+# dazu. Der Satz nennt keine Zahl -- die Szene kann eine oder drei Personen
+# beschreiben --, er verbietet nur die ungenannten.
+NUR_GENANNTE = ("Only the people described in this prompt appear. No other "
+                "figures, no bystanders in the background, no second face, "
+                "no reflection of anyone else.")
+
 NUR_EINE = ("Exactly one person is in this picture: the one described in this prompt. "
             "No bystanders, no onlookers, no second face, no reflection of "
             "anyone else.")

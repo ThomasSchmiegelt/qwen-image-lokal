@@ -491,9 +491,13 @@ Antworte ausschließlich mit JSON: {"teile": [ … ]}. Jeder Eintrag hat genau
 diese Schlüssel:
 
 "name"         Der Name, unverändert aus der Liste.
-"art"          "person", "ort" oder "gegenstand". Was in der Geschichte
-               handelt, ist eine Person; wo sie sich aufhält, ein Ort; was
-               sie benutzt oder trägt, ein Gegenstand.
+"art"          "person", "ort", "gegenstand" -- oder "unklar". Was in der
+               Geschichte handelt, ist eine Person; wo sie sich aufhält, ein
+               Ort; was sie benutzt oder trägt, ein Gegenstand. Lässt der
+               Name zusammen mit dem Inhaltsverzeichnis nicht erkennen, was
+               es ist, schreibe "unklar" -- rate nicht. Ein Gegenstand, der
+               als Person angelegt wird, bekommt ein Gesicht und steht als
+               Mensch im Bild.
 "beschreibung" Ein Satz auf DEUTSCH, wie das aussieht. Halte dich an das,
                was das Inhaltsverzeichnis hergibt, und erfinde den Rest
                plausibel dazu -- es ist ein Vorschlag, den der Benutzer
@@ -540,6 +544,8 @@ def bausteine_raten(namen: list[str], umfeld: str = "",
         art = str(e.get("art") or "").strip().lower()
         if name:
             nach_name[name.lower()] = {
+                # "unklar" und alles Unbekannte werden zu leer -- der
+                # Aufrufer legt dann nichts an, statt das Falsche.
                 "art": art if art in ("person", "ort", "gegenstand") else "",
                 "beschreibung": str(e.get("beschreibung") or "").strip()[:400]}
     # Jeder gefragte Name kommt zurueck, auch wenn das Modell ihn ausliess --
@@ -547,105 +553,11 @@ def bausteine_raten(namen: list[str], umfeld: str = "",
     raus = []
     for n in namen:
         e = nach_name.get(n.lower()) or {}
-        raus.append({"name": n, "art": e.get("art") or "person",
+        # Kein Rueckfall auf "person": ein Gegenstand, der als Person
+        # angelegt wird, bekommt Gesicht und Kleidung und steht als Mensch
+        # im Bild. Lieber leer lassen -- der Aufrufer sieht es dann.
+        raus.append({"name": n, "art": e.get("art") or "",
                      "beschreibung": e.get("beschreibung") or ""})
-    return raus
-
-
-EMPFEHLEN_SYSTEM = """Du sagst, welche Bausteine eine Bilderfolge braucht.
-
-Du bekommst ein Inhaltsverzeichnis, Zeile für Zeile eine Szene, und eine
-Liste der Bausteine, die es schon gibt. Für jede Szene nennst du, wer darin
-vorkommt, wo sie spielt und welcher Gegenstand darin wichtig ist.
-
-Antworte ausschließlich mit JSON: {"szenen": [ … ]}. Ein Eintrag je Szene:
-
-"nr"    Die Nummer der Szene, bei 1 beginnend.
-"teile" Eine Liste. Jeder Eintrag hat "name" und "art"
-        ("person", "ort" oder "gegenstand").
-
-Regeln:
-- Gibt es einen passenden Baustein schon, nimm seinen Namen BUCHSTABENGETREU.
-  Dieselbe Figur soll nicht zweimal unter zwei Namen entstehen.
-- Sonst ein kurzer, sprechender Name, deutsch, ein Wort oder zwei ohne
-  Leerzeichen dazwischen -- er wird später mit einem Schrägstrich getippt.
-- Höchstens ein Ort und höchstens ein Gegenstand je Szene, Personen bis zu
-  drei. Was im Bild nicht zu sehen ist, gehört nicht dazu.
-- Eine Szene ohne erkennbaren Baustein bekommt eine leere Liste."""
-
-
-def bausteine_empfehlen(zeilen: list[str], vorhanden: list[dict],
-                        model: str | None = None, fortschritt=None) -> list[dict]:
-    """Je Szene vorschlagen, welche Bausteine gebraucht werden.
-
-    In Haeppchen zu acht Szenen. Was in den vorigen Haeppchen an Namen
-    entstand, geht ins naechste mit hinein -- sonst hiesse dieselbe Figur in
-    Szene drei anders als in Szene zwoelf.
-    """
-    zeilen = [(z or "").strip() for z in zeilen][:MAX_ZEILEN]
-    if not any(zeilen):
-        return []
-    bekannt = [{"name": b.get("name"), "art": b.get("art")}
-               for b in vorhanden if b.get("name")]
-    raus = []
-    for anfang in range(0, len(zeilen), JE_AUFRUF):
-        teil = zeilen[anfang:anfang + JE_AUFRUF]
-        if fortschritt:
-            fortschritt(anfang + len(teil), len(zeilen))
-        dazu = _empfehlen_teil(teil, anfang, bekannt, model)
-        raus += dazu
-        # Die neuen Namen gelten ab jetzt als bekannt.
-        for e in dazu:
-            for t in e["teile"]:
-                if not any(b["name"].lower() == t["name"].lower() for b in bekannt):
-                    bekannt.append({"name": t["name"], "art": t["art"]})
-    return raus
-
-
-def _empfehlen_teil(zeilen: list[str], versatz: int, vorhanden: list[dict],
-                    model: str | None) -> list[dict]:
-    """Ein Haeppchen Szenen. `versatz` ist die Nummer der ersten minus eins."""
-    liste = "\n".join(f'  {b["name"]} ({b["art"]})' for b in vorhanden) or "  (keine)"
-    inhalt = "\n".join(f"{i}. {z}" for i, z in enumerate(zeilen, 1) if z)
-    frage = f"Vorhandene Bausteine:\n{liste}\n\nInhaltsverzeichnis:\n{inhalt}"
-    roh = antwort({
-        "model": model or MODEL,
-        "format": "json",
-        "options": {"temperature": 0.3,
-                    "num_predict": 400 + 150 * len(zeilen)},
-        "messages": [{"role": "system", "content": EMPFEHLEN_SYSTEM},
-                     {"role": "user", "content": frage}],
-    }, timeout=300)
-    gegeben = roh.get("szenen") if isinstance(roh, dict) else None
-    raus = []
-    for e in gegeben or []:
-        if not isinstance(e, dict):
-            continue
-        try:
-            nr = int(e.get("nr") or 0)
-        except (TypeError, ValueError):
-            continue
-        if not 1 <= nr <= len(zeilen):
-            continue
-        nr += versatz
-        teile, gesehen = [], set()
-        for t in (e.get("teile") or [])[:5]:
-            if not isinstance(t, dict):
-                continue
-            name = str(t.get("name") or "").strip()[:40]
-            art = str(t.get("art") or "").strip().lower()
-            # Ein Name mit Leerzeichen liesse sich nicht mit /Name tippen.
-            name = re.sub(r"\s+", "-", name)
-            # Gross geschrieben, wie deutsche Hauptwoerter: das Modell liefert
-            # mal so, mal so, und in der Liste sieht Gemischtes unordentlich aus.
-            name = name[:1].upper() + name[1:]
-            if not name or art not in ("person", "ort", "gegenstand"):
-                continue
-            if name.lower() in gesehen:
-                continue
-            gesehen.add(name.lower())
-            teile.append({"name": name, "art": art})
-        raus.append({"nr": nr, "teile": teile})
     return raus
 
 

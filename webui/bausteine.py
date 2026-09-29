@@ -443,13 +443,30 @@ def kopieren(von: str, nach: str, kennung: str) -> dict | None:
 
 
 
+def _erster_satz(text: str, hoechstens: int = 170) -> str:
+    """Der erste Satz, hoechstens so lang. Der Rest faellt weg.
+
+    Gebraucht, wenn mehrere Personen in einem Bild stehen: drei volle
+    Beschreibungen mit je drei Kleidungssaetzen ergaben einen Prompt von
+    zweitausend Zeichen, in dem sich alles widersprach.
+    """
+    text = (text or "").strip()
+    for trenner in (". ", "; "):
+        if trenner in text[:hoechstens + 40]:
+            text = text.split(trenner, 1)[0]
+            break
+    return text[:hoechstens].rstrip(" ,.;")
+
+
 def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
-                kleidung: str = "") -> str:
+                kleidung: str = "", kurz: bool = False) -> str:
     """Die Beschreibung einer Person fuer einen Prompt.
 
     `nur_gesicht` nimmt die Gesichtsbeschreibung allein -- eine Makro-
     Grossaufnahme braucht keine Hose. `kleidung` ersetzt die bevorzugte
-    Kleidung, wenn die Szene eine andere verlangt.
+    Kleidung, wenn die Szene eine andere verlangt. `kurz` nimmt von jedem
+    Stueck nur den ersten Satz: sobald mehrere Personen im Bild stehen,
+    zaehlt, dass man sie unterscheiden kann, nicht jede Falte.
     """
     # Der Hautton steht in beiden Faellen dabei -- das ist der ganze Zweck
     # des eigenen Feldes: er kann nicht mehr auseinanderlaufen.
@@ -462,16 +479,18 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
         gesicht = einsetzen(b["gesicht"], werte).rstrip(".")
         return ", ".join(t for t in (wesen, gesicht, haut) if t)
     stuecke = [t for t in (wesen,) if t]
-    stuecke.append(einsetzen(b.get("prompt") or "", werte).rstrip("."))
+    allgemein = einsetzen(b.get("prompt") or "", werte).rstrip(".")
+    stuecke.append(_erster_satz(allgemein) if kurz else allgemein)
     stuecke = [s for s in stuecke if s]
     if wesen and len(stuecke) > 1:
         stuecke[1] = _klein(stuecke[1])
     if haut:
-        stuecke.append(haut)
+        stuecke.append(_erster_satz(haut, 90) if kurz else haut)
     if not nur_gesicht:
         was = (kleidung or b.get("kleidung") or "").strip()
         if was:
             # Die Kleidung haengt mitten im Satz -- ein grosses "Worn wool
             # coat" dort liest sich wie ein neuer Anfang.
-            stuecke.append(_klein(einsetzen(was, werte).rstrip(".")))
+            was = _klein(einsetzen(was, werte).rstrip("."))
+            stuecke.append(_erster_satz(was, 120) if kurz else was)
     return ", ".join(t for t in stuecke if t)

@@ -30,7 +30,7 @@ import projekte
 from kataloge import (  # noqa: F401
     WESEN,
     CAMERAS, EINSTELLUNGEN, GEZEICHNET, HALTUNGEN, MIMIK, NICHT_FOTO,
-    STYLES, VIEWS,
+    NUR_GENANNTE, STYLES, VIEWS,
 )
 
 # Wie die Person bewahrt wird, waehrend Ort, Handlung und Stil wechseln.
@@ -109,11 +109,15 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
 
     stuecke = []
     # Bis zu drei Personen: was darueber hinausgeht, verwaessert den Prompt
-    # mehr, als es dem Bild nuetzt.
-    for person in welche("person", 3):
+    # mehr, als es dem Bild nuetzt. Ab der zweiten steht von jeder nur noch
+    # der erste Satz -- drei volle Beschreibungen mit je drei
+    # Kleidungssaetzen ergaben zweitausend Zeichen, in denen sich alles
+    # widersprach.
+    personen = welche("person", 3)
+    for person in personen:
         stuecke.append(bausteine.person_text(
             person, person.get("variablen") or {}, nur_gesicht=nur_gesicht,
-            kleidung=szene.get("kleidung") or ""))
+            kleidung=szene.get("kleidung") or "", kurz=len(personen) > 1))
     ausdruck = _mimik(szene.get("mimik") or "")
     if ausdruck:
         stuecke.append(ausdruck)
@@ -142,7 +146,14 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     sauber = [t.strip().rstrip(".") for t in stuecke if t and t.strip()]
     if not sauber:
         return ""
-    return ", ".join([sauber[0]] + [bausteine._klein(t) for t in sauber[1:]])
+    text = ", ".join([sauber[0]] + [bausteine._klein(t) for t in sauber[1:]])
+    # Ungenannte Figuren verbieten. Vor allem bei den gezeichneten Stilen
+    # noetig: "graphic novel panel" und "expressive panel composition" sind
+    # Bildsprachen mit mehreren Figuren, und Anime setzt gern eine zweite
+    # dazu. Wer eine Menschenmenge will, schaltet es in der Geschichte ab.
+    if szene.get("nur_genannte") and welche("person", 9):
+        text += ". " + NUR_GENANNTE
+    return text
 
 
 def je_szene(szenen: list[dict], teile: list[dict],
@@ -196,11 +207,20 @@ def zu_bloecken(szenen: list[dict], teile: list[dict],
                                     szene.get("spiegelung") or "", eigene)
         stil = szene.get("stil") or ""
         name = STYLES[stil][0] if stil in STYLES else "Szene"
-        if bloecke and bloecke[-1]["stil"] == stil:
+        # Mehr als eine Person: dann kein Startbild als Vorlage. "Dieselbe
+        # Person wie im Referenzbild" trifft bei einer Gruppe niemanden und
+        # zieht die Beschreibung einer Fremden in den Prompt.
+        viele = len([k for k in (szene.get("teile") or [])
+                     if (nach_kennung.get(k) or {}).get("art") == "person"
+                     and k not in set(szene.get("unsichtbar") or [])]) > 1
+        bezug = "" if viele else "start"
+        if bloecke and bloecke[-1]["stil"] == stil \
+                and bloecke[-1]["referenz"] == bezug:
             bloecke[-1]["bausteine"] += fassungen
         else:
-            bloecke.append({"titel": name, "referenz": "start",
-                            "vorlage": "geschichte", "bleibt": BLEIBT,
+            bloecke.append({"titel": name, "referenz": bezug,
+                            "vorlage": "geschichte" if bezug else "",
+                            "bleibt": BLEIBT if bezug else "",
                             "zurueck": False, "stil": stil,
                             "bausteine": list(fassungen)})
     # `stil` ist nur die Hilfsgroesse fuers Buendeln und hat im Block nichts
@@ -342,6 +362,9 @@ def gliederung_zu_szenen(zeilen: list[dict], prompts: list[dict],
             # darueber bleiben fuer das Startbild und aeltere Staende.
             "teile": list(benutzt),
             "unsichtbar": list(zeile.get("unsichtbar") or []),
+            # Ungenannte Figuren verbieten. Voreingestellt ja -- wer eine
+            # Menschenmenge will, schaltet es in der Geschichte ab.
+            "nur_genannte": zeile.get("nur_genannte", True),
             "mimik": p.get("mimik") or "",
             "kleidung": p.get("kleidung") or "",
             "stil": stil,
@@ -774,7 +797,8 @@ def zeilen_lesen(roh: list[dict], alle: list[dict],
                        "definitionen": erklaert, "teile": teile,
                        # Wer hinter der Kamera steht: in der Prosa dabei,
                        # im Bild nicht.
-                       "unsichtbar": unsichtbar})
+                       "unsichtbar": unsichtbar,
+                       "nur_genannte": z.get("nur_genannte", True)})
     return zeilen
 
 

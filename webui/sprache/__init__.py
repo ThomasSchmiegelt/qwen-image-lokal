@@ -9,7 +9,7 @@ Der Server spricht nur mit diesem Paket, nicht mit den einzelnen Dateien.
 """
 
 from .deuten import (
-    MODES, ask, baustein_prompt, bausteine_empfehlen, bausteine_raten,
+    MODES, ask, baustein_prompt, bausteine_raten,
     interpret,
     luecken_vorschlaege, sanitise,
     person_teilen, system_prompt, teil_prompt,
@@ -28,7 +28,7 @@ from .uebersetzen import looks_german, translate
 __all__ = [
     "abschnitte", "kapitel", "rahmen", "szenen_aus_abschnitt",
     "ERZAEHLER", "FREIGABEN", "GROSS", "MODEL", "MODES", "OLLAMA", "WELTEN",
-    "erzaehlerstimme", "freigabe", "entladen", "expose", "ask", "available", "baustein_prompt", "bausteine_empfehlen", "bausteine_raten",
+    "erzaehlerstimme", "freigabe", "entladen", "expose", "ask", "available", "baustein_prompt", "bausteine_raten",
     "bild_frage", "bild_lesen",
     "bild_zu_prompt", "geschichte", "gliederung", "interpret",
     "ist_weiblich",

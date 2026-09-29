@@ -776,6 +776,42 @@ def _bloecke_gruppieren(bloecke: list[dict]) -> list[tuple[str, list[dict]]]:
     return gebuendelt
 
 
+def _demo_ohne_basis(params, stamp, fest, seed, sammler, pruefe,
+                     gesammelt) -> None:
+    """Eine einzelne Szene erzeugen -- ohne Startbild, ohne Referenz.
+
+    Der Ablauf baut sonst zuerst ein Startbild, liest es mit dem
+    Bildmodell und haengt an jeden Block "dieselbe Person wie im
+    Referenzbild". Fuer eine Szene aus der Geschichte ist das dreifach
+    falsch: ein Bild zu viel, eine fremde Person als Vorlage und eine
+    Bewahrungsklausel, die den Prompt verdoppelt.
+    """
+    texte = []
+    for block in params.get("bloecke") or []:
+        texte += [t for t in ablauf.bausteine_von(block) if t]
+    if not texte:
+        raise RuntimeError("Die Szene ergibt keinen Prompt")
+
+    current["stage"] = f"{len(texte)} Bild(er) werden erzeugt"
+    engine.run_series(**_series_kwargs(
+        {"mode": "t2i", "prompt": "", "aspect": params.get("aspect") or "3:2",
+         "seed": seed, "count": len(texte), **fest}, [], "t2i", sammler),
+        prompts=texte, seeds=[seed + i for i in range(len(texte))])
+    pruefe()
+
+    # Ein Video aus einem Bild gibt es nicht.
+    if (len(gesammelt) > 1 and demo.available()["video"]
+            and not params.get("ohne_video")):
+        current["stage"] = "Video wird gebaut"
+        ziel_datei = os.path.join(ziel(), f"{stamp}_szene.mp4")
+        demo.baue_video([os.path.join(ziel(), n) for n in gesammelt],
+                        ziel_datei,
+                        gesamtdauer=float(params.get("duration") or 8.0))
+        current["video"] = os.path.basename(ziel_datei)
+    melden("")
+    engine.note("idle", f"Szene fertig: {len(gesammelt)} Bild(er)")
+
+
 def run_demo(params: dict) -> None:
     """Arbeitet einen Ablauf ab und baut daraus ein Video."""
     try:
@@ -811,6 +847,13 @@ def run_demo(params: dict) -> None:
             return bild
 
         # --- Startbild ---------------------------------------------------
+        # "ohne_basis" kommt von einer einzelnen Szene. Dort ist das
+        # Startbild ein zweites Bild, das niemand bestellt hat -- und seine
+        # Bewahrungsklausel ("dieselbe Person wie im Referenzbild") passt
+        # nicht, wenn in der Szene ganz andere Figuren stehen.
+        if params.get("ohne_basis"):
+            return _demo_ohne_basis(params, stamp, fest, seed, sammler,
+                                    pruefe, gesammelt)
         pruefe()
         current["stage"] = "Startbild"
         if params.get("image"):
