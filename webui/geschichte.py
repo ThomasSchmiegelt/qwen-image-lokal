@@ -111,13 +111,28 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     def welche(art, hoechstens):
         return [b for b in alle if b.get("art") == art][:hoechstens]
 
+    # Denselben eigenen Stil an mehreren Bausteinen nur einmal nennen.
+    # Gemessen an vier Figuren im selben Scifi-Stil: der Stilsatz stand
+    # viermal im Prompt und noch einmal beim Ort -- 600 Zeichen ohne
+    # Aussage, und die Beschreibungen der Figuren rutschten dahinter.
+    # Ein Stil, den nur ein Baustein traegt, bleibt bei ihm stehen: daraus
+    # baut man die Widersprueche.
+    zaehlung = {}
+    for b in alle:
+        if bausteine.eigener_stil(b):
+            schluessel = b.get("stil") or ""
+            zaehlung[schluessel] = zaehlung.get(schluessel, 0) + 1
+    geteilt = [k for k, n in zaehlung.items() if n > 1]
+    gemeinsam = set(geteilt)
+
     stuecke = []
     # Bis zu vier Personen. Mehr bekommt das Bildmodell nicht auseinander --
     # schon bei vieren teilt es Kleidung zwischen ihnen auf.
     personen = welche("person", 4)
     beschreibungen = [bausteine.person_text(
         p, p.get("variablen") or {}, nur_gesicht=nur_gesicht,
-        kleidung=szene.get("kleidung") or "", kurz=len(personen) > 1)
+        kleidung=szene.get("kleidung") or "", kurz=len(personen) > 1,
+        ohne_stil=(p.get("stil") or "") in gemeinsam)
         for p in personen]
     beschreibungen = [t for t in beschreibungen if t.strip()]
     if len(beschreibungen) == 1:
@@ -152,7 +167,8 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
         """Der Text eines Bausteins samt seinem eigenen Stil."""
         text = bausteine.einsetzen(b.get("prompt") or "",
                                    b.get("variablen") or {}).rstrip(".")
-        eigen = bausteine.eigener_stil(b)
+        eigen = "" if (b.get("stil") or "") in gemeinsam \
+            else bausteine.eigener_stil(b)
         return f"{text}, {bausteine._klein(eigen)}" if eigen else text
 
     if not nur_gesicht:
@@ -161,8 +177,13 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
         # Nur ein Ort: ein Bild spielt an einer Stelle.
         for ort in welche("ort", 1):
             stuecke.append(mit_eigenem(ort))
+    # Der geteilte Stil, einmal, hinter allem was er faerbt.
+    for schluessel in geteilt:
+        stuecke.append(_stil(schluessel))
     stil = _stil(szene.get("stil") or "")
-    if stil:
+    # Nicht doppelt: traegt schon ein Baustein denselben Stil, steht der
+    # Satz bereits im Prompt.
+    if stil and stil not in stuecke:
         stuecke.append(stil)
 
     sauber = [t.strip().rstrip(".") for t in stuecke if t and t.strip()]
@@ -576,6 +597,35 @@ def besetzung(roh: list[dict], alle: list[dict],
     return "\n".join(raus)
 
 
+# Deutsche Woerter in einem englischen Bildprompt. Das Bildmodell
+# uebersetzt nicht: "weiße haut, blaue augen" blieb unbeachtet, und die
+# Figur bekam die Hautfarbe, die dem Modell gerade einfiel. Erkannt wird an
+# Umlaut oder Eszett und an einer Handvoll Woerter, die es im Englischen
+# nicht gibt -- "die" und "rot" stehen ausdruecklich nicht dabei, beides ist
+# auch Englisch.
+DEUTSCHWORT = frozenset((
+    "und", "oder", "mit", "ohne", "eine", "einen", "einem", "eines", "ein",
+    "der", "den", "dem", "des", "ist", "sind", "haben", "sie", "ihre",
+    "haut", "haare", "haar", "augen", "gesicht", "koerper", "frau", "mann",
+    "maedchen", "junge", "kleid", "hose", "jacke", "mantel", "schuhe",
+    "stiefel", "hemd", "traegt", "jahre", "jahren", "grosse", "kleine",
+    "lange", "kurze", "dunkle", "helle", "schwarz", "schwarze",
+    "weiss", "weisse", "braun", "braune", "blau", "blaue", "gruen",
+    "gruene", "gelocktes", "glatte", "stehen", "sitzt", "steht"))
+
+
+def _deutsch(text: str) -> list[str]:
+    """Die deutschen Woerter in einem Feld, hoechstens drei."""
+    ersatz = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
+                            "Ä": "Ae", "Ö": "Oe", "Ü": "Ue"})
+    funde = []
+    for wort in re.findall(r"[A-Za-zÄÖÜäöüß]{2,}", text or ""):
+        klein = wort.lower()
+        if klein.translate(ersatz) in DEUTSCHWORT and wort not in funde:
+            funde.append(wort)
+    return funde[:3]
+
+
 def pruefen(roh: list[dict], alle: list[dict],
             eigene: dict | None = None) -> list[dict]:
     """Durchsehen, ob die Gliederung vollstaendig ist.
@@ -660,6 +710,15 @@ def pruefen(roh: list[dict], alle: list[dict],
         if len(text) < 40:
             fund(0, "warnung", f"/{b['name']} ist sehr knapp beschrieben — "
                                "das Bild fällt jedes Mal anders aus.")
+        # Deutsch in irgendeinem Feld: das Bildmodell liest Englisch.
+        for feld, wie in (("prompt", "Prompt"), ("gesicht", "Gesicht"),
+                          ("kleidung", "Kleidung"), ("haut", "Hautton")):
+            worte = _deutsch(b.get(feld) or "")
+            if worte:
+                fund(0, "fehler",
+                     f"/{b['name']}: „{' '.join(worte)}“ unter {wie} ist "
+                     "Deutsch — das Bildmodell übersetzt nicht, der Satz "
+                     "landet unverstanden im Prompt.")
         if b.get("art") == "person":
             for feld, was in (("gesicht", "keine Gesichtsbeschreibung"),
                               ("kleidung", "keine Kleidung"),

@@ -477,14 +477,17 @@ def _erster_satz(text: str, hoechstens: int = 170) -> str:
 
 
 def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
-                kleidung: str = "", kurz: bool = False) -> str:
+                kleidung: str = "", kurz: bool = False,
+                ohne_stil: bool = False) -> str:
     """Die Beschreibung einer Person fuer einen Prompt.
 
     `nur_gesicht` nimmt die Gesichtsbeschreibung allein -- eine Makro-
     Grossaufnahme braucht keine Hose. `kleidung` ersetzt die bevorzugte
     Kleidung, wenn die Szene eine andere verlangt. `kurz` nimmt von jedem
     Stueck nur den ersten Satz: sobald mehrere Personen im Bild stehen,
-    zaehlt, dass man sie unterscheiden kann, nicht jede Falte.
+    zaehlt, dass man sie unterscheiden kann, nicht jede Falte. `ohne_stil`
+    laesst den eigenen Stil weg: tragen mehrere Bausteine denselben, steht er
+    einmal fuer das ganze Bild statt einmal je Figur.
     """
     # Der Hautton steht in beiden Faellen dabei -- das ist der ganze Zweck
     # des eigenen Feldes: er kann nicht mehr auseinanderlaufen.
@@ -501,8 +504,8 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
         gesicht = einsetzen(b["gesicht"], werte).rstrip(".")
         if farben_weg:
             gesicht = ohne_farben(gesicht).rstrip(" .")
-        return ", ".join(t for t in (wesen, gesicht, haut,
-                                     _klein(eigener_stil(b))) if t)
+        eigen = "" if ohne_stil else _klein(eigener_stil(b))
+        return ", ".join(t for t in (wesen, gesicht, haut, eigen) if t)
     stuecke = [t for t in (wesen,) if t]
     allgemein = einsetzen(b.get("prompt") or "", werte).rstrip(".")
     if farben_weg:
@@ -525,7 +528,7 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
                 stuecke.append(_erster_satz(was, 120) if kurz else was)
     # Der eigene Stil steht dicht bei der Figur, nicht am Satzende: dort
     # bezieht ihn das Modell auf sie und nicht auf das ganze Bild.
-    eigen = eigener_stil(b)
+    eigen = "" if ohne_stil else eigener_stil(b)
     if eigen:
         stuecke.append(_klein(eigen))
     return ", ".join(t for t in stuecke if t)
