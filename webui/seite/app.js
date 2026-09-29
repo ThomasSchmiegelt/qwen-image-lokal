@@ -3278,7 +3278,8 @@ function zeigeBau(bau) {
   const kopf = [];
   if ((plan.kulisse || "").trim()) kopf.push("Raum: " + plan.kulisse);
   (plan.figuren || []).forEach(f => {
-    if ((f.pose || "").trim()) kopf.push(`${f.name}: ${f.pose}`);
+    const was = [f.pose, f.platz].filter(t => (t || "").trim()).join(", ");
+    if (was) kopf.push(`${f.name}: ${was}`);
   });
   if ((spiegel.wo || "").trim()) {
     kopf.push(`Spiegelung${spiegel.name ? " von " + spiegel.name : ""}: ${

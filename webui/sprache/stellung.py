@@ -24,16 +24,24 @@ Du bekommst einen Satz und eine Liste von Namen. Antworte nur mit JSON:
 
 {"kulisse": "<der Raum allein, englisch, ohne jede Person>",
  "figuren": [{"name": "<Name aus der Liste>",
-              "pose": "<was diese Figur tut, englisch>"}],
+              "pose": "<was der Koerper tut, englisch>",
+              "platz": "<Bildseite, Stelle im Raum, was das Gewicht traegt>"}],
  "spiegelung": {"name": "<Name aus der Liste oder leer>",
                 "wo": "<worin sie sich spiegelt, englisch>"}}
 
 Regeln:
 - Jeder Name aus der Liste kommt genau einmal in "figuren" vor, in der
   Reihenfolge der Liste. Keine weiteren Namen erfinden.
-- "pose" nennt nur Koerperhaltung, Platz im Bild und Blickrichtung.
-  Kein Aussehen, keine Kleidung, keine Haut-, Haar- oder Augenfarbe, kein
+- "pose" nennt nur die Koerperhaltung und die Blickrichtung. Kein
+  Aussehen, keine Kleidung, keine Haut-, Haar- oder Augenfarbe, kein
   Name -- das alles steht schon woanders.
+- "platz" beginnt immer mit einer Bildseite: "on the left", "in the
+  middle" oder "on the right". Dahinter die Stelle im Raum und worauf das
+  Gewicht ruht -- auf dem Boden, auf einem Moebelstueck, an eine Wand
+  gelehnt. Steht jemand neben einem Bett, ruht sein Gewicht auf dem Boden,
+  nicht auf dem Bett.
+- Zwei Figuren bekommen nie dieselbe Bildseite. Sie stuenden sonst
+  uebereinander, und die hintere verschwindet.
 - "kulisse" nennt Raum, Licht und Gegenstaende. Keine Person, auch keine
   angedeutete.
 - "spiegelung" nur ausfuellen, wenn der Satz wirklich von einer Spiegelung,
@@ -50,6 +58,11 @@ def bauplan(text: str, namen: list[str], modell: str | None = None) -> dict:
     Die Antwort ist nach Namen verschluesselt, nicht nach Reihenfolge: das
     Modell laesst gern eine Figur aus, und dann rutscht bei einer
     Positionsliste jede folgende Pose an die falsche Person.
+
+    Haltung und Platz stehen getrennt. Zusammen in einem Feld ging der
+    Platz beim Zusammensetzen verloren: "standing next to the bed" wurde
+    zu einer Figur, die auf dem Bett steht -- die Haltung kam an, die
+    Stelle nicht.
     """
     leer = {"kulisse": "", "figuren": [], "spiegelung": {}}
     if not (text or "").strip() or not namen:
@@ -84,8 +97,11 @@ def _ordnen(roh: dict, namen: list[str]) -> dict:
         name = str(eintrag.get("name") or "").strip()
         treffer = next((n for n in namen if n.lower() == name.lower()), "")
         if treffer:
-            nach_name[treffer] = _pose(str(eintrag.get("pose") or ""))
-    figuren = [{"name": n, "pose": nach_name.get(n, "")} for n in namen]
+            nach_name[treffer] = {
+                "pose": _pose(str(eintrag.get("pose") or "")),
+                "platz": _pose(str(eintrag.get("platz") or ""))}
+    figuren = [{"name": n, **nach_name.get(n, {"pose": "", "platz": ""})}
+               for n in namen]
 
     spiegel = roh.get("spiegelung")
     spiegel = spiegel if isinstance(spiegel, dict) else {}

@@ -65,13 +65,21 @@ SPIEGEL_SETZEN = (
     "faintly visible through it. Everything else in the first reference "
     "image stays exactly as it is.")
 
+# Die Stelle im Raum steht getrennt von der Haltung und ausdruecklich vorn.
+# Gemessen: "standing next to the bed" in einem Stueck ergab eine Figur, die
+# auf dem Bett stand. Die Haltung kam an, die Stelle nicht -- das Modell
+# setzt die Figur dorthin, wo im Bild Platz ist, wenn man ihm nicht sagt,
+# worauf ihr Gewicht ruhen soll.
 SETZEN = (
     "Place the figure from the second reference image into the scene of the "
-    "first reference image, {pose}. Keep the figure exactly as in its "
-    "reference: face, hair, clothing, colours and its visual style. Match "
-    "only its size to the scene, put it on the ground where it belongs and "
-    "give it a contact shadow. Everything else in the first reference image "
-    "stays exactly as it is: the room, the light, the other figures.")
+    "first reference image. Where it goes: {platz}. What its body does: "
+    "{pose}. Its weight rests on what the position names and on nothing "
+    "else -- if it stands on the floor, it does not stand on the furniture, "
+    "and its feet are at floor level, not raised. Keep the figure exactly "
+    "as in its reference: face, hair, clothing, colours and its visual "
+    "style. Match only its size to the scene and give it a contact shadow "
+    "where it touches. Everything else in the first reference image stays "
+    "exactly as it is: the room, the light, the other figures.")
 
 
 # Das Sprachmodell antwortet auf "worin spiegelt es sich" gern mit dem
@@ -118,7 +126,11 @@ def kulisse_prompt(ort: dict | None, aus_plan: str, stil: str) -> str:
         return _mit_stil(text, stil)
     if not (aus_plan or "").strip():
         return ""
-    return _mit_stil(f"an empty room, no people in the picture, "
+    # Weit genug, dass der Boden zu sehen ist. Sonst hat eine Figur, die
+    # neben dem Bett stehen soll, keine Stelle, auf die sie gehoert -- und
+    # das Modell setzt sie aufs Bett, weil dort Platz im Bild ist.
+    return _mit_stil(f"a wide shot of an empty room, no people in the "
+                     f"picture, the floor visible across the whole width, "
                      f"{aus_plan.strip().rstrip('.')}", stil)
 
 
@@ -141,11 +153,44 @@ def pose_prompt(person: dict, pose: str) -> str:
     return f"{kopf}. {text.rstrip('. ')}. {FREI}"
 
 
-def _pose_von(eintrag) -> str:
-    """Die Haltung aus einem Planeintrag, oder leer."""
+# Die Bildseiten, in der Reihenfolge, in der sie vergeben werden.
+SEITEN = ("on the left", "on the right", "in the middle",
+          "at the left edge", "at the right edge")
+
+
+def _seite_von(text: str) -> str:
+    """Welche Bildseite eine Ortsangabe nennt, falls eine darin steht."""
+    klein = (text or "").lower()
+    for seite in SEITEN:
+        if seite in klein:
+            return seite
+    return ""
+
+
+def _andere_seite(stelle: str, belegt: list[str]) -> str:
+    """Eine schon vergebene Bildseite gegen eine freie tauschen."""
+    seiten = [_seite_von(t) for t in belegt]
+    meine = _seite_von(stelle)
+    if meine and meine not in seiten:
+        return stelle
+    frei = next((s for s in SEITEN if s not in seiten), "")
+    if not frei:
+        return stelle
+    if meine:
+        return stelle.replace(meine, frei, 1)
+    return f"{frei}, {stelle}"
+
+
+def _feld_von(eintrag, feld: str) -> str:
+    """Ein Feld aus einem Planeintrag, oder leer."""
     if not isinstance(eintrag, dict):
         return ""
-    return (eintrag.get("pose") or "").strip().rstrip(".")
+    return (eintrag.get(feld) or "").strip().rstrip(".")
+
+
+def _pose_von(eintrag) -> str:
+    """Die Haltung aus einem Planeintrag, oder leer."""
+    return _feld_von(eintrag, "pose")
 
 
 def schritte(plan: dict, teile: list[dict], stil: str = "") -> list[dict]:
@@ -214,16 +259,24 @@ def schritte(plan: dict, teile: list[dict], stil: str = "") -> list[dict]:
                           "vorlagen": vorlage, "aktion": ""})
 
     # --- Zusammensetzen, eine Figur nach der anderen --------------------
+    belegt: list[str] = []
     # Nacheinander statt alles auf einmal: das Modell nimmt hoechstens vier
     # Vorlagen, und es haelt zwei Bilder besser auseinander als fuenf.
     stand = 0
     for person in personen:
         if person["id"] not in posen:
             continue
-        wohin = _pose_von(nach_plan.get(person["name"].lower())) \
-            or "standing in the scene"
+        eintrag = nach_plan.get(person["name"].lower())
+        wohin = _pose_von(eintrag) or "standing upright"
+        stelle = _feld_von(eintrag, "platz") \
+            or "in the middle of the picture, standing on the floor"
+        # Zwei Figuren auf derselben Bildseite stehen uebereinander, und
+        # die hintere verschwindet: beim Einsetzen der zweiten sieht das
+        # Modell die erste als Platz, nicht als Hindernis.
+        stelle = _andere_seite(stelle, belegt)
+        belegt.append(stelle)
         folge.append({"art": "setzen", "titel": f"Einsetzen: {person['name']}",
-                      "prompt": SETZEN.format(pose=wohin),
+                      "prompt": SETZEN.format(pose=wohin, platz=stelle),
                       "baustein": "", "feld": "",
                       "vorlagen": [stand, posen[person["id"]]],
                       "aktion": "einsetzen"})
