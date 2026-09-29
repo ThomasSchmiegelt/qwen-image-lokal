@@ -268,6 +268,30 @@ GROUP_ACTIONS = {
             "people to that same lighting, perspective and scale. {extra}"
         ),
     },
+    # Der Weg zum Stilbruch, den ein einzelner Prompt nicht hergibt: das
+    # Bildmodell zieht einen Stil immer ueber das ganze Bild. Zwei fertige
+    # Bilder nebeneinanderzulegen kann es dagegen -- eine Collage ist ihm
+    # ein vertrautes Motiv, ein halb gezeichnetes Bild nicht.
+    "einsetzen": {
+        "label": "Figur in eine Szene setzen", "min": 2,
+        "hint": "Erstes Bild: die Szene. Danach je ein Bild pro Figur, "
+                "freigestellt. Der eigene Stil jeder Figur bleibt erhalten.",
+        "template": (
+            "The first reference image is a scene. The following {m} reference "
+            "image(s) each show one figure standing against a plain "
+            "background. Place those figures into the scene so that they "
+            "stand in it convincingly: correct scale, a plausible position on "
+            "the ground, and a contact shadow where they touch it. "
+            "Keep the scene itself unchanged -- its background, its light and "
+            "its look. Keep every figure exactly as in its own reference "
+            "image: face, hair, clothing, colours AND its visual style. If a "
+            "figure is photographic and the scene is drawn, that difference "
+            "must stay visible, like a photograph cut out and pasted into a "
+            "drawing, with a hard edge where the two meet. Do not redraw a "
+            "figure in the style of the scene, and do not restyle the scene "
+            "to match a figure. {extra}"
+        ),
+    },
     "entfernen": {
         "label": "Person entfernen", "min": 1,
         "hint": "Nur das Gruppenfoto. Unten beschreiben, wer verschwinden soll.",
