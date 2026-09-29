@@ -58,6 +58,8 @@
       <p class="hint">Personen, Orte und Gegenstände zum Wiederverwenden.
         Was sich ändern darf, steht in geschweiften Klammern —
         <code>{kleidung}</code> — und wird beim Benutzen gefüllt.
+        <b>→</b> übernimmt einen Baustein in den Prompt bei
+        <b>Text→Bild</b> — mehrere hintereinander hängen sich aneinander.
         Ein Baustein entsteht erst als Text; das Musterbild holst du mit
         <b>▣</b> nach, wenn der Prompt steht — bei einer Person mit ihrer
         bevorzugten Kleidung. Ein zweites <b>▣</b> erzeugt es neu und ersetzt
@@ -88,12 +90,13 @@
         trifft dann dieselbe Figur wie <code>/Nora</code>. Gibt es den
         Zweitnamen noch als eigenen Baustein, geht er beim
         <b>aktualisieren</b> in diesem hier auf.</p>
-      <label for="bsStil">Stil fürs Musterbild</label>
+      <label for="bsStil">Eigener Stil</label>
       <select id="bsStil"></select>
-      <p class="hint">Gilt nur für das Bild, nicht für den Baustein. Leer
-        heißt: der Stil der Geschichte, an der du gerade arbeitest. Dieselbe
-        Person darf in der nächsten Geschichte als Manga auftreten, auch wenn
-        ihr erstes Bild ein Foto war.</p>
+      <p class="hint">Gilt für jede Verwendung dieses Bausteins, nicht nur
+        fürs Musterbild. Damit lassen sich <b>Widersprüche</b> bauen: eine
+        fotorealistische Figur in einer gezeichneten Szene, ein gemalter
+        Gegenstand in einem Foto. Leer heißt: der Stil der Geschichte, wie
+        bisher.</p>
       <label for="bsText">Beschreibung auf Deutsch</label>
       <textarea id="bsText" style="min-height:52px"
         placeholder="eine Frau Mitte dreißig, schlank, kurze dunkle Haare, wirkt streng und wachsam"></textarea>

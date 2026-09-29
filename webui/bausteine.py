@@ -349,13 +349,26 @@ FREISTELLEN = {
 }
 
 
-def mit_stil(prompt: str, stil: str) -> str:
-    """Den Stil an ein Musterbild haengen.
+def eigener_stil(b: dict) -> str:
+    """Der Stil, den dieser Baustein selbst mitbringt -- oder leer.
 
-    Nur ans Bild, nie an den Baustein: die Person soll in der naechsten
-    Geschichte als Manga auftreten duerfen, auch wenn ihr erstes Bild ein
-    Foto war.
+    Frueher galt er nur fuers Musterbild. Jetzt haengt er an jeder
+    Verwendung: so laesst sich ein Widerspruch bauen -- eine
+    fotorealistische Figur in einer gezeichneten Szene, ein gemalter
+    Gegenstand in einem Foto. Wer das nicht will, laesst das Feld leer;
+    dann gilt der Stil der Geschichte wie bisher.
     """
+    eintrag = STYLES.get((b or {}).get("stil") or "")
+    if not eintrag:
+        return ""
+    text = eintrag[1]
+    if b["stil"] in GEZEICHNET:
+        text += f" {NICHT_FOTO}"
+    return text
+
+
+def mit_stil(prompt: str, stil: str) -> str:
+    """Den Stil an einen fertigen Prompt haengen."""
     eintrag = STYLES.get(stil or "")
     prompt = (prompt or "").strip().rstrip(".")
     if not eintrag or not prompt:
@@ -488,7 +501,8 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
         gesicht = einsetzen(b["gesicht"], werte).rstrip(".")
         if farben_weg:
             gesicht = ohne_farben(gesicht).rstrip(" .")
-        return ", ".join(t for t in (wesen, gesicht, haut) if t)
+        return ", ".join(t for t in (wesen, gesicht, haut,
+                                     _klein(eigener_stil(b))) if t)
     stuecke = [t for t in (wesen,) if t]
     allgemein = einsetzen(b.get("prompt") or "", werte).rstrip(".")
     if farben_weg:
@@ -509,6 +523,11 @@ def person_text(b: dict, werte: dict | None = None, nur_gesicht: bool = False,
             was = _klein(einsetzen(was, werte).rstrip("."))
             if not _steckt_drin(was, allgemein):
                 stuecke.append(_erster_satz(was, 120) if kurz else was)
+    # Der eigene Stil steht dicht bei der Figur, nicht am Satzende: dort
+    # bezieht ihn das Modell auf sie und nicht auf das ganze Bild.
+    eigen = eigener_stil(b)
+    if eigen:
+        stuecke.append(_klein(eigen))
     return ", ".join(t for t in stuecke if t)
 
 

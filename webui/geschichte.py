@@ -148,15 +148,19 @@ def szene_zu_text(szene: dict, nach_kennung: dict) -> str:
     if handlung:
         stuecke.append(handlung)
 
+    def mit_eigenem(b):
+        """Der Text eines Bausteins samt seinem eigenen Stil."""
+        text = bausteine.einsetzen(b.get("prompt") or "",
+                                   b.get("variablen") or {}).rstrip(".")
+        eigen = bausteine.eigener_stil(b)
+        return f"{text}, {bausteine._klein(eigen)}" if eigen else text
+
     if not nur_gesicht:
         for gegenstand in welche("gegenstand", 2):
-            stuecke.append(bausteine.einsetzen(
-                gegenstand.get("prompt") or "",
-                gegenstand.get("variablen") or {}))
+            stuecke.append(mit_eigenem(gegenstand))
         # Nur ein Ort: ein Bild spielt an einer Stelle.
         for ort in welche("ort", 1):
-            stuecke.append(bausteine.einsetzen(ort.get("prompt") or "",
-                                               ort.get("variablen") or {}))
+            stuecke.append(mit_eigenem(ort))
     stil = _stil(szene.get("stil") or "")
     if stil:
         stuecke.append(stil)

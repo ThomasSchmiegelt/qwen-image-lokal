@@ -848,9 +848,11 @@ class Handler(BaseHTTPRequestHandler):
                 # und kein Muster mehr.
                 if params.get("freistellen") and len(teile) == 1:
                     fertig = bausteine.freigestellt(fertig, teile[0].get("art"))
-                # Der Stil kommt zuletzt und nur ins Bild. Welcher, sagt die
-                # Geschichte, an der gerade gearbeitet wird.
-                fertig = bausteine.mit_stil(fertig, str(params.get("stil") or ""))
+                # Der Stil kommt zuletzt. Bringt der Baustein einen eigenen
+                # mit, steht der schon im Text -- dann nicht noch einmal.
+                if not (len(teile) == 1 and (teile[0].get("stil") or "").strip()):
+                    fertig = bausteine.mit_stil(fertig,
+                                                str(params.get("stil") or ""))
                 return self._json(200, {
                     "prompt": fertig,
                     # Dieselbe Mischung mit offenen Luecken -- so wird sie als

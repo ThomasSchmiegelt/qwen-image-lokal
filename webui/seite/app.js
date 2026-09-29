@@ -905,6 +905,8 @@ function zeigeBausteine(liste) {
           <div class="bstext" onclick="bausteinKlappen('${b.id}')">
             <b>${esc(b.name)}</b><br><span class="art">${esc(kurz)}</span>
           </div>
+          <span class="knopf" onclick="bausteinInPrompt('${b.id}')"
+            title="in den Prompt bei Text→Bild übernehmen">→</span>
           <span class="knopf" onclick="bausteinLaden('${b.id}')"
             title="bearbeiten">✎</span>
           <span class="knopf" onclick="bausteinBild('${b.id}')"
@@ -1187,6 +1189,21 @@ $("bsAuffrischen").onclick = async e => {
   await bausteineHolen();
   say(`Aufgefrischt: ${g.neu.map(b => b.name).join(", ")}.`, "ok");
 };
+
+// Einen Baustein nach Text->Bild uebernehmen. Angehaengt, nicht ersetzt:
+// so lassen sich mehrere hintereinander holen und von Hand verbinden.
+async function bausteinInPrompt(id) {
+  const b = BAUSTEINE.find(x => x.id === id);
+  if (!b) return;
+  const g = await bausteinRuf({tu: "zusammensetzen", ids: [id],
+                               werte: b.variablen});
+  if (!g || !g.prompt) return;
+  setMode("t2i");
+  const da = $("prompt").value.trim();
+  $("prompt").value = da ? `${da}, ${g.prompt}` : g.prompt;
+  $("prompt").focus();
+  say(`„${b.name}“ in den Prompt übernommen.`, "ok");
+}
 
 // Zu einer Person gehoert ein zweites Bild: die Grossaufnahme der Augen.
 // Sie zeigt, was bei \augen entsteht -- und deckt auf, wenn Gesicht und
